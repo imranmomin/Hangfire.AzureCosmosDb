@@ -9,7 +9,8 @@ using Hangfire.AzureDocumentDB.Entities;
 using Hangfire.AzureDocumentDB.Queue;
 using Hangfire.States;
 using Hangfire.Storage;
-
+using Microsoft.Azure.Documents;
+using Microsoft.Azure.Documents.Client;
 
 
 namespace Hangfire.AzureDocumentDB
@@ -19,9 +20,23 @@ namespace Hangfire.AzureDocumentDB
         private readonly AzureDocumentDbConnection connection;
         private readonly List<Action> commands = new List<Action>();
 
+        private readonly FeedOptions QueryOptions = new FeedOptions { MaxItemCount = -1 };
+        private readonly Uri JobDocumentCollectionUri;
+        private readonly Uri SetDocumentCollectionUri;
+        private readonly Uri CounterDocumentCollectionUri;
+        private readonly Uri HashDocumentCollectionUri;
+        private readonly Uri ListDocumentCollectionUri;
+
         public AzureDocumentDbWriteOnlyTransaction(AzureDocumentDbConnection connection)
         {
             this.connection = connection;
+
+            AzureDocumentDbStorage storage = connection.Storage;
+            JobDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "jobs");
+            SetDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "sets");
+            CounterDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "counters");
+            HashDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "hashes");
+            ListDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "lists");
         }
 
         private void QueueCommand(Action command) => commands.Add(command);
@@ -52,35 +67,33 @@ namespace Hangfire.AzureDocumentDB
             {
                 Counter data = new Counter
                 {
+                    Key = key,
+                    Type = CounterTypes.Raw,
                     Value = -1
                 };
 
-                FirebaseResponse response = connection.Client.Push($"counters/raw/{key}", data);
-                if (response.StatusCode != HttpStatusCode.OK)
-                {
-                    throw new HttpRequestException(response.Body);
-                }
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(CounterDocumentCollectionUri, data);
+                task.Wait();
             });
         }
 
         public void DecrementCounter(string key, TimeSpan expireIn)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
-            if (expireIn.Duration() != expireIn) throw new ArgumentException("The `expireIn` value must be positive.", nameof(expireIn));
+            if (expireIn.Duration() != expireIn) throw new ArgumentException(@"The `expireIn` value must be positive.", nameof(expireIn));
 
             QueueCommand(() =>
             {
                 Counter data = new Counter
                 {
+                    Key = key,
+                    Type = CounterTypes.Raw,
                     Value = -1,
                     ExpireOn = DateTime.UtcNow.Add(expireIn)
                 };
 
-                FirebaseResponse response = connection.Client.Push($"counters/raw/{key}", data);
-                if (response.StatusCode != HttpStatusCode.OK)
-                {
-                    throw new HttpRequestException(response.Body);
-                }
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(CounterDocumentCollectionUri, data);
+                task.Wait();
             });
         }
 
@@ -92,35 +105,33 @@ namespace Hangfire.AzureDocumentDB
             {
                 Counter data = new Counter
                 {
+                    Key = key,
+                    Type = CounterTypes.Raw,
                     Value = 1
                 };
 
-                FirebaseResponse response = connection.Client.Push($"counters/raw/{key}", data);
-                if (response.StatusCode != HttpStatusCode.OK)
-                {
-                    throw new HttpRequestException(response.Body);
-                }
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(CounterDocumentCollectionUri, data);
+                task.Wait();
             });
         }
 
         public void IncrementCounter(string key, TimeSpan expireIn)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
-            if (expireIn.Duration() != expireIn) throw new ArgumentException("The `expireIn` value must be positive.", nameof(expireIn));
+            if (expireIn.Duration() != expireIn) throw new ArgumentException(@"The `expireIn` value must be positive.", nameof(expireIn));
 
             QueueCommand(() =>
             {
                 Counter data = new Counter
                 {
+                    Key = key,
+                    Type = CounterTypes.Raw,
                     Value = 1,
                     ExpireOn = DateTime.UtcNow.Add(expireIn)
                 };
 
-                FirebaseResponse response = connection.Client.Push($"counters/raw/{key}", data);
-                if (response.StatusCode != HttpStatusCode.OK)
-                {
-                    throw new HttpRequestException(response.Body);
-                }
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(CounterDocumentCollectionUri, data);
+                task.Wait();
             });
         }
 
@@ -131,14 +142,20 @@ namespace Hangfire.AzureDocumentDB
         public void ExpireJob(string jobId, TimeSpan expireIn)
         {
             if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
-            if (expireIn.Duration() != expireIn) throw new ArgumentException("The `expireIn` value must be positive.", nameof(expireIn));
+            if (expireIn.Duration() != expireIn) throw new ArgumentException(@"The `expireIn` value must be positive.", nameof(expireIn));
 
             QueueCommand(() =>
             {
-                FirebaseResponse response = connection.Client.Set($"jobs/{jobId}/expire_on", DateTime.UtcNow.Add(expireIn));
-                if (response.StatusCode != HttpStatusCode.OK)
+                Job job = connection.Storage.Client.CreateDocumentQuery<Job>(JobDocumentCollectionUri, QueryOptions)
+                    .Where(j => j.Id == jobId)
+                    .AsEnumerable()
+                    .FirstOrDefault();
+
+                if (job != null)
                 {
-                    throw new HttpRequestException(response.Body);
+                    job.ExpireOn = DateTime.UtcNow.Add(expireIn);
+                    Task<ResourceResponse<Document>> task = connection.Storage.Client.ReplaceDocumentAsync(job.SelfLink, job);
+                    task.Wait();
                 }
             });
         }
@@ -149,10 +166,16 @@ namespace Hangfire.AzureDocumentDB
 
             QueueCommand(() =>
             {
-                FirebaseResponse response = connection.Client.Delete($"jobs/{jobId}/expire_on");
-                if (response.StatusCode != HttpStatusCode.OK)
+                Job job = connection.Storage.Client.CreateDocumentQuery<Job>(JobDocumentCollectionUri, QueryOptions)
+                    .Where(j => j.Id == jobId)
+                    .AsEnumerable()
+                    .FirstOrDefault();
+
+                if (job != null)
                 {
-                    throw new HttpRequestException(response.Body);
+                    job.ExpireOn = null;
+                    Task<ResourceResponse<Document>> task = connection.Storage.Client.ReplaceDocumentAsync(job.SelfLink, job);
+                    task.Wait();
                 }
             });
         }
@@ -168,27 +191,30 @@ namespace Hangfire.AzureDocumentDB
 
             QueueCommand(() =>
             {
-                FirebaseResponse response = connection.Client.Get($"jobs/{jobId}");
-                if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
+                Job job = connection.Storage.Client.CreateDocumentQuery<Job>(JobDocumentCollectionUri, QueryOptions)
+                    .Where(j => j.Id == jobId)
+                    .AsEnumerable()
+                    .FirstOrDefault();
+
+                if (job != null)
                 {
-                    Job job = response.ResultAs<Job>();
                     State data = new State
                     {
+                        JobId = jobId,
                         Name = state.Name,
                         Reason = state.Reason,
                         CreatedOn = DateTime.UtcNow,
                         Data = state.SerializeData()
                     };
 
-                    response = connection.Client.Push($"states/{jobId}", data);
-                    if (response.StatusCode == HttpStatusCode.OK)
+                    Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(SetDocumentCollectionUri, data);
+                    task.ContinueWith(async t =>
                     {
-                        string reference = ((PushResponse)response).Result.name;
-                        job.StateId = reference;
+                        job.StateId = t.Result.Resource.Id;
                         job.StateName = state.Name;
 
-                        connection.Client.Set($"jobs/{jobId}", job);
-                    }
+                        await connection.Storage.Client.ReplaceDocumentAsync(job.SelfLink, job);
+                    });
                 }
             });
         }
@@ -202,16 +228,15 @@ namespace Hangfire.AzureDocumentDB
             {
                 State data = new State
                 {
+                    JobId = jobId,
                     Name = state.Name,
                     Reason = state.Reason,
                     CreatedOn = DateTime.UtcNow,
                     Data = state.SerializeData()
                 };
-                FirebaseResponse response = connection.Client.Push($"states/{jobId}", data);
-                if (response.StatusCode != HttpStatusCode.OK)
-                {
-                    throw new HttpRequestException(response.Body);
-                }
+
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(SetDocumentCollectionUri, data);
+                task.Wait();
             });
         }
 
@@ -226,17 +251,16 @@ namespace Hangfire.AzureDocumentDB
 
             QueueCommand(() =>
             {
-                QueryBuilder builder = QueryBuilder.New($@"equalTo=""{key}""");
-                builder.OrderBy("key");
-                FirebaseResponse response = connection.Client.Get("sets", builder);
-                if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
+                Set set = connection.Storage.Client
+                     .CreateDocumentQuery<Set>(SetDocumentCollectionUri, QueryOptions)
+                     .Where(s => s.Key == key && s.Value == value)
+                     .AsEnumerable()
+                     .FirstOrDefault();
+
+                if (set != null)
                 {
-                    Dictionary<string, Set> sets = response.ResultAs<Dictionary<string, Set>>();
-                    string reference = sets.Where(s => s.Value.Value == value).Select(s => s.Key).FirstOrDefault();
-                    if (!string.IsNullOrEmpty(reference))
-                    {
-                        connection.Client.Delete($"sets/{reference}");
-                    }
+                    Task<ResourceResponse<Document>> task = connection.Storage.Client.DeleteDocumentAsync(set.SelfLink);
+                    task.Wait();
                 }
             });
         }
@@ -250,35 +274,30 @@ namespace Hangfire.AzureDocumentDB
 
             QueueCommand(() =>
             {
-                Set data = new Set
+                Set set = connection.Storage.Client
+                    .CreateDocumentQuery<Set>(SetDocumentCollectionUri, QueryOptions)
+                    .Where(s => s.Key == key && s.Value == value)
+                    .AsEnumerable()
+                    .FirstOrDefault();
+
+                if (set != null)
                 {
-                    Key = key,
-                    Value = value,
-                    Score = score
-                };
+                    set.Key = key;
+                    set.Value = value;
+                    set.Score = score;
 
-                QueryBuilder builder = QueryBuilder.New($@"equalTo=""{key}""");
-                builder.OrderBy("key");
-                FirebaseResponse response = connection.Client.Get("sets", builder);
-                if (response.StatusCode == HttpStatusCode.OK)
+                    Task<ResourceResponse<Document>> task = connection.Storage.Client.ReplaceDocumentAsync(set.SelfLink, set);
+                    task.Wait();
+                }
+                else
                 {
-                    Dictionary<string, Set> sets = response.ResultAs<Dictionary<string, Set>>();
-                    string reference = sets?.Where(s => s.Value.Value == value).Select(s => s.Key).FirstOrDefault();
-
-                    if (!string.IsNullOrEmpty(reference))
+                    Set data = new Set
                     {
-                        response = connection.Client.Set($"sets/{reference}", data);
-                    }
-                    else
-                    {
-                        response = connection.Client.Push("sets", data);
-                    }
-
-
-                    if (response.StatusCode != HttpStatusCode.OK)
-                    {
-                        throw new HttpRequestException(response.Body);
-                    }
+                        Key = key,
+                        Value = value,
+                        Score = score
+                    };
+                    connection.Storage.Client.CreateDocumentAsync(SetDocumentCollectionUri, data);
                 }
             });
         }
@@ -293,11 +312,12 @@ namespace Hangfire.AzureDocumentDB
 
             QueueCommand(() =>
             {
-                FirebaseResponse response = connection.Client.Delete($"hashes/{key}");
-                if (response.StatusCode != HttpStatusCode.OK)
-                {
-                    throw new HttpRequestException(response.Body);
-                }
+                List<Hash> hashes = connection.Storage.Client.CreateDocumentQuery<Hash>(HashDocumentCollectionUri, QueryOptions)
+                    .Where(h => h.Key == key)
+                    .AsEnumerable()
+                    .ToList();
+
+                hashes.ForEach(hash => connection.Storage.Client.DeleteDocumentAsync(hash.SelfLink));
             });
         }
 
@@ -310,34 +330,12 @@ namespace Hangfire.AzureDocumentDB
             {
                 List<Hash> hashes = keyValuePairs.Select(k => new Hash
                 {
+                    Key = key,
                     Field = k.Key,
                     Value = k.Value
                 }).ToList();
 
-                FirebaseResponse response = connection.Client.Get($"hashes/{key}");
-                if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-                {
-                    // update 
-                    Dictionary<string, Hash> collection = response.ResultAs<Dictionary<string, Hash>>();
-                    string[] references = collection.Where(h => hashes.Any(k => k.Field == h.Value.Field))
-                                                    .Select(h => h.Key)
-                                                    .ToArray();
-                    Parallel.ForEach(references, reference =>
-                    {
-                        Hash hash;
-                        if (collection.TryGetValue(reference, out hash) && hashes.Any(k => k.Field == hash.Field))
-                        {
-                            string value = hashes.Where(k => k.Field == hash.Field).Select(k => k.Value).Single();
-                            connection.Client.Set($"hashes/{key}/{reference}/value", value);
-
-                            // remove the hash from the list
-                            hashes.RemoveAll(x => x.Field == hash.Field);
-                        }
-                    });
-                }
-
-                // new 
-                Parallel.ForEach(hashes, hash => connection.Client.Push($"hashes/{key}", hash));
+                hashes.ForEach(hash => connection.Storage.Client.UpsertDocumentAsync(HashDocumentCollectionUri, hash));
             });
         }
 
@@ -358,11 +356,7 @@ namespace Hangfire.AzureDocumentDB
                     Value = value
                 };
 
-                FirebaseResponse response = connection.Client.Push("lists", data);
-                if (response.StatusCode != HttpStatusCode.OK)
-                {
-                    throw new HttpRequestException(response.Body);
-                }
+                connection.Storage.Client.CreateDocumentAsync(ListDocumentCollectionUri, data);
             });
         }
 
@@ -373,21 +367,14 @@ namespace Hangfire.AzureDocumentDB
 
             QueueCommand(() =>
             {
-                QueryBuilder builder = QueryBuilder.New($@"equalTo=""{key}""");
-                builder.OrderBy("key");
-                FirebaseResponse response = connection.Client.Get("lists", builder);
-                if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
+                List data = connection.Storage.Client.CreateDocumentQuery<List>(ListDocumentCollectionUri, QueryOptions)
+                    .Where(l => l.Key == key && l.Value == value)
+                    .AsEnumerable()
+                    .FirstOrDefault();
+
+                if (data != null)
                 {
-                    Dictionary<string, List> lists = response.ResultAs<Dictionary<string, List>>();
-                    string reference = lists.Where(l => l.Value.Value == value).Select(k => k.Key).FirstOrDefault();
-                    if (string.IsNullOrEmpty(reference))
-                    {
-                        response = connection.Client.Delete($"lists/{reference}");
-                        if (response.StatusCode != HttpStatusCode.OK)
-                        {
-                            throw new HttpRequestException(response.Body);
-                        }
-                    }
+                    connection.Storage.Client.DeleteDocumentAsync(data.SelfLink);
                 }
             });
         }
@@ -398,18 +385,13 @@ namespace Hangfire.AzureDocumentDB
 
             QueueCommand(() =>
             {
-                QueryBuilder builder = QueryBuilder.New($@"equalTo=""{key}""");
-                builder.OrderBy("key");
-                FirebaseResponse response = connection.Client.Get("lists", builder);
-                if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-                {
-                    Dictionary<string, List> lists = response.ResultAs<Dictionary<string, List>>();
-                    string[] listsReferences = lists.Skip(keepStartingFrom).Take(keepEndingAt)
-                                                    .Select(l => l.Key)
-                                                    .ToArray();
+                List<List> lists = connection.Storage.Client.CreateDocumentQuery<List>(ListDocumentCollectionUri, QueryOptions)
+                    .Where(l => l.Key == key)
+                    .AsEnumerable()
+                    .Skip(keepStartingFrom).Take(keepEndingAt)
+                    .ToList();
 
-                    Parallel.ForEach(listsReferences, reference => connection.Client.Delete($"lists/{reference}"));
-                }
+                lists.ForEach(list => connection.Storage.Client.DeleteDocumentAsync(list.SelfLink));
             });
         }
 

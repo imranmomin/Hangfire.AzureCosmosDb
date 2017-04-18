@@ -6,6 +6,7 @@ namespace Hangfire.AzureDocumentDB.Entities
 {
     internal class State : FireEntity
     {
+        public string JobId { get; set; }
         public string Name { get; set; }
         public string Reason { get; set; }
         public DateTime CreatedOn { get; set; }

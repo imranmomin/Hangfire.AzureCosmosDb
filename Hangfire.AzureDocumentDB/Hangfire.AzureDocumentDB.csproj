@@ -69,6 +69,14 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AzureDocumentDbConnection.cs" />
+    <Compile Include="AzureDocumentDbDistributedLock.cs" />
+    <Compile Include="AzureDocumentDbDistributedLockException.cs" />
+    <Compile Include="AzureDocumentDbMonitoringApi.cs" />
+    <Compile Include="AzureDocumentDbStorage.cs" />
+    <Compile Include="AzureDocumentDbStorageExtensions.cs" />
+    <Compile Include="AzureDocumentDbStorageOptions.cs" />
+    <Compile Include="AzureDocumentDbWriteOnlyTransaction.cs" />
     <Compile Include="CountersAggregator.cs" />
     <Compile Include="Entities\Counter.cs" />
     <Compile Include="Entities\FireEntity.cs" />
@@ -78,17 +86,10 @@
     <Compile Include="Entities\List.cs" />
     <Compile Include="Entities\Lock.cs" />
     <Compile Include="Entities\Parameter.cs" />
+    <Compile Include="Entities\Queue.cs" />
     <Compile Include="Entities\Server.cs" />
     <Compile Include="Entities\Set.cs" />
     <Compile Include="Entities\State.cs" />
-    <Compile Include="AzureDocumentDbConnection.cs" />
-    <Compile Include="AzureDocumentDbStorage.cs" />
-    <Compile Include="AzureDocumentDbStorageExtensions.cs" />
-    <Compile Include="AzureDocumentDbStorageOptions.cs" />
-    <Compile Include="AzureDocumentDbDistributedLock.cs" />
-    <Compile Include="AzureDocumentDbDistributedLockException.cs" />
-    <Compile Include="AzureDocumentDbMonitoringApi.cs" />
-    <Compile Include="AzureDocumentDbWriteOnlyTransaction.cs" />
     <Compile Include="ExpirationManager.cs" />
     <Compile Include="Json\LowerCaseDelimitedPropertyNamesContractResovler.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

@@ -4,11 +4,13 @@ using System.Net;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
+using Microsoft.Azure.Documents.Client;
+
 using Hangfire.Common;
 using Hangfire.Storage;
+using Hangfire.Storage.Monitoring;
 using Hangfire.AzureDocumentDB.Queue;
 using Hangfire.AzureDocumentDB.Entities;
-using Hangfire.Storage.Monitoring;
 
 namespace Hangfire.AzureDocumentDB
 {
@@ -17,10 +19,29 @@ namespace Hangfire.AzureDocumentDB
         private readonly AzureDocumentDbConnection connection;
         private readonly AzureDocumentDbStorage storage;
 
+        private readonly FeedOptions QueryOptions = new FeedOptions { MaxItemCount = -1 };
+        private readonly Uri JobDocumentCollectionUri;
+        private readonly Uri StateDocumentCollectionUri;
+        private readonly Uri SetDocumentCollectionUri;
+        private readonly Uri CounterDocumentCollectionUri;
+        private readonly Uri ServerDocumentCollectionUri;
+        private readonly Uri HashDocumentCollectionUri;
+        private readonly Uri ListDocumentCollectionUri;
+        private readonly Uri QueueDocumentCollectionUri;
+
         public AzureDocumentDbMonitoringApi(AzureDocumentDbStorage storage)
         {
             this.storage = storage;
             connection = (AzureDocumentDbConnection)storage.GetConnection();
+
+            JobDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "jobs");
+            StateDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "states");
+            SetDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "sets");
+            CounterDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "counters");
+            ServerDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "servers");
+            HashDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "hashes");
+            ListDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "lists");
+            QueueDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "queues");
         }
 
         public IList<QueueWithTopEnqueuedJobsDto> Queues()
@@ -45,50 +66,44 @@ namespace Hangfire.AzureDocumentDB
 
         public IList<ServerDto> Servers()
         {
-            List<ServerDto> servers = new List<ServerDto>();
+            List<Entities.Server> servers = storage.Client.CreateDocumentQuery<Entities.Server>(SetDocumentCollectionUri, QueryOptions)
+                                                   .AsEnumerable()
+                                                   .ToList();
 
-            FirebaseResponse response = connection.Client.Get("servers");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
+            return servers.Select(server => new ServerDto
             {
-                Dictionary<string, Entities.Server> collections = response.ResultAs<Dictionary<string, Entities.Server>>();
-                servers = collections?.Select(s => new ServerDto
-                {
-                    Name = s.Value.ServerId,
-                    Heartbeat = s.Value.LastHeartbeat,
-                    Queues = s.Value.Queues,
-                    StartedAt = s.Value.CreatedOn,
-                    WorkersCount = s.Value.Workers
-                }).ToList();
-            }
-
-            return servers;
+                Name = server.ServerId,
+                Heartbeat = server.LastHeartbeat,
+                Queues = server.Queues,
+                StartedAt = server.CreatedOn,
+                WorkersCount = server.Workers
+            }).ToList();
         }
 
         public JobDetailsDto JobDetails(string jobId)
         {
             if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
 
-            List<StateHistoryDto> states = new List<StateHistoryDto>();
+            Entities.Job job = storage.Client.CreateDocumentQuery<Entities.Job>(JobDocumentCollectionUri, QueryOptions)
+                                      .Where(j => j.Id == jobId)
+                                      .AsEnumerable()
+                                      .FirstOrDefault();
 
-            FirebaseResponse response = connection.Client.Get($"jobs/{jobId}");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
+            if (job != null)
             {
-                Entities.Job job = response.ResultAs<Entities.Job>();
                 InvocationData invocationData = job.InvocationData;
                 invocationData.Arguments = job.Arguments;
 
-                response = connection.Client.Get($"states/{jobId}");
-                if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-                {
-                    Dictionary<string, State> collections = response.ResultAs<Dictionary<string, State>>();
-                    states = collections.Select(s => new StateHistoryDto
-                    {
-                        Data = s.Value.Data.Trasnform(),
-                        CreatedAt = s.Value.CreatedOn,
-                        Reason = s.Value.Reason,
-                        StateName = s.Value.Name
-                    }).ToList();
-                }
+                List<StateHistoryDto> states = storage.Client.CreateDocumentQuery<State>(StateDocumentCollectionUri, QueryOptions)
+                                                      .Where(s => s.JobId == jobId)
+                                                      .AsEnumerable()
+                                                      .Select(s => new StateHistoryDto
+                                                      {
+                                                          Data = s.Data.Trasnform(),
+                                                          CreatedAt = s.CreatedOn,
+                                                          Reason = s.Reason,
+                                                          StateName = s.Name
+                                                      }).ToList();
 
                 return new JobDetailsDto
                 {
@@ -105,73 +120,45 @@ namespace Hangfire.AzureDocumentDB
 
         public StatisticsDto GetStatistics()
         {
-            int count = 0;
+            long count = 0;
             Dictionary<string, long> results = new Dictionary<string, long>();
 
             // get counts of jobs groupby on state
-            FirebaseResponse response = connection.Client.Get("jobs");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, Entities.Job> collections = response.ResultAs<Dictionary<string, Entities.Job>>();
-                Dictionary<string, long> data = collections.Select(c => c.Value)
-                                                           .GroupBy(j => j.StateName)
-                                                           .Where(g => !string.IsNullOrEmpty(g.Key))
-                                                           .ToDictionary(g => g.Key, g => g.LongCount());
-                results = results.Concat(data).ToDictionary(k => k.Key, v => v.Value);
-            }
+            Dictionary<string, long> states = storage.Client.CreateDocumentQuery<Entities.Job>(JobDocumentCollectionUri, QueryOptions)
+                .Where(j => !string.IsNullOrEmpty(j.StateName))
+                .Select(j => j.StateName)
+                .AsEnumerable()
+                .GroupBy(j => j)
+                .ToDictionary(g => g.Key, g => g.LongCount());
+
+            results = results.Concat(states).ToDictionary(k => k.Key, v => v.Value);
 
             // get counts of servers
-            QueryBuilder builder = QueryBuilder.New();
-            builder.Shallow(true);
-            response = connection.Client.Get("servers", builder);
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, bool> collections = response.ResultAs<Dictionary<string, bool>>();
-                results.Add("Servers", collections.LongCount());
-            }
+            long servers = storage.Client.CreateDocumentQuery<Entities.Server>(ServerDocumentCollectionUri, QueryOptions).LongCount();
+            results.Add("Servers", servers);
 
-            // get sum of stats:deleted counters / aggregatedcounter 
-            response = connection.Client.Get("counters/raw/stats:succeeded");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, Counter> collections = response.ResultAs<Dictionary<string, Counter>>();
-                count += collections.Sum(c => c.Value.Value);
-            }
+            // get sum of stats:succeeded counters  raw / aggregate
+            count += storage.Client.CreateDocumentQuery<Counter>(ServerDocumentCollectionUri, QueryOptions)
+                            .Where(c => (c.Type == CounterTypes.Raw || c.Type == CounterTypes.Aggregrate) && c.Key == "stats:succeeded")
+                            .Sum(c => c.Value);
 
-            response = connection.Client.Get("counters/aggregrated/stats:succeeded");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Counter counter = response.ResultAs<Counter>();
-                count += counter.Value;
-            }
             results.Add("stats:succeeded", count);
 
             // get sum of stats:deleted counters / aggregatedcounter 
             count = 0;
-            response = connection.Client.Get("counters/raw/stats:deleted");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, Counter> collections = response.ResultAs<Dictionary<string, Counter>>();
-                count += collections.Sum(c => c.Value.Value);
-            }
+            count += storage.Client.CreateDocumentQuery<Counter>(ServerDocumentCollectionUri, QueryOptions)
+                            .Where(c => (c.Type == CounterTypes.Raw || c.Type == CounterTypes.Aggregrate) && c.Key == "stats:deleted")
+                            .Sum(c => c.Value);
 
-            response = connection.Client.Get("counters/aggregrated/stats:deleted");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Counter counter = response.ResultAs<Counter>();
-                count += counter.Value;
-            }
             results.Add("stats:deleted", count);
 
-            // get recurring-jobs count from sets
-            builder = QueryBuilder.New(@"equalTo=""recurring-jobs""");
-            builder.OrderBy("key");
-            response = connection.Client.Get("sets", builder);
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, Set> collections = response.ResultAs<Dictionary<string, Set>>();
-                results.Add("recurring-jobs", collections.LongCount());
-            }
+
+            count = 0;
+            count += storage.Client.CreateDocumentQuery<Set>(ServerDocumentCollectionUri, QueryOptions)
+                            .Where(s => s.Key == "recurring-jobs")
+                            .LongCount();
+
+            results.Add("recurring-jobs", count);
 
             Func<string, long> getValueOrDefault = (key) => results.Where(r => r.Key == key).Select(r => r.Value).SingleOrDefault();
             return new StatisticsDto
@@ -267,33 +254,28 @@ namespace Hangfire.AzureDocumentDB
         {
             List<KeyValuePair<string, T>> jobs = new List<KeyValuePair<string, T>>();
 
-            QueryBuilder builder = QueryBuilder.New($@"equalTo=""{stateName}""");
-            builder.OrderBy("state_name");
-            FirebaseResponse response = connection.Client.Get("jobs", builder);
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
+            List<Entities.Job> filterJobs = storage.Client.CreateAttachmentQuery<Entities.Job>(JobDocumentCollectionUri, QueryOptions)
+                .Where(j => j.StateName == stateName)
+                .Skip(from).Take(count)
+                .AsEnumerable()
+                .ToList();
+
+            List<State> states = storage.Client.CreateDocumentQuery<State>(StateDocumentCollectionUri, QueryOptions)
+                .Where(s => filterJobs.Any(j => j.StateId == s.Id))
+                .AsEnumerable()
+                .ToList();
+
+            Parallel.ForEach(filterJobs, job =>
             {
-                Dictionary<string, Entities.Job> collections = response.ResultAs<Dictionary<string, Entities.Job>>();
-                string[] references = collections.Skip(from).Take(count).Select(k => k.Key).ToArray();
-                Parallel.ForEach(references, reference =>
-                {
-                    Entities.Job job;
-                    if (collections.TryGetValue(reference, out job))
-                    {
-                        FirebaseResponse stateResponse = connection.Client.Get($"states/{reference}/{job.StateId}");
-                        if (stateResponse.StatusCode == HttpStatusCode.OK && !stateResponse.IsNull())
-                        {
-                            State state = stateResponse.ResultAs<State>();
-                            state.Data = state.Data.Trasnform();
+                State state = states.Single(s => s.Id == job.StateId);
+                state.Data = state.Data.Trasnform();
 
-                            InvocationData invocationData = job.InvocationData;
-                            invocationData.Arguments = job.Arguments;
+                InvocationData invocationData = job.InvocationData;
+                invocationData.Arguments = job.Arguments;
 
-                            T data = selector(state, invocationData.Deserialize());
-                            jobs.Add(new KeyValuePair<string, T>(reference, data));
-                        }
-                    }
-                });
-            }
+                T data = selector(state, invocationData.Deserialize());
+                jobs.Add(new KeyValuePair<string, T>(job.Id, data));
+            });
 
             return new JobList<T>(jobs);
         }
@@ -304,25 +286,26 @@ namespace Hangfire.AzureDocumentDB
 
             List<KeyValuePair<string, T>> jobs = new List<KeyValuePair<string, T>>();
 
-            FirebaseResponse response = connection.Client.Get($"queue/{queue}");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, string> collection = response.ResultAs<Dictionary<string, string>>();
-                string[] references = collection.Skip(from).Take(count).Select(k => k.Value).ToArray();
-                Parallel.ForEach(references, reference =>
-                {
-                    FirebaseResponse jobResponse = connection.Client.Get($"jobs/{reference}");
-                    if (jobResponse.StatusCode == HttpStatusCode.OK && !jobResponse.IsNull())
-                    {
-                        Entities.Job job = jobResponse.ResultAs<Entities.Job>();
-                        InvocationData invocationData = job.InvocationData;
-                        invocationData.Arguments = job.Arguments;
+            List<Entities.Queue> queues = storage.Client.CreateAttachmentQuery<Entities.Queue>(QueueDocumentCollectionUri, QueryOptions)
+                .Where(q => q.Name == queue)
+                .Skip(from).Take(count)
+                .AsEnumerable()
+                .ToList();
 
-                        T data = selector(job.StateName, invocationData.Deserialize());
-                        jobs.Add(new KeyValuePair<string, T>(reference, data));
-                    }
-                });
-            }
+            List<Entities.Job> filterJobs = storage.Client.CreateAttachmentQuery<Entities.Job>(JobDocumentCollectionUri, QueryOptions)
+                .Where(j => queues.Any(q => q.JobId == j.Id))
+                .AsEnumerable()
+                .ToList();
+
+            Parallel.ForEach(queues, queueItem =>
+            {
+                Entities.Job job = filterJobs.Single(j => j.Id == queueItem.JobId);
+                InvocationData invocationData = job.InvocationData;
+                invocationData.Arguments = job.Arguments;
+
+                T data = selector(job.StateName, invocationData.Deserialize());
+                jobs.Add(new KeyValuePair<string, T>(job.Id, data));
+            });
 
             return new JobList<T>(jobs);
         }
@@ -354,16 +337,9 @@ namespace Hangfire.AzureDocumentDB
 
         private long GetNumberOfJobsByStateName(string state)
         {
-            QueryBuilder builder = QueryBuilder.New($@"equalTo=""{state}""");
-            builder.OrderBy("state_name");
-            FirebaseResponse response = connection.Client.Get("jobs", builder);
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, Entities.Job> jobs = response.ResultAs<Dictionary<string, Entities.Job>>();
-                return jobs.LongCount();
-            }
-
-            return default(long);
+            return storage.Client.CreateAttachmentQuery<Entities.Job>(JobDocumentCollectionUri, QueryOptions)
+                .Where(j => j.StateName == state)
+                .LongCount();
         }
 
         public IDictionary<DateTime, long> SucceededByDatesCount() => GetDatesTimelineStats("succeeded");
@@ -392,17 +368,15 @@ namespace Hangfire.AzureDocumentDB
         {
             Dictionary<DateTime, long> result = keys.ToDictionary(k => k.Value, v => default(long));
 
-            FirebaseResponse response = connection.Client.Get("counters/aggregrated");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, Counter> collections = response.ResultAs<Dictionary<string, Counter>>();
-                Dictionary<string, int> data = collections.Where(k => keys.ContainsKey(k.Key)).ToDictionary(k => k.Key, k => k.Value.Value);
+            Dictionary<string, int> data = storage.Client.CreateDocumentQuery<Counter>(CounterDocumentCollectionUri, QueryOptions)
+                .Where(c => c.Type == CounterTypes.Aggregrate && keys.ContainsKey(c.Key))
+                .AsEnumerable()
+                .ToDictionary(k => k.Key, k => k.Value);
 
-                foreach (string key in keys.Keys)
-                {
-                    DateTime date = keys.Where(k => k.Key == key).Select(k => k.Value).First();
-                    result[date] = data.ContainsKey(key) ? data[key] : 0;
-                }
+            foreach (string key in keys.Keys)
+            {
+                DateTime date = keys.Where(k => k.Key == key).Select(k => k.Value).First();
+                result[date] = data.ContainsKey(key) ? data[key] : 0;
             }
 
             return result;

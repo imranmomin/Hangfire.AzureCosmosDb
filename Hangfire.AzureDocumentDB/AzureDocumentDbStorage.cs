@@ -19,8 +19,10 @@ namespace Hangfire.AzureDocumentDB
 
         internal PersistentJobQueueProviderCollection QueueProviders { get; }
 
+        internal DocumentClient Client { get; }
+
         /// <summary>
-        /// Initializes the FirebaseStorage form the url & auth secret provide.
+        /// Initializes the FirebaseStorage form the url auth secret provide.
         /// </summary>
         /// <param name="url">The url string to Firebase Database</param>
         /// <param name="authSecret">The secret key for the Firebase Database</param>
@@ -29,7 +31,7 @@ namespace Hangfire.AzureDocumentDB
         public AzureDocumentDbStorage(string url, string authSecret) : this(new AzureDocumentDbStorageOptions { Endpoint = new Uri(url), AuthSecret = authSecret }) { }
 
         /// <summary>
-        /// Initializes the FirebaseStorage form the url & auth secret provide.
+        /// Initializes the FirebaseStorage form the url auth secret provide.
         /// </summary>
         /// <param name="options">The FirebaseStorage object to override any of the options</param>
         /// <exception cref="ArgumentNullException"><paramref name="options"/> argument is null.</exception>
@@ -38,20 +40,32 @@ namespace Hangfire.AzureDocumentDB
             if (options == null) throw new ArgumentNullException(nameof(options));
             Options = options;
 
-            using (DocumentClient client = new DocumentClient(options.Endpoint, options.AuthSecret))
-            {
-                client.OpenAsync();
-            }
-
+            ConnectionPolicy connectionPolicy = ConnectionPolicy.Default;
+            connectionPolicy.RequestTimeout = options.RequestTimeout;
+            Client = new DocumentClient(options.Endpoint, options.AuthSecret, connectionPolicy);
+            Client.OpenAsync();
+            
             JobQueueProvider provider = new JobQueueProvider(this);
             QueueProviders = new PersistentJobQueueProviderCollection(provider);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <returns></returns>
         public override IStorageConnection GetConnection() => new AzureDocumentDbConnection(this);
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <returns></returns>
         public override IMonitoringApi GetMonitoringApi() => new AzureDocumentDbMonitoringApi(this);
 
 #pragma warning disable 618
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <returns></returns>
         public override IEnumerable<IServerComponent> GetComponents()
 #pragma warning restore 618
         {
@@ -59,6 +73,10 @@ namespace Hangfire.AzureDocumentDB
             yield return new CountersAggregator(this);
         }
 
+        /// <summary>
+        /// Prints out the storage options
+        /// </summary>
+        /// <param name="logger"></param>
         public override void WriteOptionsToLog(ILog logger)
         {
             logger.Info("Using the following options for Firebase job storage:");
@@ -70,7 +88,11 @@ namespace Hangfire.AzureDocumentDB
             logger.Info($"     Queue: {string.Join(",", Options.Queues)}");
         }
 
-        public override string ToString() => $"Firbase Database : {Options.Endpoint.AbsoluteUri}";
+        /// <summary>
+        /// Return the name of the database
+        /// </summary>
+        /// <returns></returns>
+        public override string ToString() => $"Firbase Database : {Options.DatabaseName}";
 
     }
 }

@@ -1,37 +1,50 @@
 ﻿using System;
 using System.Net;
 using System.Linq;
-using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-using Newtonsoft.Json;
+using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 
 using Hangfire.Common;
 using Hangfire.Server;
 using Hangfire.Storage;
-using Hangfire.AzureDocumentDB.Json;
 using Hangfire.AzureDocumentDB.Queue;
 using Hangfire.AzureDocumentDB.Entities;
-
-
 
 namespace Hangfire.AzureDocumentDB
 {
     internal sealed class AzureDocumentDbConnection : JobStorageConnection
     {
-        public DocumentClient Client { get; }
+        public AzureDocumentDbStorage Storage { get; }
         public PersistentJobQueueProviderCollection QueueProviders { get; }
+
+        private readonly FeedOptions QueryOptions = new FeedOptions { MaxItemCount = -1 };
+        private readonly Uri JobDocumentCollectionUri;
+        private readonly Uri StateDocumentCollectionUri;
+        private readonly Uri SetDocumentCollectionUri;
+        private readonly Uri CounterDocumentCollectionUri;
+        private readonly Uri ServerDocumentCollectionUri;
+        private readonly Uri HashDocumentCollectionUri;
+        private readonly Uri ListDocumentCollectionUri;
 
         public AzureDocumentDbConnection(AzureDocumentDbStorage storage)
         {
-            Client = new DocumentClient(storage.);
+            Storage = storage;
             QueueProviders = storage.QueueProviders;
+
+            JobDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(Storage.Options.DatabaseName, "jobs");
+            StateDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(Storage.Options.DatabaseName, "states");
+            SetDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(Storage.Options.DatabaseName, "sets");
+            CounterDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(Storage.Options.DatabaseName, "counters");
+            ServerDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(Storage.Options.DatabaseName, "servers");
+            HashDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(Storage.Options.DatabaseName, "hashes");
+            ListDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(Storage.Options.DatabaseName, "lists");
         }
 
-        public override IDisposable AcquireDistributedLock(string resource, TimeSpan timeout) => new AzureDocumentDbDistributedLock(resource, timeout, Client);
+        public override IDisposable AcquireDistributedLock(string resource, TimeSpan timeout) => new AzureDocumentDbDistributedLock(resource, timeout, Storage);
         public override IWriteOnlyTransaction CreateWriteTransaction() => new AzureDocumentDbWriteOnlyTransaction(this);
 
         #region Job
@@ -42,7 +55,9 @@ namespace Hangfire.AzureDocumentDB
             if (parameters == null) throw new ArgumentNullException(nameof(parameters));
 
             InvocationData invocationData = InvocationData.Serialize(job);
-            PushResponse response = Client.Push("jobs", new Entities.Job
+            Uri documentCollectionUri = UriFactory.CreateDocumentCollectionUri(Storage.Options.DatabaseName, "jobs");
+
+            Entities.Job entityJob = new Entities.Job
             {
                 InvocationData = invocationData,
                 Arguments = invocationData.Arguments,
@@ -54,11 +69,12 @@ namespace Hangfire.AzureDocumentDB
                     Name = p.Key,
                     Value = p.Value
                 }).ToArray()
-            });
+            };
 
-            if (response.StatusCode == HttpStatusCode.OK)
+            Task<ResourceResponse<Document>> response = Storage.Client.CreateDocumentAsync(documentCollectionUri, entityJob);
+            if (response.Result.StatusCode == HttpStatusCode.Created)
             {
-                return response.Result.name;
+                return response.Result.Resource.Id;
             }
 
             return string.Empty;
@@ -86,10 +102,13 @@ namespace Hangfire.AzureDocumentDB
         {
             if (jobId == null) throw new ArgumentNullException(nameof(jobId));
 
-            FirebaseResponse response = Client.Get($"jobs/{jobId}");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
+            Entities.Job data = Storage.Client.CreateDocumentQuery<Entities.Job>(JobDocumentCollectionUri, QueryOptions)
+                                       .Where(j => j.Id == jobId)
+                                       .AsEnumerable()
+                                       .FirstOrDefault();
+
+            if (data != null)
             {
-                Entities.Job data = response.ResultAs<Entities.Job>();
                 InvocationData invocationData = data.InvocationData;
                 invocationData.Arguments = data.Arguments;
 
@@ -121,14 +140,21 @@ namespace Hangfire.AzureDocumentDB
         {
             if (jobId == null) throw new ArgumentNullException(nameof(jobId));
 
-            FirebaseResponse response = Client.Get($"jobs/{jobId}");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
+            string stateId = Storage.Client.CreateDocumentQuery<Entities.Job>(JobDocumentCollectionUri, QueryOptions)
+                                      .Where(j => j.Id == jobId)
+                                      .Select(j => j.StateId)
+                                      .AsEnumerable()
+                                      .FirstOrDefault();
+
+            if (!string.IsNullOrEmpty(stateId))
             {
-                Entities.Job job = response.ResultAs<Entities.Job>();
-                response = Client.Get($"states/{jobId}/{job.StateId}");
-                if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
+                State data = Storage.Client.CreateDocumentQuery<State>(StateDocumentCollectionUri, QueryOptions)
+                                    .Where(j => j.Id == stateId)
+                                    .AsEnumerable()
+                                    .FirstOrDefault();
+
+                if (data != null)
                 {
-                    State data = response.ResultAs<State>();
                     return new StateData
                     {
                         Name = data.Name,
@@ -150,36 +176,44 @@ namespace Hangfire.AzureDocumentDB
             if (id == null) throw new ArgumentNullException(nameof(id));
             if (name == null) throw new ArgumentNullException(nameof(name));
 
-            FirebaseResponse response = Client.Get($"jobs/{id}/parameter");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Parameter[] parameters = response.ResultAs<Parameter[]>();
-                return parameters.Where(p => p.Name == name)
-                                 .Select(p => p.Value).FirstOrDefault();
-            }
+            Parameter[] parameters = Storage.Client.CreateDocumentQuery<Entities.Job>(JobDocumentCollectionUri, QueryOptions)
+                                            .Where(j => j.Id == id)
+                                            .SelectMany(j => j.Parameters)
+                                            .AsEnumerable()
+                                            .ToArray();
 
-            return null;
+            return parameters.Where(p => p.Name == name).Select(p => p.Value).FirstOrDefault();
         }
 
-        public override void SetJobParameter(string id, string name, string value)
+        public override async void SetJobParameter(string id, string name, string value)
         {
             if (id == null) throw new ArgumentNullException(nameof(id));
             if (name == null) throw new ArgumentNullException(nameof(name));
 
-            Parameter parameter = new Parameter
-            {
-                Name = name,
-                Value = value
-            };
+            Entities.Job job = Storage.Client.CreateDocumentQuery<Entities.Job>(JobDocumentCollectionUri, QueryOptions)
+                                        .Where(j => j.Id == id)
+                                        .AsEnumerable()
+                                        .FirstOrDefault();
 
-            FirebaseResponse response = Client.Get($"jobs/{id}/parameters");
-            if (response.StatusCode == HttpStatusCode.OK)
+            if (job != null)
             {
-                Parameter[] parameters = response.ResultAs<Parameter[]>();
-                int index = parameters.Where(p => p.Name == name).Select((p, i) => i + 1).FirstOrDefault();
+                List<Parameter> parameters = job.Parameters.ToList();
 
-                if (index > 0) Client.Set($"jobs/{id}/parameters/{index - 1}/value", value);
-                else Client.Set($"jobs/{id}/parameters/{parameters.Length}", parameter);
+                Parameter parameter = parameters.Find(p => p.Name == name);
+                if (parameter != null) parameter.Value = value;
+                else
+                {
+                    parameter = new Parameter
+                    {
+                        Name = name,
+                        Value = value
+                    };
+
+                    parameters.Add(parameter);
+                }
+
+                job.Parameters = parameters.ToArray();
+                await Storage.Client.ReplaceDocumentAsync(job.SelfLink, job);
             }
         }
 
@@ -191,91 +225,53 @@ namespace Hangfire.AzureDocumentDB
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            QueryBuilder builder = QueryBuilder.New($@"equalTo=""{key}""");
-            builder.OrderBy("key");
-            FirebaseResponse response = Client.Get("sets", builder);
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, Set> collections = response.ResultAs<Dictionary<string, Set>>();
-                DateTime? expireOn = collections.Select(c => c.Value).Min(s => s.ExpireOn);
-                if (expireOn.HasValue)
-                {
-                    return expireOn.Value - DateTime.UtcNow;
-                }
-            }
+            DateTime? expireOn = Storage.Client.CreateDocumentQuery<Set>(SetDocumentCollectionUri, QueryOptions)
+                                        .Where(s => s.Key == key)
+                                        .Min(s => s.ExpireOn);
 
-            return TimeSpan.FromSeconds(-1);
+            return expireOn.HasValue ? expireOn.Value - DateTime.UtcNow : TimeSpan.FromSeconds(-1);
         }
 
         public override List<string> GetRangeFromSet(string key, int startingFrom, int endingAt)
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            QueryBuilder builder = QueryBuilder.New($@"equalTo=""{key}""");
-            builder.OrderBy("key");
-            FirebaseResponse response = Client.Get("sets", builder);
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, Set> collections = response.ResultAs<Dictionary<string, Set>>();
-                return collections.Skip(startingFrom).Take(endingAt).Select(c => c.Value).Select(s => s.Value).ToList();
-            }
-
-            return new List<string>();
+            return Storage.Client.CreateDocumentQuery<Set>(SetDocumentCollectionUri, QueryOptions)
+                          .Skip(startingFrom).Take(endingAt)
+                          .Select(c => c.Value)
+                          .AsEnumerable()
+                          .ToList();
         }
 
         public override long GetCounter(string key)
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            long value = 0;
-            FirebaseResponse response = Client.Get($"counters/raw/{key}");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, Counter> collections = response.ResultAs<Dictionary<string, Counter>>();
-                value += collections.Sum(c => c.Value.Value);
-            }
-
-            response = Client.Get($"counters/aggregrated/{key}");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, Counter> collections = response.ResultAs<Dictionary<string, Counter>>();
-                value += collections.Sum(c => c.Value.Value);
-            }
-
-            return value;
+            return Storage.Client.CreateDocumentQuery<Counter>(CounterDocumentCollectionUri, QueryOptions)
+                          .Where(c => c.Key == key)
+                          .Sum(c => c.Value);
         }
 
         public override long GetSetCount(string key)
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            QueryBuilder builder = QueryBuilder.New($@"equalTo=""{key}""");
-            builder.OrderBy("key");
-            FirebaseResponse response = Client.Get("sets", builder);
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, Set> collections = response.ResultAs<Dictionary<string, Set>>();
-                return collections.LongCount();
-            }
-
-            return default(long);
+            return Storage.Client.CreateDocumentQuery<Set>(SetDocumentCollectionUri, QueryOptions)
+                          .Where(s => s.Key == key)
+                          .LongCount();
         }
 
         public override HashSet<string> GetAllItemsFromSet(string key)
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            QueryBuilder builder = QueryBuilder.New($@"equalTo=""{key}""");
-            builder.OrderBy("key");
-            FirebaseResponse response = Client.Get("sets", builder);
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, Set> sets = response.ResultAs<Dictionary<string, Set>>();
-                List<string> data = sets.Select(s => s.Value.Value).ToList();
-                return new HashSet<string>(data);
-            }
+            List<string> sets = Storage.Client.CreateDocumentQuery<Set>(SetDocumentCollectionUri, QueryOptions)
+                                       .Where(s => s.Key == key)
+                                       .Select(s => s.Value)
+                                       .AsEnumerable()
+                                       .ToList();
 
-            return new HashSet<string>();
+            return new HashSet<string>(sets);
         }
 
         public override string GetFirstByLowestScoreFromSet(string key, double fromScore, double toScore)
@@ -283,90 +279,64 @@ namespace Hangfire.AzureDocumentDB
             if (key == null) throw new ArgumentNullException(nameof(key));
             if (toScore < fromScore) throw new ArgumentException("The `toScore` value must be higher or equal to the `fromScore` value.");
 
-            QueryBuilder builder = QueryBuilder.New($@"equalTo=""{key}""");
-            builder.OrderBy("key");
-            FirebaseResponse response = Client.Get("sets", builder);
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, Set> sets = response.ResultAs<Dictionary<string, Set>>();
-                return sets.Select(s => s.Value)
-                           .OrderBy(s => s.Score)
-                           .Where(s => s.Score >= fromScore && s.Score <= toScore)
-                           .Select(s => s.Value).FirstOrDefault();
-            }
-
-            return string.Empty;
+            return Storage.Client.CreateDocumentQuery<Set>(SetDocumentCollectionUri, QueryOptions)
+                          .Where(s => s.Key == key)
+                          .OrderBy(s => s.Score)
+                          .Where(s => s.Score >= fromScore && s.Score <= toScore)
+                          .Select(s => s.Value)
+                          .AsEnumerable()
+                          .FirstOrDefault();
         }
 
         #endregion
 
         #region Server
 
-        public override void AnnounceServer(string serverId, ServerContext context)
+        public override async void AnnounceServer(string serverId, ServerContext context)
         {
             if (serverId == null) throw new ArgumentNullException(nameof(serverId));
             if (context == null) throw new ArgumentNullException(nameof(context));
 
-            QueryBuilder builder = QueryBuilder.New($@"equalTo=""{serverId}""");
-            builder.OrderBy("server_id");
-            FirebaseResponse response = Client.Get("servers", builder);
-            if (response.StatusCode == HttpStatusCode.OK)
+            Entities.Server server = Storage.Client.CreateDocumentQuery<Entities.Server>(ServerDocumentCollectionUri, QueryOptions)
+                                            .Where(s => s.ServerId == serverId)
+                                            .AsEnumerable()
+                                            .FirstOrDefault();
+
+            if (server != null)
             {
-                Dictionary<string, Entities.Server> servers = response.ResultAs<Dictionary<string, Entities.Server>>();
-                string reference = servers?.Where(s => s.Value.ServerId == serverId).Select(s => s.Key).FirstOrDefault();
+                server.LastHeartbeat = DateTime.UtcNow;
+                server.Workers = context.WorkerCount;
+                server.Queues = context.Queues;
 
-                Entities.Server server;
-                if (!string.IsNullOrEmpty(reference) && servers.TryGetValue(reference, out server))
+                await Storage.Client.ReplaceDocumentAsync(server.SelfLink, server);
+            }
+            else
+            {
+                server = new Entities.Server
                 {
-                    server.LastHeartbeat = DateTime.UtcNow;
-                    server.Workers = context.WorkerCount;
-                    server.Queues = context.Queues;
+                    ServerId = serverId,
+                    Workers = context.WorkerCount,
+                    Queues = context.Queues,
+                    CreatedOn = DateTime.UtcNow,
+                    LastHeartbeat = DateTime.UtcNow
+                };
 
-                    response = Client.Set($"servers/{reference}", server);
-                    if (response.StatusCode != HttpStatusCode.OK)
-                    {
-                        throw new HttpRequestException(response.Body);
-                    }
-                }
-                else
-                {
-                    server = new Entities.Server
-                    {
-                        ServerId = serverId,
-                        Workers = context.WorkerCount,
-                        Queues = context.Queues,
-                        CreatedOn = DateTime.UtcNow,
-                        LastHeartbeat = DateTime.UtcNow
-                    };
-
-                    response = Client.Push("servers", server);
-                    if (response.StatusCode != HttpStatusCode.OK)
-                    {
-                        throw new HttpRequestException(response.Body);
-                    }
-                }
+                await Storage.Client.CreateDocumentAsync(ServerDocumentCollectionUri, server);
             }
         }
 
-        public override void Heartbeat(string serverId)
+        public override async void Heartbeat(string serverId)
         {
             if (serverId == null) throw new ArgumentNullException(nameof(serverId));
 
-            QueryBuilder builder = QueryBuilder.New($@"equalTo=""{serverId}""");
-            builder.OrderBy("server_id");
-            FirebaseResponse response = Client.Get("servers", builder);
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
+            Entities.Server server = Storage.Client.CreateDocumentQuery<Entities.Server>(SetDocumentCollectionUri, QueryOptions)
+                                            .Where(s => s.ServerId == serverId)
+                                            .AsEnumerable()
+                                            .FirstOrDefault();
+            if (server != null)
             {
-                Dictionary<string, Entities.Server> servers = response.ResultAs<Dictionary<string, Entities.Server>>();
-                string reference = servers.Where(s => s.Value.ServerId == serverId).Select(s => s.Key).FirstOrDefault();
-                if (!string.IsNullOrEmpty(reference))
-                {
-                    response = Client.Set($"servers/{reference}/last_heartbeat", DateTime.UtcNow);
-                    if (response.StatusCode != HttpStatusCode.OK)
-                    {
-                        throw new HttpRequestException(response.Body);
-                    }
-                }
+                server.LastHeartbeat = DateTime.UtcNow;
+                await Storage.Client.ReplaceDocumentAsync(server.SelfLink, server);
             }
         }
 
@@ -374,17 +344,13 @@ namespace Hangfire.AzureDocumentDB
         {
             if (serverId == null) throw new ArgumentNullException(nameof(serverId));
 
-            QueryBuilder builder = QueryBuilder.New($@"equalTo=""{serverId}""");
-            builder.OrderBy("server_id");
-            FirebaseResponse response = Client.Get("servers", builder);
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
+            Entities.Server server = Storage.Client.CreateDocumentQuery<Entities.Server>(ServerDocumentCollectionUri, QueryOptions)
+                                            .Where(s => s.ServerId == serverId)
+                                            .AsEnumerable()
+                                            .FirstOrDefault();
+            if (server != null)
             {
-                Dictionary<string, Entities.Server> servers = response.ResultAs<Dictionary<string, Entities.Server>>();
-                string reference = servers.Where(s => s.Value.ServerId == serverId).Select(s => s.Key).Single();
-                if (!string.IsNullOrEmpty(reference))
-                {
-                    Client.Delete($"servers/{reference}");
-                }
+                Storage.Client.DeleteDocumentAsync(server.SelfLink);
             }
         }
 
@@ -392,26 +358,18 @@ namespace Hangfire.AzureDocumentDB
         {
             if (timeOut.Duration() != timeOut)
             {
-                throw new ArgumentException("The `timeOut` value must be positive.", nameof(timeOut));
+                throw new ArgumentException(@"The `timeOut` value must be positive.", nameof(timeOut));
             }
 
-            FirebaseResponse response = Client.Get("servers");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, Entities.Server> servers = response.ResultAs<Dictionary<string, Entities.Server>>();
+            DateTime lastHeartbeat = DateTime.UtcNow.Add(timeOut.Negate());
+            string[] selfLinks = Storage.Client.CreateDocumentQuery<Entities.Server>(ServerDocumentCollectionUri, QueryOptions)
+                                        .Where(s => s.LastHeartbeat < lastHeartbeat)
+                                        .Select(s => s.SelfLink)
+                                        .AsEnumerable()
+                                        .ToArray();
 
-                // get the firebase reference key for each timeout server
-                DateTime lastHeartbeat = DateTime.UtcNow.Add(timeOut.Negate());
-                string[] references = servers.Where(s => s.Value.LastHeartbeat < lastHeartbeat)
-                                             .Select(s => s.Key)
-                                             .ToArray();
-
-                // remove all timeout server.
-                Array.ForEach(references, reference => Client.Delete($"servers/{reference}"));
-                return references.Length;
-            }
-
-            return default(int);
+            Array.ForEach(selfLinks, selfLink => Storage.Client.DeleteDocumentAsync(selfLink));
+            return selfLinks.Length;
         }
 
         #endregion
@@ -422,14 +380,10 @@ namespace Hangfire.AzureDocumentDB
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            FirebaseResponse response = Client.Get($"hashes/{key}");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, Hash> hashes = response.ResultAs<Dictionary<string, Hash>>();
-                return hashes.Select(h => h.Value).ToDictionary(h => h.Field, h => h.Value);
-            }
-
-            return new Dictionary<string, string>();
+            return Storage.Client.CreateDocumentQuery<Hash>(HashDocumentCollectionUri, QueryOptions)
+                          .Where(h => h.Key == key)
+                          .AsEnumerable()
+                          .ToDictionary(h => h.Field, h => h.Value);
         }
 
         public override void SetRangeInHash(string key, IEnumerable<KeyValuePair<string, string>> keyValuePairs)
@@ -437,51 +391,23 @@ namespace Hangfire.AzureDocumentDB
             if (key == null) throw new ArgumentNullException(nameof(key));
             if (keyValuePairs == null) throw new ArgumentNullException(nameof(keyValuePairs));
 
-            List<Hash> hashes = keyValuePairs.Select(k => new Hash
+            List<Hash> source = keyValuePairs.Select(k => new Hash
             {
+                Key = key,
                 Field = k.Key,
                 Value = k.Value
             }).ToList();
 
-            FirebaseResponse response = Client.Get($"hashes/{key}");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, Hash> existingHashes = response.ResultAs<Dictionary<string, Hash>>();
-                string[] references = existingHashes.Where(h => hashes.Any(k => k.Field == h.Value.Field))
-                                                    .Select(h => h.Key)
-                                                    .ToArray();
-                // updates 
-                Parallel.ForEach(references, reference =>
-                {
-                    Hash hash;
-                    if (existingHashes.TryGetValue(reference, out hash) && hashes.Any(k => k.Field == hash.Field))
-                    {
-                        string value = hashes.Where(k => k.Field == hash.Field).Select(k => k.Value).Single();
-                        Client.Set($"hashes/{key}/{reference}/value", value);
-
-                        // remove the hash from the list
-                        hashes.RemoveAll(x => x.Field == hash.Field);
-                    }
-                });
-            }
-
-            // new 
-            Parallel.ForEach(hashes, hash => Client.Push($"hashes/{key}", hash));
+            source.ForEach(hash => Storage.Client.UpsertDocumentAsync(SetDocumentCollectionUri, hash));
         }
 
         public override long GetHashCount(string key)
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            QueryBuilder builder = QueryBuilder.New().Shallow(true);
-            FirebaseResponse response = Client.Get($"hashes/{key}", builder);
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                string[] hashes = response.ResultAs<string[]>();
-                return hashes.LongCount();
-            }
-
-            return default(long);
+            return Storage.Client.CreateDocumentQuery<Hash>(HashDocumentCollectionUri, QueryOptions)
+                          .Where(h => h.Key == key)
+                          .LongCount();
         }
 
         public override string GetValueFromHash(string key, string name)
@@ -489,29 +415,22 @@ namespace Hangfire.AzureDocumentDB
             if (key == null) throw new ArgumentNullException(nameof(key));
             if (name == null) throw new ArgumentNullException(nameof(name));
 
-            FirebaseResponse response = Client.Get($"hashes/{key}");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, Hash> hashes = response.ResultAs<Dictionary<string, Hash>>();
-                return hashes.Select(h => h.Value).Where(h => h.Field == name).Select(v => v.Value).FirstOrDefault();
-            }
-
-            return string.Empty;
+            return Storage.Client.CreateDocumentQuery<Hash>(HashDocumentCollectionUri, QueryOptions)
+                          .Where(h => h.Key == key && h.Field == name)
+                          .Select(h => h.Value)
+                          .AsEnumerable()
+                          .FirstOrDefault();
         }
 
         public override TimeSpan GetHashTtl(string key)
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            FirebaseResponse response = Client.Get($"hashes/{key}");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, Hash> hashes = response.ResultAs<Dictionary<string, Hash>>();
-                DateTime? expireOn = hashes.Select(h => h.Value).Min(h => h.ExpireOn);
-                if (expireOn.HasValue) return expireOn.Value - DateTime.UtcNow;
-            }
+            DateTime? expireOn = Storage.Client.CreateDocumentQuery<Hash>(HashDocumentCollectionUri, QueryOptions)
+                                        .Where(h => h.Key == key)
+                                        .Min(h => h.ExpireOn);
 
-            return TimeSpan.FromSeconds(-1);
+            return expireOn.HasValue ? expireOn.Value - DateTime.UtcNow : TimeSpan.FromSeconds(-1);
         }
 
         #endregion
@@ -522,61 +441,44 @@ namespace Hangfire.AzureDocumentDB
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            FirebaseResponse response = Client.Get($"lists/{key}");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, List> lists = response.ResultAs<Dictionary<string, List>>();
-                return lists.Select(l => l.Value).Select(l => l.Value).ToList();
-            }
-
-            return new List<string>();
+            return Storage.Client.CreateDocumentQuery<Hash>(ListDocumentCollectionUri, QueryOptions)
+                          .Where(l => l.Key == key)
+                          .Select(l => l.Value)
+                          .AsEnumerable()
+                          .ToList();
         }
 
         public override List<string> GetRangeFromList(string key, int startingFrom, int endingAt)
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            FirebaseResponse response = Client.Get($"lists/{key}");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, List> lists = response.ResultAs<Dictionary<string, List>>();
-                return lists.Select(l => l.Value)
-                            .OrderBy(l => l.ExpireOn)
-                            .Skip(startingFrom).Take(endingAt)
-                            .Select(l => l.Value).ToList();
-            }
-
-            return new List<string>();
+            return Storage.Client.CreateDocumentQuery<Hash>(ListDocumentCollectionUri, QueryOptions)
+                          .Where(l => l.Key == key)
+                          .OrderBy(l => l.ExpireOn)
+                          .Skip(startingFrom).Take(endingAt)
+                          .Select(l => l.Value)
+                          .AsEnumerable()
+                          .ToList();
         }
 
         public override TimeSpan GetListTtl(string key)
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            FirebaseResponse response = Client.Get($"lists/{key}");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, List> lists = response.ResultAs<Dictionary<string, List>>();
-                DateTime? expireOn = lists.Select(l => l.Value).Min(l => l.ExpireOn);
-                if (expireOn.HasValue) return expireOn.Value - DateTime.UtcNow;
-            }
+            DateTime? expireOn = Storage.Client.CreateDocumentQuery<Hash>(ListDocumentCollectionUri, QueryOptions)
+                                        .Where(l => l.Key == key)
+                                        .Min(l => l.ExpireOn);
 
-            return TimeSpan.FromSeconds(-1);
+            return expireOn.HasValue ? expireOn.Value - DateTime.UtcNow : TimeSpan.FromSeconds(-1);
         }
 
         public override long GetListCount(string key)
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            QueryBuilder builder = QueryBuilder.New().Shallow(true);
-            FirebaseResponse response = Client.Get($"lists/{key}", builder);
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                string[] lists = response.ResultAs<string[]>();
-                return lists.LongCount();
-            }
-
-            return default(long);
+            return Storage.Client.CreateDocumentQuery<Hash>(ListDocumentCollectionUri, QueryOptions)
+                          .Where(l => l.Key == key)
+                          .LongCount();
         }
 
         #endregion
