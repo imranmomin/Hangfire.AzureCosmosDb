@@ -5,7 +5,7 @@ using Hangfire.Server;
 using Hangfire.Storage;
 using Hangfire.Logging;
 using Hangfire.AzureDocumentDB.Queue;
-
+using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 
 namespace Hangfire.AzureDocumentDB
@@ -44,7 +44,10 @@ namespace Hangfire.AzureDocumentDB
             connectionPolicy.RequestTimeout = options.RequestTimeout;
             Client = new DocumentClient(options.Endpoint, options.AuthSecret, connectionPolicy);
             Client.OpenAsync();
-            
+
+            // create the database all the collections
+            Initialize();
+
             JobQueueProvider provider = new JobQueueProvider(this);
             QueueProviders = new PersistentJobQueueProviderCollection(provider);
         }
@@ -93,6 +96,23 @@ namespace Hangfire.AzureDocumentDB
         /// </summary>
         /// <returns></returns>
         public override string ToString() => $"Firbase Database : {Options.DatabaseName}";
+
+        private async void Initialize()
+        {
+            // create database
+            await Client.CreateDatabaseIfNotExistsAsync(new Database { Id = Options.DatabaseName });
+
+            // create all the collections 
+            Uri databaseUri = UriFactory.CreateDatabaseUri(Options.DatabaseName);
+            await Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "servers" });
+            await Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "queues" });
+            await Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "hashes" });
+            await Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "lists" });
+            await Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "counters" });
+            await Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "jobs" });
+            await Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "states" });
+            await Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "sets" });
+        }
 
     }
 }
