@@ -1,42 +1,42 @@
-﻿using System.Net;
+﻿using System;
+using System.Net;
 using System.Linq;
 using System.Collections.Generic;
+using Microsoft.Azure.Documents.Client;
 
 namespace Hangfire.AzureDocumentDB.Queue
 {
     internal class JobQueueMonitoringApi : IPersistentJobQueueMonitoringApi
     {
-        private readonly AzureDocumentDbConnection connection;
+        private readonly AzureDocumentDbStorage storage;
         private readonly IEnumerable<string> queues;
+        private readonly Uri QueueDocumentCollectionUri;
+        private readonly FeedOptions QueryOptions = new FeedOptions { MaxItemCount = -1 };
 
         public JobQueueMonitoringApi(AzureDocumentDbStorage storage)
         {
-            connection = (AzureDocumentDbConnection)storage.GetConnection();
+            this.storage = storage;
             queues = storage.Options.Queues;
+            QueueDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "queues");
         }
 
         public IEnumerable<string> GetQueues() => queues;
 
         public int GetEnqueuedCount(string queue)
         {
-            FirebaseResponse response = connection.Client.Get($"queue/{queue}");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, string> collection = response.ResultAs<Dictionary<string, string>>();
-                return collection.Count;
-            }
-            return default(int);
+            return storage.Client.CreateDocumentQuery<Entities.Queue>(QueueDocumentCollectionUri, QueryOptions)
+                .Where(q => q.Name == queue)
+                .AsEnumerable()
+                .Count();
         }
 
         public IEnumerable<string> GetEnqueuedJobIds(string queue, int from, int perPage)
         {
-            FirebaseResponse response = connection.Client.Get($"queue/{queue}");
-            if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
-            {
-                Dictionary<string, string> collection = response.ResultAs<Dictionary<string, string>>();
-                return collection.Skip(from).Take(perPage).Select(c => c.Value);
-            }
-            return null;
+           return storage.Client.CreateDocumentQuery<Entities.Queue>(QueueDocumentCollectionUri, QueryOptions)
+                .Where(q => q.Name == queue)
+                .Skip(from).Take(perPage)
+                .Select(c => c.JobId)
+                .ToList();
         }
 
         public IEnumerable<string> GetFetchedJobIds(string queue, int from, int perPage) => GetEnqueuedJobIds(queue, from, perPage);

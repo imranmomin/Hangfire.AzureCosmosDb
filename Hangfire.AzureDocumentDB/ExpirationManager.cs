@@ -4,6 +4,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
+using Microsoft.Azure.Documents.Linq;
+using Microsoft.Azure.Documents.Client;
+
 using Hangfire.Logging;
 using Hangfire.Server;
 using Hangfire.AzureDocumentDB.Entities;
@@ -17,15 +20,16 @@ namespace Hangfire.AzureDocumentDB
         private static readonly ILog Logger = LogProvider.For<ExpirationManager>();
         private const string distributedLockKey = "expirationmanager";
         private static readonly TimeSpan defaultLockTimeout = TimeSpan.FromMinutes(5);
-        private static readonly string[] documents = { "locks", "jobs", "lists", "sets", "hashs", "counters/aggregrated" };
-        private readonly AzureDocumentDbConnection connection;
+        private static readonly string[] documents = { "locks", "jobs", "lists", "sets", "hashes", "counters" };
         private readonly TimeSpan checkInterval;
+
+        private readonly AzureDocumentDbStorage storage;
 
         public ExpirationManager(AzureDocumentDbStorage storage)
         {
             if (storage == null) throw new ArgumentNullException(nameof(storage));
 
-            connection = (AzureDocumentDbConnection)storage.GetConnection();
+            this.storage = storage;
             checkInterval = storage.Options.ExpirationCheckInterval;
         }
 
@@ -35,29 +39,39 @@ namespace Hangfire.AzureDocumentDB
             {
                 Logger.Debug($"Removing outdated records from the '{document}' document.");
 
-                using (new AzureDocumentDbDistributedLock(distributedLockKey, defaultLockTimeout, connection.Client))
+                using (new AzureDocumentDbDistributedLock(distributedLockKey, defaultLockTimeout, storage))
                 {
-                    FirebaseResponse respone = connection.Client.Get($"{document}");
-                    if (respone.StatusCode == System.Net.HttpStatusCode.OK)
+                    string responseContinuation = null;
+                    Uri collectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, document);
+
+                    do
                     {
-                        Dictionary<string, FireEntity> collection = respone.ResultAs<Dictionary<string, FireEntity>>();
-                        string[] references = collection?.Where(c => c.Value.ExpireOn.HasValue && c.Value.ExpireOn < DateTime.UtcNow).Select(c => c.Key).ToArray();
-                        if (references != null && references.Length > 0)
+                        FeedOptions QueryOptions = new FeedOptions { MaxItemCount = 100, RequestContinuation = responseContinuation };
+                        IDocumentQuery<FireEntity> query = storage.Client.CreateDocumentQuery<FireEntity>(collectionUri, QueryOptions)
+                            .Where(c => c.ExpireOn.HasValue && c.ExpireOn < DateTime.UtcNow)
+                            .AsDocumentQuery();
+
+                        if (query.HasMoreResults)
                         {
-                            ParallelOptions options = new ParallelOptions { CancellationToken = cancellationToken };
-                            Parallel.ForEach(references, options, (reference) =>
+                            Task<FeedResponse<FireEntity>> task = query.ExecuteNextAsync<FireEntity>(cancellationToken);
+                            responseContinuation = task.Result.ResponseContinuation;
+
+                            List<FireEntity> entities = task.Result.Where(entity => document != "counters" || !(entity is Counter) || (entity as Counter).Type != CounterTypes.Raw).ToList();
+
+                            foreach (FireEntity entity in entities)
                             {
-                                options.CancellationToken.ThrowIfCancellationRequested();
-                                connection.Client.Delete($"{document}/{reference}");
-                            });
+                                cancellationToken.ThrowIfCancellationRequested();
+                                storage.Client.DeleteDocumentAsync(entity.SelfLink);
+                            }
                         }
-                    }
+
+                    } while (!string.IsNullOrEmpty(responseContinuation));
+
                 }
 
                 Logger.Trace($"Outdated records removed from the '{document}' document.");
                 cancellationToken.WaitHandle.WaitOne(checkInterval);
             }
         }
-
     }
 }

@@ -3,10 +3,13 @@ using System.Net;
 using System.Linq;
 using System.Threading;
 using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Azure.Documents.Client;
 
 using Hangfire.Logging;
 using Hangfire.Server;
 using Hangfire.AzureDocumentDB.Entities;
+using Microsoft.Azure.Documents;
 
 namespace Hangfire.AzureDocumentDB
 {
@@ -17,64 +20,75 @@ namespace Hangfire.AzureDocumentDB
         private static readonly ILog Logger = LogProvider.For<CountersAggregator>();
         private const string distributedLockKey = "countersaggragator";
         private static readonly TimeSpan defaultLockTimeout = TimeSpan.FromMinutes(5);
-        private readonly AzureDocumentDbConnection connection;
         private readonly TimeSpan checkInterval;
+
+        private readonly AzureDocumentDbStorage storage;
+
+        private readonly FeedOptions QueryOptions = new FeedOptions { MaxItemCount = -1 };
+        private readonly Uri CounterDocumentCollectionUri;
 
         public CountersAggregator(AzureDocumentDbStorage storage)
         {
             if (storage == null) throw new ArgumentNullException(nameof(storage));
 
-            connection = (AzureDocumentDbConnection)storage.GetConnection();
+            this.storage = storage;
             checkInterval = storage.Options.CountersAggregateInterval;
+            CounterDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "counters");
         }
 
         public void Execute(CancellationToken cancellationToken)
         {
             Logger.Debug("Aggregating records in 'Counter' table.");
 
-            using (new AzureDocumentDbDistributedLock(distributedLockKey, defaultLockTimeout, connection.Client))
+            using (new AzureDocumentDbDistributedLock(distributedLockKey, defaultLockTimeout, storage))
             {
-                FirebaseResponse response = connection.Client.Get("counters/raw");
-                if (response.StatusCode == HttpStatusCode.OK && !response.IsNull())
+                List<Counter> rawCounters = storage.Client.CreateDocumentQuery<Counter>(CounterDocumentCollectionUri, QueryOptions)
+                    .Where(c => c.Type == CounterTypes.Raw)
+                    .AsEnumerable()
+                    .ToList();
+
+                Dictionary<string, Tuple<int, DateTime?>> counters = rawCounters.GroupBy(c => c.Key)
+                    .ToDictionary(k => k.Key, v => new Tuple<int, DateTime?>(v.Sum(c => c.Value), v.Max(c => c.ExpireOn)));
+
+                Array.ForEach(counters.Keys.ToArray(), key =>
                 {
-                    Dictionary<string, Dictionary<string, Counter>> counters = response.ResultAs<Dictionary<string, Dictionary<string, Counter>>>();
-                    Array.ForEach(counters.Keys.ToArray(), key =>
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    Tuple<int, DateTime?> data;
+                    if (counters.TryGetValue(key, out data))
                     {
-                        cancellationToken.ThrowIfCancellationRequested();
+                        Counter aggregated = storage.Client.CreateDocumentQuery<Counter>(CounterDocumentCollectionUri, QueryOptions)
+                             .Where(c => c.Key == key && c.Type == CounterTypes.Aggregrate)
+                             .AsEnumerable()
+                             .FirstOrDefault();
 
-                        Dictionary<string, Counter> data;
-                        if (counters.TryGetValue(key, out data))
+                        if (aggregated == null)
                         {
-                            data = data.ToDictionary(k => k.Key, v => v.Value);
-
-                            int value = data.Sum(c => c.Value.Value);
-                            DateTime? expireOn = data.Max(c => c.Value.ExpireOn);
-                            Counter aggregated = new Counter
+                            aggregated = new Counter
                             {
-                                Value = value,
-                                ExpireOn = expireOn
+                                Key = key,
+                                Type = CounterTypes.Aggregrate,
+                                Value = data.Item1,
+                                ExpireOn = data.Item2
                             };
-
-                            FirebaseResponse counterResponse = connection.Client.Get($"counters/aggregrated/{key}");
-                            if (counterResponse.StatusCode == HttpStatusCode.OK && !counterResponse.IsNull())
-                            {
-                                Counter counter = counterResponse.ResultAs<Counter>();
-                                if (counter != null)
-                                {
-                                    aggregated.Value += counter.Value;
-                                }
-                            }
-
-                            // update the aggregrated counter
-                            FirebaseResponse aggResponse = connection.Client.Set($"counters/aggregrated/{key}", aggregated);
-                            if (aggResponse.StatusCode == HttpStatusCode.OK)
-                            {
-                                // delete all the counter references for the key
-                                Array.ForEach(data.Keys.ToArray(), reference => connection.Client.Delete($"counters/raw/{key}/{reference}"));
-                            }
                         }
-                    });
-                }
+                        else
+                        {
+                            aggregated.Value += data.Item1;
+                            aggregated.ExpireOn = data.Item2;
+                        }
+
+                        Task<ResourceResponse<Document>> task = storage.Client.UpsertDocumentAsync(CounterDocumentCollectionUri, aggregated);
+                        task.ContinueWith(t =>
+                        {
+                            if (t.Result.StatusCode == HttpStatusCode.Accepted)
+                            {
+                                List<Counter> deleteCountersr = rawCounters.Where(c => c.Key == key).ToList();
+                                deleteCountersr.ForEach(counter => storage.Client.DeleteDocumentAsync(counter.SelfLink));
+                            }
+                        }, cancellationToken);
+                    }
+                });
             }
 
             Logger.Trace("Records from the 'Counter' table aggregated.");

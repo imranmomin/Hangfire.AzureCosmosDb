@@ -1,22 +1,28 @@
-﻿using System.Net;
+﻿using System;
 
 using Hangfire.Storage;
+using Microsoft.Azure.Documents.Client;
 
 namespace Hangfire.AzureDocumentDB.Queue
 {
     internal class FetchedJob : IFetchedJob
     {
-        private readonly AzureDocumentDbConnection connection;
+        private readonly AzureDocumentDbStorage storage;
+        private readonly Uri QueueDocumentCollectionUri;
 
-        public FetchedJob(AzureDocumentDbStorage storage, string queue, string jobId, string reference)
+        public FetchedJob(AzureDocumentDbStorage storage, Entities.Queue data)
         {
-            connection = (AzureDocumentDbConnection)storage.GetConnection();
-            JobId = jobId;
-            Queue = queue;
-            Reference = reference;
+            this.storage = storage;
+            Id = data.Id;
+            JobId = data.JobId;
+            Queue = data.Name;
+            SelfLink = data.SelfLink;
+            QueueDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "queues");
         }
 
-        private string Reference { get; }
+        private string Id { get; }
+
+        private string SelfLink { get; }
 
         public string JobId { get; }
 
@@ -26,15 +32,17 @@ namespace Hangfire.AzureDocumentDB.Queue
         {
         }
 
-        public void RemoveFromQueue() => connection.Client.Delete($"queue/{Queue}/{Reference}");
+        public void RemoveFromQueue() => storage.Client.DeleteDocumentAsync(SelfLink);
 
         public void Requeue()
         {
-            FirebaseResponse response = connection.Client.Get($"queue/{Queue}/{Reference}");
-            if (response.StatusCode == HttpStatusCode.NotFound)
+            Entities.Queue data = new Entities.Queue
             {
-                connection.Client.Push($"queue/{Queue}", JobId);
-            }
+                Id = Id,
+                Name = Queue,
+                JobId = JobId
+            };
+            storage.Client.UpsertDocumentAsync(QueueDocumentCollectionUri, data);
         }
     }
 }

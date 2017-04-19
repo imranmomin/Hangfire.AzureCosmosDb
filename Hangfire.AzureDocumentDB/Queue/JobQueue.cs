@@ -4,23 +4,26 @@ using System.Threading;
 using System.Collections.Generic;
 
 using Hangfire.Storage;
- 
+using Microsoft.Azure.Documents.Client;
+
 namespace Hangfire.AzureDocumentDB.Queue
 {
     internal class JobQueue : IPersistentJobQueue
     {
         private readonly AzureDocumentDbStorage storage;
-        private readonly AzureDocumentDbConnection connection;
         private readonly string dequeueLockKey = "locks:job:dequeue";
         private readonly TimeSpan defaultLockTimeout = TimeSpan.FromMinutes(1);
         private readonly TimeSpan checkInterval;
         private readonly object syncLock = new object();
 
+        private readonly Uri QueueDocumentCollectionUri;
+        private readonly FeedOptions QueryOptions = new FeedOptions { MaxItemCount = 1 };
+
         public JobQueue(AzureDocumentDbStorage storage)
         {
             this.storage = storage;
-            connection = (AzureDocumentDbConnection)storage.GetConnection();
             checkInterval = storage.Options.QueuePollInterval;
+            QueueDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "queues");
         }
 
         public IFetchedJob Dequeue(string[] queues, CancellationToken cancellationToken)
@@ -31,25 +34,19 @@ namespace Hangfire.AzureDocumentDB.Queue
                 cancellationToken.ThrowIfCancellationRequested();
                 lock (syncLock)
                 {
-                    using (new AzureDocumentDbDistributedLock(dequeueLockKey, defaultLockTimeout, connection.Client))
+                    using (new AzureDocumentDbDistributedLock(dequeueLockKey, defaultLockTimeout, storage))
                     {
                         string queue = queues.ElementAt(index);
 
-                        QueryBuilder buidler = QueryBuilder.New();
-                        buidler.OrderBy("$key");
-                        buidler.LimitToFirst(1);
-                        FirebaseResponse response = connection.Client.Get($"queue/{queue}", buidler);
-                        if (response.StatusCode == System.Net.HttpStatusCode.OK)
-                        {
-                            Dictionary<string, string> collection = response.ResultAs<Dictionary<string, string>>();
-                            var data = collection?.Select(q => new { Queue = queue, Reference = q.Key, JobId = q.Value })
-                                .FirstOrDefault();
+                        Entities.Queue data = storage.Client.CreateDocumentQuery<Entities.Queue>(QueueDocumentCollectionUri, QueryOptions)
+                            .Where(q => q.Name == queue)
+                            .AsEnumerable()
+                            .FirstOrDefault();
 
-                            if (!string.IsNullOrEmpty(data?.JobId) && !string.IsNullOrEmpty(data.Reference))
-                            {
-                                connection.Client.Delete($"queue/{data.Queue}/{data.Reference}");
-                                return new FetchedJob(storage, data.Queue, data.JobId, data.Reference);
-                            }
+                        if (data != null)
+                        {
+                            storage.Client.DeleteDocumentAsync(data.SelfLink);
+                            return new FetchedJob(storage, data);
                         }
                     }
                 }
@@ -59,6 +56,14 @@ namespace Hangfire.AzureDocumentDB.Queue
             }
         }
 
-        public void Enqueue(string queue, string jobId) => connection.Client.Push($"queue/{queue}", jobId);
+        public void Enqueue(string queue, string jobId)
+        {
+            Entities.Queue data = new Entities.Queue
+            {
+                Name = queue,
+                JobId = jobId
+            };
+            storage.Client.CreateDocumentAsync(QueueDocumentCollectionUri, data);
+        }
     }
 }
