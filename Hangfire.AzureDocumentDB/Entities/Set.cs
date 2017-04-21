@@ -1,9 +1,16 @@
-﻿namespace Hangfire.AzureDocumentDB.Entities
+﻿using Newtonsoft.Json;
+
+namespace Hangfire.AzureDocumentDB.Entities
 {
-    internal class Set : FireEntity
+    internal class Set : DocumentEntity
     {
+        [JsonProperty("key")]
         public string Key { get; set; }
+
+        [JsonProperty("value")]
         public string Value { get; set; }
-        public double Score { get; set; }
+
+        [JsonProperty("score")]
+        public double? Score { get; set; }
     }
 }

@@ -1,12 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 
+using Microsoft.Azure.Documents;
+using Microsoft.Azure.Documents.Client;
+
 using Hangfire.Server;
 using Hangfire.Storage;
 using Hangfire.Logging;
 using Hangfire.AzureDocumentDB.Queue;
-using Microsoft.Azure.Documents;
-using Microsoft.Azure.Documents.Client;
 
 namespace Hangfire.AzureDocumentDB
 {
@@ -26,9 +27,10 @@ namespace Hangfire.AzureDocumentDB
         /// </summary>
         /// <param name="url">The url string to Firebase Database</param>
         /// <param name="authSecret">The secret key for the Firebase Database</param>
+        /// <param name="database">The name of the database to connect with</param>
         /// <exception cref="ArgumentNullException"><paramref name="url"/> argument is null.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="authSecret"/> argument is null.</exception>
-        public AzureDocumentDbStorage(string url, string authSecret) : this(new AzureDocumentDbStorageOptions { Endpoint = new Uri(url), AuthSecret = authSecret }) { }
+        public AzureDocumentDbStorage(string url, string authSecret, string database) : this(new AzureDocumentDbStorageOptions { Endpoint = new Uri(url), AuthSecret = authSecret, DatabaseName = database }) { }
 
         /// <summary>
         /// Initializes the FirebaseStorage form the url auth secret provide.
@@ -43,10 +45,18 @@ namespace Hangfire.AzureDocumentDB
             ConnectionPolicy connectionPolicy = ConnectionPolicy.Default;
             connectionPolicy.RequestTimeout = options.RequestTimeout;
             Client = new DocumentClient(options.Endpoint, options.AuthSecret, connectionPolicy);
-            Client.OpenAsync();
+            Client.OpenAsync().GetAwaiter().GetResult();
 
             // create the database all the collections
             Initialize();
+
+            Newtonsoft.Json.JsonConvert.DefaultSettings = () => new Newtonsoft.Json.JsonSerializerSettings
+            {
+                NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore,
+                DefaultValueHandling = Newtonsoft.Json.DefaultValueHandling.Ignore,
+                DateTimeZoneHandling = Newtonsoft.Json.DateTimeZoneHandling.Utc,
+                TypeNameHandling = Newtonsoft.Json.TypeNameHandling.All
+            };
 
             JobQueueProvider provider = new JobQueueProvider(this);
             QueueProviders = new PersistentJobQueueProviderCollection(provider);
@@ -97,21 +107,32 @@ namespace Hangfire.AzureDocumentDB
         /// <returns></returns>
         public override string ToString() => $"Firbase Database : {Options.DatabaseName}";
 
-        private async void Initialize()
+        private void Initialize()
         {
-            // create database
-            await Client.CreateDatabaseIfNotExistsAsync(new Database { Id = Options.DatabaseName });
-
-            // create all the collections 
+            ILog logger = LogProvider.For<AzureDocumentDbStorage>();
             Uri databaseUri = UriFactory.CreateDatabaseUri(Options.DatabaseName);
-            await Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "servers" });
-            await Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "queues" });
-            await Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "hashes" });
-            await Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "lists" });
-            await Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "counters" });
-            await Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "jobs" });
-            await Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "states" });
-            await Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "sets" });
+
+            // create database
+            logger.Info($"Creating database : {Options.DatabaseName}");
+            Client.CreateDatabaseIfNotExistsAsync(new Database { Id = Options.DatabaseName }).GetAwaiter().GetResult();
+            logger.Info("Creating document collection : servers");
+            Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "servers" }).GetAwaiter().GetResult();
+            logger.Info("Creating document collection : queues");
+            Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "queues" }).GetAwaiter().GetResult();
+            logger.Info("Creating document collection : hashes");
+            Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "hashes" }).GetAwaiter().GetResult();
+            logger.Info("Creating document collection : lists");
+            Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "lists" }).GetAwaiter().GetResult();
+            logger.Info("Creating document collection : counters");
+            Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "counters" }).GetAwaiter().GetResult();
+            logger.Info("Creating document collection : jobs");
+            Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "jobs" }).GetAwaiter().GetResult();
+            logger.Info("Creating document collection : states");
+            Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "states" }).GetAwaiter().GetResult();
+            logger.Info("Creating document collection : sets");
+            Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "sets" }).GetAwaiter().GetResult();
+            logger.Info("Creating document collection : locks");
+            Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "locks" }).GetAwaiter().GetResult();
         }
 
     }

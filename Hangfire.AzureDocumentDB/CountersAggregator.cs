@@ -3,13 +3,13 @@ using System.Net;
 using System.Linq;
 using System.Threading;
 using System.Collections.Generic;
-using System.Threading.Tasks;
+
+using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 
-using Hangfire.Logging;
 using Hangfire.Server;
+using Hangfire.Logging;
 using Hangfire.AzureDocumentDB.Entities;
-using Microsoft.Azure.Documents;
 
 namespace Hangfire.AzureDocumentDB
 {
@@ -24,7 +24,7 @@ namespace Hangfire.AzureDocumentDB
 
         private readonly AzureDocumentDbStorage storage;
 
-        private readonly FeedOptions QueryOptions = new FeedOptions { MaxItemCount = -1 };
+        private readonly FeedOptions QueryOptions = new FeedOptions { MaxItemCount = 1000 };
         private readonly Uri CounterDocumentCollectionUri;
 
         public CountersAggregator(AzureDocumentDbStorage storage)
@@ -78,15 +78,12 @@ namespace Hangfire.AzureDocumentDB
                             aggregated.ExpireOn = data.Item2;
                         }
 
-                        Task<ResourceResponse<Document>> task = storage.Client.UpsertDocumentAsync(CounterDocumentCollectionUri, aggregated);
-                        task.ContinueWith(t =>
+                        ResourceResponse<Document> response = storage.Client.UpsertDocumentAsync(CounterDocumentCollectionUri, aggregated).GetAwaiter().GetResult();
+                        if (response.StatusCode == HttpStatusCode.Accepted)
                         {
-                            if (t.Result.StatusCode == HttpStatusCode.Accepted)
-                            {
-                                List<Counter> deleteCountersr = rawCounters.Where(c => c.Key == key).ToList();
-                                deleteCountersr.ForEach(counter => storage.Client.DeleteDocumentAsync(counter.SelfLink));
-                            }
-                        }, cancellationToken);
+                            List<Counter> deleteCountersr = rawCounters.Where(c => c.Key == key).ToList();
+                            deleteCountersr.ForEach(counter => storage.Client.DeleteDocumentAsync(counter.SelfLink).GetAwaiter().GetResult());
+                        }
                     }
                 });
             }

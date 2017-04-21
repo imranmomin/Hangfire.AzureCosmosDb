@@ -1,17 +1,15 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Net;
-using System.Net.Http;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 
-using Hangfire.AzureDocumentDB.Entities;
-using Hangfire.AzureDocumentDB.Queue;
-using Hangfire.States;
-using Hangfire.Storage;
 using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 
+using Hangfire.States;
+using Hangfire.Storage;
+using Hangfire.AzureDocumentDB.Queue;
+using Hangfire.AzureDocumentDB.Entities;
 
 namespace Hangfire.AzureDocumentDB
 {
@@ -20,9 +18,10 @@ namespace Hangfire.AzureDocumentDB
         private readonly AzureDocumentDbConnection connection;
         private readonly List<Action> commands = new List<Action>();
 
-        private readonly FeedOptions QueryOptions = new FeedOptions { MaxItemCount = -1 };
+        private readonly FeedOptions QueryOptions = new FeedOptions { MaxItemCount = 100 };
         private readonly Uri JobDocumentCollectionUri;
         private readonly Uri SetDocumentCollectionUri;
+        private readonly Uri StateDocumentCollectionUri;
         private readonly Uri CounterDocumentCollectionUri;
         private readonly Uri HashDocumentCollectionUri;
         private readonly Uri ListDocumentCollectionUri;
@@ -34,6 +33,7 @@ namespace Hangfire.AzureDocumentDB
             AzureDocumentDbStorage storage = connection.Storage;
             JobDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "jobs");
             SetDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "sets");
+            StateDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "states");
             CounterDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "counters");
             HashDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "hashes");
             ListDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "lists");
@@ -72,8 +72,7 @@ namespace Hangfire.AzureDocumentDB
                     Value = -1
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(CounterDocumentCollectionUri, data);
-                task.Wait();
+                connection.Storage.Client.CreateDocumentAsync(CounterDocumentCollectionUri, data).GetAwaiter().GetResult();
             });
         }
 
@@ -92,8 +91,7 @@ namespace Hangfire.AzureDocumentDB
                     ExpireOn = DateTime.UtcNow.Add(expireIn)
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(CounterDocumentCollectionUri, data);
-                task.Wait();
+                connection.Storage.Client.CreateDocumentAsync(CounterDocumentCollectionUri, data).GetAwaiter().GetResult();
             });
         }
 
@@ -110,8 +108,7 @@ namespace Hangfire.AzureDocumentDB
                     Value = 1
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(CounterDocumentCollectionUri, data);
-                task.Wait();
+                connection.Storage.Client.CreateDocumentAsync(CounterDocumentCollectionUri, data).GetAwaiter().GetResult();
             });
         }
 
@@ -154,8 +151,7 @@ namespace Hangfire.AzureDocumentDB
                 if (job != null)
                 {
                     job.ExpireOn = DateTime.UtcNow.Add(expireIn);
-                    Task<ResourceResponse<Document>> task = connection.Storage.Client.ReplaceDocumentAsync(job.SelfLink, job);
-                    task.Wait();
+                    connection.Storage.Client.ReplaceDocumentAsync(job.SelfLink, job).GetAwaiter().GetResult();
                 }
             });
         }
@@ -174,8 +170,7 @@ namespace Hangfire.AzureDocumentDB
                 if (job != null)
                 {
                     job.ExpireOn = null;
-                    Task<ResourceResponse<Document>> task = connection.Storage.Client.ReplaceDocumentAsync(job.SelfLink, job);
-                    task.Wait();
+                    connection.Storage.Client.ReplaceDocumentAsync(job.SelfLink, job).GetAwaiter().GetResult();
                 }
             });
         }
@@ -207,14 +202,12 @@ namespace Hangfire.AzureDocumentDB
                         Data = state.SerializeData()
                     };
 
-                    Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(SetDocumentCollectionUri, data);
-                    task.ContinueWith(async t =>
-                    {
-                        job.StateId = t.Result.Resource.Id;
-                        job.StateName = state.Name;
+                    ResourceResponse<Document> response = connection.Storage.Client.CreateDocumentAsync(StateDocumentCollectionUri, data).GetAwaiter().GetResult();
 
-                        await connection.Storage.Client.ReplaceDocumentAsync(job.SelfLink, job);
-                    });
+                    job.StateId = response.Resource.Id;
+                    job.StateName = state.Name;
+
+                    connection.Storage.Client.ReplaceDocumentAsync(job.SelfLink, job).GetAwaiter().GetResult();
                 }
             });
         }
@@ -235,8 +228,7 @@ namespace Hangfire.AzureDocumentDB
                     Data = state.SerializeData()
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(SetDocumentCollectionUri, data);
-                task.Wait();
+                connection.Storage.Client.CreateDocumentAsync(StateDocumentCollectionUri, data).GetAwaiter().GetResult();
             });
         }
 
@@ -259,8 +251,7 @@ namespace Hangfire.AzureDocumentDB
 
                 if (set != null)
                 {
-                    Task<ResourceResponse<Document>> task = connection.Storage.Client.DeleteDocumentAsync(set.SelfLink);
-                    task.Wait();
+                    connection.Storage.Client.DeleteDocumentAsync(set.SelfLink).GetAwaiter().GetResult();
                 }
             });
         }
@@ -286,8 +277,7 @@ namespace Hangfire.AzureDocumentDB
                     set.Value = value;
                     set.Score = score;
 
-                    Task<ResourceResponse<Document>> task = connection.Storage.Client.ReplaceDocumentAsync(set.SelfLink, set);
-                    task.Wait();
+                    connection.Storage.Client.ReplaceDocumentAsync(set.SelfLink, set).GetAwaiter().GetResult();
                 }
                 else
                 {
@@ -297,7 +287,7 @@ namespace Hangfire.AzureDocumentDB
                         Value = value,
                         Score = score
                     };
-                    connection.Storage.Client.CreateDocumentAsync(SetDocumentCollectionUri, data);
+                    connection.Storage.Client.CreateDocumentAsync(SetDocumentCollectionUri, data).GetAwaiter().GetResult();
                 }
             });
         }
@@ -317,7 +307,7 @@ namespace Hangfire.AzureDocumentDB
                     .AsEnumerable()
                     .ToList();
 
-                hashes.ForEach(hash => connection.Storage.Client.DeleteDocumentAsync(hash.SelfLink));
+                hashes.ForEach(hash => connection.Storage.Client.DeleteDocumentAsync(hash.SelfLink).GetAwaiter().GetResult());
             });
         }
 
@@ -335,7 +325,7 @@ namespace Hangfire.AzureDocumentDB
                     Value = k.Value
                 }).ToList();
 
-                hashes.ForEach(hash => connection.Storage.Client.UpsertDocumentAsync(HashDocumentCollectionUri, hash));
+                hashes.ForEach(hash => connection.Storage.Client.UpsertDocumentAsync(HashDocumentCollectionUri, hash).GetAwaiter().GetResult());
             });
         }
 
@@ -356,7 +346,7 @@ namespace Hangfire.AzureDocumentDB
                     Value = value
                 };
 
-                connection.Storage.Client.CreateDocumentAsync(ListDocumentCollectionUri, data);
+                connection.Storage.Client.CreateDocumentAsync(ListDocumentCollectionUri, data).GetAwaiter().GetResult();
             });
         }
 
@@ -374,7 +364,7 @@ namespace Hangfire.AzureDocumentDB
 
                 if (data != null)
                 {
-                    connection.Storage.Client.DeleteDocumentAsync(data.SelfLink);
+                    connection.Storage.Client.DeleteDocumentAsync(data.SelfLink).GetAwaiter().GetResult();
                 }
             });
         }
@@ -391,7 +381,7 @@ namespace Hangfire.AzureDocumentDB
                     .Skip(keepStartingFrom).Take(keepEndingAt)
                     .ToList();
 
-                lists.ForEach(list => connection.Storage.Client.DeleteDocumentAsync(list.SelfLink));
+                lists.ForEach(list => connection.Storage.Client.DeleteDocumentAsync(list.SelfLink).GetAwaiter().GetResult());
             });
         }
 

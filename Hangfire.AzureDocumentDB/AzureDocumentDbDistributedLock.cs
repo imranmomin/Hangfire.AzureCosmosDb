@@ -22,7 +22,7 @@ namespace Hangfire.AzureDocumentDB
 
         public void Dispose() => Relase();
 
-        private async void Acquire(string resource, TimeSpan timeout)
+        private void Acquire(string name, TimeSpan timeout)
         {
             Uri documentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "locks");
             FeedOptions queryOptions = new FeedOptions { MaxItemCount = 1 };
@@ -33,14 +33,14 @@ namespace Hangfire.AzureDocumentDB
             while (true)
             {
                 Lock @lock = storage.Client.CreateDocumentQuery<Lock>(documentCollectionUri, queryOptions)
-                                    .Where(l => l.Resource == resource)
+                                    .Where(l => l.Name == name)
                                     .AsEnumerable()
                                     .FirstOrDefault();
 
                 if (@lock == null)
                 {
-                    @lock = new Lock { Resource = resource, ExpireOn = DateTime.UtcNow.Add(timeout) };
-                    ResourceResponse<Document> response = await storage.Client.CreateDocumentAsync(documentCollectionUri, @lock);
+                    @lock = new Lock { Name = name, ExpireOn = DateTime.UtcNow.Add(timeout) };
+                    ResourceResponse<Document> response = storage.Client.CreateDocumentAsync(documentCollectionUri, @lock).GetAwaiter().GetResult();
                     if (response.StatusCode == HttpStatusCode.Created)
                     {
                         selfLink = response.Resource.SelfLink;
@@ -51,7 +51,7 @@ namespace Hangfire.AzureDocumentDB
                 // check the timeout
                 if (acquireStart.ElapsedMilliseconds > timeout.TotalMilliseconds)
                 {
-                    throw new AzureDocumentDbDistributedLockException($"Could not place a lock on the resource '{resource}': Lock timeout.");
+                    throw new AzureDocumentDbDistributedLockException($"Could not place a lock on the resource '{name}': Lock timeout.");
                 }
 
                 // sleep for 500 millisecond
@@ -63,7 +63,7 @@ namespace Hangfire.AzureDocumentDB
         {
             lock (syncLock)
             {
-                storage.Client.DeleteDocumentAsync(selfLink);
+                storage.Client.DeleteDocumentAsync(selfLink).GetAwaiter().GetResult();
             }
         }
     }

@@ -14,14 +14,15 @@ namespace Hangfire
         /// <param name="configuration">The IGlobalConfiguration object</param>
         /// <param name="url">The url string to AzureDocumentDb Database</param>
         /// <param name="authSecret">The secret key for the AzureDocumentDb Database</param>
+        /// <param name="database">The name of the database to connect with</param>
         /// <returns></returns>
-        public static IGlobalConfiguration<AzureDocumentDbStorage> UseAzureDocumentDbStorage(this IGlobalConfiguration configuration, string url, string authSecret)
+        public static IGlobalConfiguration<AzureDocumentDbStorage> UseAzureDocumentDbStorage(this IGlobalConfiguration configuration, string url, string authSecret, string database)
         {
             if (configuration == null) throw new ArgumentNullException(nameof(configuration));
             if (string.IsNullOrEmpty(url)) throw new ArgumentNullException(nameof(url));
             if (string.IsNullOrEmpty(authSecret)) throw new ArgumentNullException(nameof(authSecret));
 
-            AzureDocumentDbStorage storage = new AzureDocumentDbStorage(url, authSecret);
+            AzureDocumentDbStorage storage = new AzureDocumentDbStorage(url, authSecret, database);
             return configuration.UseStorage(storage);
         }
 

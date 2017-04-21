@@ -79,9 +79,8 @@
     <Compile Include="AzureDocumentDbWriteOnlyTransaction.cs" />
     <Compile Include="CountersAggregator.cs" />
     <Compile Include="Entities\Counter.cs" />
-    <Compile Include="Entities\FireEntity.cs" />
+    <Compile Include="Entities\DocumentEntity.cs" />
     <Compile Include="Entities\Hash.cs" />
-    <Compile Include="Entities\IExpireEntity.cs" />
     <Compile Include="Entities\Job.cs" />
     <Compile Include="Entities\List.cs" />
     <Compile Include="Entities\Lock.cs" />

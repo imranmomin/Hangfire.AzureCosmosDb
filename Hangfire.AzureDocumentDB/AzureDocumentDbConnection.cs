@@ -185,7 +185,7 @@ namespace Hangfire.AzureDocumentDB
             return parameters.Where(p => p.Name == name).Select(p => p.Value).FirstOrDefault();
         }
 
-        public override async void SetJobParameter(string id, string name, string value)
+        public override void SetJobParameter(string id, string name, string value)
         {
             if (id == null) throw new ArgumentNullException(nameof(id));
             if (name == null) throw new ArgumentNullException(nameof(name));
@@ -213,7 +213,7 @@ namespace Hangfire.AzureDocumentDB
                 }
 
                 job.Parameters = parameters.ToArray();
-                await Storage.Client.ReplaceDocumentAsync(job.SelfLink, job);
+                Storage.Client.ReplaceDocumentAsync(job.SelfLink, job).GetAwaiter().GetResult();
             }
         }
 
@@ -237,10 +237,10 @@ namespace Hangfire.AzureDocumentDB
             if (key == null) throw new ArgumentNullException(nameof(key));
 
             return Storage.Client.CreateDocumentQuery<Set>(SetDocumentCollectionUri, QueryOptions)
-                          .Skip(startingFrom).Take(endingAt)
-                          .Select(c => c.Value)
-                          .AsEnumerable()
-                          .ToList();
+                .AsEnumerable()
+                .Skip(startingFrom).Take(endingAt)
+                .Select(c => c.Value)
+                .ToList();
         }
 
         public override long GetCounter(string key)
@@ -292,7 +292,7 @@ namespace Hangfire.AzureDocumentDB
 
         #region Server
 
-        public override async void AnnounceServer(string serverId, ServerContext context)
+        public override void AnnounceServer(string serverId, ServerContext context)
         {
             if (serverId == null) throw new ArgumentNullException(nameof(serverId));
             if (context == null) throw new ArgumentNullException(nameof(context));
@@ -307,8 +307,6 @@ namespace Hangfire.AzureDocumentDB
                 server.LastHeartbeat = DateTime.UtcNow;
                 server.Workers = context.WorkerCount;
                 server.Queues = context.Queues;
-
-                await Storage.Client.ReplaceDocumentAsync(server.SelfLink, server);
             }
             else
             {
@@ -320,12 +318,12 @@ namespace Hangfire.AzureDocumentDB
                     CreatedOn = DateTime.UtcNow,
                     LastHeartbeat = DateTime.UtcNow
                 };
-
-                await Storage.Client.CreateDocumentAsync(ServerDocumentCollectionUri, server);
             }
+
+            Storage.Client.UpsertDocumentAsync(ServerDocumentCollectionUri, server).GetAwaiter().GetResult();
         }
 
-        public override async void Heartbeat(string serverId)
+        public override void Heartbeat(string serverId)
         {
             if (serverId == null) throw new ArgumentNullException(nameof(serverId));
 
@@ -336,7 +334,7 @@ namespace Hangfire.AzureDocumentDB
             if (server != null)
             {
                 server.LastHeartbeat = DateTime.UtcNow;
-                await Storage.Client.ReplaceDocumentAsync(server.SelfLink, server);
+                Storage.Client.ReplaceDocumentAsync(server.SelfLink, server).GetAwaiter().GetResult();
             }
         }
 
@@ -368,7 +366,7 @@ namespace Hangfire.AzureDocumentDB
                                         .AsEnumerable()
                                         .ToArray();
 
-            Array.ForEach(selfLinks, selfLink => Storage.Client.DeleteDocumentAsync(selfLink));
+            Array.ForEach(selfLinks, selfLink => Storage.Client.DeleteDocumentAsync(selfLink).GetAwaiter().GetResult());
             return selfLinks.Length;
         }
 
@@ -398,7 +396,8 @@ namespace Hangfire.AzureDocumentDB
                 Value = k.Value
             }).ToList();
 
-            source.ForEach(hash => Storage.Client.UpsertDocumentAsync(SetDocumentCollectionUri, hash));
+            // TODO: need to merge existing before upsert
+            source.ForEach(hash => Storage.Client.UpsertDocumentAsync(SetDocumentCollectionUri, hash).GetAwaiter().GetResult());
         }
 
         public override long GetHashCount(string key)
@@ -453,12 +452,12 @@ namespace Hangfire.AzureDocumentDB
             if (key == null) throw new ArgumentNullException(nameof(key));
 
             return Storage.Client.CreateDocumentQuery<Hash>(ListDocumentCollectionUri, QueryOptions)
-                          .Where(l => l.Key == key)
-                          .OrderBy(l => l.ExpireOn)
-                          .Skip(startingFrom).Take(endingAt)
-                          .Select(l => l.Value)
-                          .AsEnumerable()
-                          .ToList();
+                .Where(l => l.Key == key)
+                .AsEnumerable()
+                .OrderBy(l => l.ExpireOn)
+                .Skip(startingFrom).Take(endingAt)
+                .Select(l => l.Value)
+                .ToList();
         }
 
         public override TimeSpan GetListTtl(string key)

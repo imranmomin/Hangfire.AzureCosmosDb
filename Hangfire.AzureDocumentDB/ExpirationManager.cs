@@ -1,14 +1,13 @@
 ﻿using System;
 using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Collections.Generic;
 
 using Microsoft.Azure.Documents.Linq;
 using Microsoft.Azure.Documents.Client;
 
-using Hangfire.Logging;
 using Hangfire.Server;
+using Hangfire.Logging;
 using Hangfire.AzureDocumentDB.Entities;
 
 namespace Hangfire.AzureDocumentDB
@@ -47,21 +46,21 @@ namespace Hangfire.AzureDocumentDB
                     do
                     {
                         FeedOptions QueryOptions = new FeedOptions { MaxItemCount = 100, RequestContinuation = responseContinuation };
-                        IDocumentQuery<FireEntity> query = storage.Client.CreateDocumentQuery<FireEntity>(collectionUri, QueryOptions)
-                            .Where(c => c.ExpireOn.HasValue && c.ExpireOn < DateTime.UtcNow)
+                        IDocumentQuery<DocumentEntity> query = storage.Client.CreateDocumentQuery<DocumentEntity>(collectionUri, QueryOptions)
+                            .Where(c => c.ExpireOn < DateTime.UtcNow)
                             .AsDocumentQuery();
 
                         if (query.HasMoreResults)
                         {
-                            Task<FeedResponse<FireEntity>> task = query.ExecuteNextAsync<FireEntity>(cancellationToken);
-                            responseContinuation = task.Result.ResponseContinuation;
+                            FeedResponse<DocumentEntity> response = query.ExecuteNextAsync<DocumentEntity>(cancellationToken).GetAwaiter().GetResult();
+                            responseContinuation = response.ResponseContinuation;
 
-                            List<FireEntity> entities = task.Result.Where(entity => document != "counters" || !(entity is Counter) || (entity as Counter).Type != CounterTypes.Raw).ToList();
+                            List<DocumentEntity> entities = response.Where(entity => document != "counters" || !(entity is Counter) || ((Counter)entity).Type != CounterTypes.Raw).ToList();
 
-                            foreach (FireEntity entity in entities)
+                            foreach (DocumentEntity entity in entities)
                             {
                                 cancellationToken.ThrowIfCancellationRequested();
-                                storage.Client.DeleteDocumentAsync(entity.SelfLink);
+                                storage.Client.DeleteDocumentAsync(entity.SelfLink).GetAwaiter().GetResult();
                             }
                         }
 

@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Linq;
-using System.Net;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
@@ -16,7 +15,6 @@ namespace Hangfire.AzureDocumentDB
 {
     internal sealed class AzureDocumentDbMonitoringApi : IMonitoringApi
     {
-        private readonly AzureDocumentDbConnection connection;
         private readonly AzureDocumentDbStorage storage;
 
         private readonly FeedOptions QueryOptions = new FeedOptions { MaxItemCount = -1 };
@@ -25,22 +23,17 @@ namespace Hangfire.AzureDocumentDB
         private readonly Uri SetDocumentCollectionUri;
         private readonly Uri CounterDocumentCollectionUri;
         private readonly Uri ServerDocumentCollectionUri;
-        private readonly Uri HashDocumentCollectionUri;
-        private readonly Uri ListDocumentCollectionUri;
         private readonly Uri QueueDocumentCollectionUri;
 
         public AzureDocumentDbMonitoringApi(AzureDocumentDbStorage storage)
         {
             this.storage = storage;
-            connection = (AzureDocumentDbConnection)storage.GetConnection();
 
             JobDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "jobs");
             StateDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "states");
             SetDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "sets");
             CounterDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "counters");
             ServerDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "servers");
-            HashDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "hashes");
-            ListDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "lists");
             QueueDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "queues");
         }
 
@@ -256,13 +249,13 @@ namespace Hangfire.AzureDocumentDB
 
             List<Entities.Job> filterJobs = storage.Client.CreateAttachmentQuery<Entities.Job>(JobDocumentCollectionUri, QueryOptions)
                 .Where(j => j.StateName == stateName)
-                .Skip(from).Take(count)
                 .AsEnumerable()
+                .Skip(from).Take(count)
                 .ToList();
 
             List<State> states = storage.Client.CreateDocumentQuery<State>(StateDocumentCollectionUri, QueryOptions)
-                .Where(s => filterJobs.Any(j => j.StateId == s.Id))
                 .AsEnumerable()
+                .Where(s => filterJobs.Any(j => j.StateId == s.Id))
                 .ToList();
 
             Parallel.ForEach(filterJobs, job =>
@@ -288,8 +281,8 @@ namespace Hangfire.AzureDocumentDB
 
             List<Entities.Queue> queues = storage.Client.CreateAttachmentQuery<Entities.Queue>(QueueDocumentCollectionUri, QueryOptions)
                 .Where(q => q.Name == queue)
-                .Skip(from).Take(count)
                 .AsEnumerable()
+                .Skip(from).Take(count)
                 .ToList();
 
             List<Entities.Job> filterJobs = storage.Client.CreateAttachmentQuery<Entities.Job>(JobDocumentCollectionUri, QueryOptions)

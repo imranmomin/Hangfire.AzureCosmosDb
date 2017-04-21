@@ -1,4 +1,6 @@
 ﻿using System;
+// ReSharper disable MemberCanBePrivate.Global
+// ReSharper disable AutoPropertyCanBeMadeGetOnly.Global
 
 namespace Hangfire.AzureDocumentDB
 {
@@ -49,7 +51,7 @@ namespace Hangfire.AzureDocumentDB
         {
             RequestTimeout = TimeSpan.FromSeconds(30);
             Queues = new[] { "default", "critical" };
-            ExpirationCheckInterval = TimeSpan.FromMinutes(15);
+            ExpirationCheckInterval = TimeSpan.FromMinutes(1);
             CountersAggregateInterval = TimeSpan.FromMinutes(1);
             QueuePollInterval = TimeSpan.FromSeconds(2);
         }

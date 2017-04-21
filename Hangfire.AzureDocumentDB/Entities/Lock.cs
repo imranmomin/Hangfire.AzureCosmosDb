@@ -1,7 +1,10 @@
-﻿namespace Hangfire.AzureDocumentDB.Entities
+﻿using Newtonsoft.Json;
+
+namespace Hangfire.AzureDocumentDB.Entities
 {
-    internal class Lock : FireEntity
+    internal class Lock : DocumentEntity
     {
-        public string Resource { get; set; }
+        [JsonProperty("name")]
+        public string Name { get; set; }
     }
 }

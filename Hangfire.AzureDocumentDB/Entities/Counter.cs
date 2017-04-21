@@ -1,15 +1,22 @@
-﻿namespace Hangfire.AzureDocumentDB.Entities
+﻿using Newtonsoft.Json;
+
+namespace Hangfire.AzureDocumentDB.Entities
 {
-    internal class Counter : FireEntity
+    internal class Counter : DocumentEntity
     {
+        [JsonProperty("key")]
         public string Key { get; set; }
+
+        [JsonProperty("value")]
         public int Value { get; set; }
+
+        [JsonProperty("country_type")]
         public CounterTypes Type { get; set; }
     }
 
     internal enum CounterTypes
     {
-        Raw,
-        Aggregrate
+        Raw = 1,
+        Aggregrate = 2
     }
 }

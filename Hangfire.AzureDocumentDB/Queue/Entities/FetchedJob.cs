@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Linq;
 
 using Hangfire.Storage;
+
 using Microsoft.Azure.Documents.Client;
 
 namespace Hangfire.AzureDocumentDB.Queue
@@ -9,6 +11,7 @@ namespace Hangfire.AzureDocumentDB.Queue
     {
         private readonly AzureDocumentDbStorage storage;
         private readonly Uri QueueDocumentCollectionUri;
+        private readonly FeedOptions QueryOptions = new FeedOptions { MaxItemCount = 1 };
 
         public FetchedJob(AzureDocumentDbStorage storage, Entities.Queue data)
         {
@@ -32,7 +35,15 @@ namespace Hangfire.AzureDocumentDB.Queue
         {
         }
 
-        public void RemoveFromQueue() => storage.Client.DeleteDocumentAsync(SelfLink);
+        public void RemoveFromQueue()
+        {
+           bool exists = storage.Client.CreateDocumentQuery(QueueDocumentCollectionUri, QueryOptions)
+                .Where(d => d.Id == Id)
+                .AsEnumerable()
+                .Any();
+
+            if (exists) storage.Client.DeleteDocumentAsync(SelfLink).GetAwaiter().GetResult();
+        }
 
         public void Requeue()
         {
@@ -42,7 +53,7 @@ namespace Hangfire.AzureDocumentDB.Queue
                 Name = Queue,
                 JobId = JobId
             };
-            storage.Client.UpsertDocumentAsync(QueueDocumentCollectionUri, data);
+            storage.Client.UpsertDocumentAsync(QueueDocumentCollectionUri, data).GetAwaiter().GetResult();
         }
     }
 }

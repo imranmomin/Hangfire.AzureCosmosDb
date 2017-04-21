@@ -1,7 +1,7 @@
 ﻿using System;
-using System.Net;
 using System.Linq;
 using System.Collections.Generic;
+
 using Microsoft.Azure.Documents.Client;
 
 namespace Hangfire.AzureDocumentDB.Queue
@@ -11,7 +11,7 @@ namespace Hangfire.AzureDocumentDB.Queue
         private readonly AzureDocumentDbStorage storage;
         private readonly IEnumerable<string> queues;
         private readonly Uri QueueDocumentCollectionUri;
-        private readonly FeedOptions QueryOptions = new FeedOptions { MaxItemCount = -1 };
+        private readonly FeedOptions QueryOptions = new FeedOptions { MaxItemCount = 100 };
 
         public JobQueueMonitoringApi(AzureDocumentDbStorage storage)
         {
@@ -34,6 +34,7 @@ namespace Hangfire.AzureDocumentDB.Queue
         {
            return storage.Client.CreateDocumentQuery<Entities.Queue>(QueueDocumentCollectionUri, QueryOptions)
                 .Where(q => q.Name == queue)
+                .AsEnumerable()
                 .Skip(from).Take(perPage)
                 .Select(c => c.JobId)
                 .ToList();
