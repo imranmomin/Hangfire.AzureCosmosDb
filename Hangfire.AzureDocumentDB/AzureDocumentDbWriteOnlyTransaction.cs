@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Linq;
-using System.Threading.Tasks;
+using System.Globalization;
 using System.Collections.Generic;
 
 using Microsoft.Azure.Documents;
@@ -314,11 +314,24 @@ namespace Hangfire.AzureDocumentDB
 
             QueueCommand(() =>
             {
+                Func<string, string> epoch = s =>
+                {
+                    DateTime date;
+                    if (DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out date))
+                    {
+                        if (date.Equals(DateTime.MinValue)) return int.MinValue.ToString();
+                        DateTime epochDateTime = new DateTime(1970, 1, 1);
+                        TimeSpan epochTimeSpan = date - epochDateTime;
+                        return ((int)epochTimeSpan.TotalSeconds).ToString(CultureInfo.InvariantCulture);
+                    }
+                    return s;
+                };
+
                 List<Hash> sources = keyValuePairs.Select(k => new Hash
                 {
                     Key = key,
                     Field = k.Key,
-                    Value = k.Value
+                    Value = epoch(k.Value)
                 }).ToList();
 
                 List<Hash> hashes = connection.Storage.Client.CreateDocumentQuery<Hash>(HashDocumentCollectionUri, QueryOptions)
@@ -328,7 +341,7 @@ namespace Hangfire.AzureDocumentDB
 
                 sources.ForEach(source =>
                 {
-                    Hash hash = hashes.Where(h => h.Key == source.Key && h.Field == source.Field).FirstOrDefault();
+                    Hash hash = hashes.FirstOrDefault(h => h.Key == source.Key && h.Field == source.Field);
                     if (hash != null) source.Id = hash.Id;
                 });
 
