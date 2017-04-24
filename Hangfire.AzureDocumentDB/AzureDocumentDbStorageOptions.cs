@@ -51,7 +51,7 @@ namespace Hangfire.AzureDocumentDB
         {
             RequestTimeout = TimeSpan.FromSeconds(30);
             Queues = new[] { "default", "critical" };
-            ExpirationCheckInterval = TimeSpan.FromMinutes(1);
+            ExpirationCheckInterval = TimeSpan.FromMinutes(5);
             CountersAggregateInterval = TimeSpan.FromMinutes(1);
             QueuePollInterval = TimeSpan.FromSeconds(2);
         }

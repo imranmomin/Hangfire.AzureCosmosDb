@@ -45,9 +45,8 @@ namespace Hangfire.AzureDocumentDB
 
                     do
                     {
-                        FeedOptions QueryOptions = new FeedOptions { MaxItemCount = 100, RequestContinuation = responseContinuation };
+                        FeedOptions QueryOptions = new FeedOptions { MaxItemCount = 50, RequestContinuation = responseContinuation };
                         IDocumentQuery<DocumentEntity> query = storage.Client.CreateDocumentQuery<DocumentEntity>(collectionUri, QueryOptions)
-                            .Where(c => c.ExpireOn < DateTime.UtcNow)
                             .AsDocumentQuery();
 
                         if (query.HasMoreResults)
@@ -55,7 +54,9 @@ namespace Hangfire.AzureDocumentDB
                             FeedResponse<DocumentEntity> response = query.ExecuteNextAsync<DocumentEntity>(cancellationToken).GetAwaiter().GetResult();
                             responseContinuation = response.ResponseContinuation;
 
-                            List<DocumentEntity> entities = response.Where(entity => document != "counters" || !(entity is Counter) || ((Counter)entity).Type != CounterTypes.Raw).ToList();
+                            List<DocumentEntity> entities = response
+                                .Where(c => c.ExpireOn < DateTime.UtcNow)
+                                .Where(entity => document != "counters" || !(entity is Counter) || ((Counter)entity).Type != CounterTypes.Raw).ToList();
 
                             foreach (DocumentEntity entity in entities)
                             {

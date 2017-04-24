@@ -127,8 +127,7 @@ namespace Hangfire.AzureDocumentDB
                     ExpireOn = DateTime.UtcNow.Add(expireIn)
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(CounterDocumentCollectionUri, data);
-                task.Wait();
+                connection.Storage.Client.CreateDocumentAsync(CounterDocumentCollectionUri, data).GetAwaiter().GetResult();
             });
         }
 
@@ -167,7 +166,7 @@ namespace Hangfire.AzureDocumentDB
                     .AsEnumerable()
                     .FirstOrDefault();
 
-                if (job != null)
+                if (job != null && job.ExpireOn.HasValue)
                 {
                     job.ExpireOn = null;
                     connection.Storage.Client.ReplaceDocumentAsync(job.SelfLink, job).GetAwaiter().GetResult();
@@ -243,8 +242,7 @@ namespace Hangfire.AzureDocumentDB
 
             QueueCommand(() =>
             {
-                Set set = connection.Storage.Client
-                     .CreateDocumentQuery<Set>(SetDocumentCollectionUri, QueryOptions)
+                Set set = connection.Storage.Client.CreateDocumentQuery<Set>(SetDocumentCollectionUri, QueryOptions)
                      .Where(s => s.Key == key && s.Value == value)
                      .AsEnumerable()
                      .FirstOrDefault();
@@ -265,8 +263,7 @@ namespace Hangfire.AzureDocumentDB
 
             QueueCommand(() =>
             {
-                Set set = connection.Storage.Client
-                    .CreateDocumentQuery<Set>(SetDocumentCollectionUri, QueryOptions)
+                Set set = connection.Storage.Client.CreateDocumentQuery<Set>(SetDocumentCollectionUri, QueryOptions)
                     .Where(s => s.Key == key && s.Value == value)
                     .AsEnumerable()
                     .FirstOrDefault();
@@ -276,19 +273,18 @@ namespace Hangfire.AzureDocumentDB
                     set.Key = key;
                     set.Value = value;
                     set.Score = score;
-
-                    connection.Storage.Client.ReplaceDocumentAsync(set.SelfLink, set).GetAwaiter().GetResult();
                 }
                 else
                 {
-                    Set data = new Set
+                    set = new Set
                     {
                         Key = key,
                         Value = value,
                         Score = score
                     };
-                    connection.Storage.Client.CreateDocumentAsync(SetDocumentCollectionUri, data).GetAwaiter().GetResult();
                 }
+
+                connection.Storage.Client.UpsertDocumentAsync(SetDocumentCollectionUri, set).GetAwaiter().GetResult();
             });
         }
 
@@ -318,14 +314,25 @@ namespace Hangfire.AzureDocumentDB
 
             QueueCommand(() =>
             {
-                List<Hash> hashes = keyValuePairs.Select(k => new Hash
+                List<Hash> sources = keyValuePairs.Select(k => new Hash
                 {
                     Key = key,
                     Field = k.Key,
                     Value = k.Value
                 }).ToList();
 
-                hashes.ForEach(hash => connection.Storage.Client.UpsertDocumentAsync(HashDocumentCollectionUri, hash).GetAwaiter().GetResult());
+                List<Hash> hashes = connection.Storage.Client.CreateDocumentQuery<Hash>(HashDocumentCollectionUri, QueryOptions)
+                    .Where(h => h.Key == key)
+                    .AsEnumerable()
+                    .ToList();
+
+                sources.ForEach(source =>
+                {
+                    Hash hash = hashes.Where(h => h.Key == source.Key && h.Field == source.Field).FirstOrDefault();
+                    if (hash != null) source.Id = hash.Id;
+                });
+
+                sources.ForEach(hash => connection.Storage.Client.UpsertDocumentAsync(HashDocumentCollectionUri, hash).GetAwaiter().GetResult());
             });
         }
 

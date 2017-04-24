@@ -79,7 +79,7 @@ namespace Hangfire.AzureDocumentDB
                         }
 
                         ResourceResponse<Document> response = storage.Client.UpsertDocumentAsync(CounterDocumentCollectionUri, aggregated).GetAwaiter().GetResult();
-                        if (response.StatusCode == HttpStatusCode.Accepted)
+                        if (response.StatusCode == HttpStatusCode.Created || response.StatusCode ==  HttpStatusCode.OK)
                         {
                             List<Counter> deleteCountersr = rawCounters.Where(c => c.Key == key).ToList();
                             deleteCountersr.ForEach(counter => storage.Client.DeleteDocumentAsync(counter.SelfLink).GetAwaiter().GetResult());

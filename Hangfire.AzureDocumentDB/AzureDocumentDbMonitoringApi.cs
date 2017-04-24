@@ -60,8 +60,8 @@ namespace Hangfire.AzureDocumentDB
         public IList<ServerDto> Servers()
         {
             List<Entities.Server> servers = storage.Client.CreateDocumentQuery<Entities.Server>(SetDocumentCollectionUri, QueryOptions)
-                                                   .AsEnumerable()
-                                                   .ToList();
+                .AsEnumerable()
+                .ToList();
 
             return servers.Select(server => new ServerDto
             {
@@ -78,9 +78,9 @@ namespace Hangfire.AzureDocumentDB
             if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
 
             Entities.Job job = storage.Client.CreateDocumentQuery<Entities.Job>(JobDocumentCollectionUri, QueryOptions)
-                                      .Where(j => j.Id == jobId)
-                                      .AsEnumerable()
-                                      .FirstOrDefault();
+                .Where(j => j.Id == jobId)
+                .AsEnumerable()
+                .FirstOrDefault();
 
             if (job != null)
             {
@@ -88,15 +88,15 @@ namespace Hangfire.AzureDocumentDB
                 invocationData.Arguments = job.Arguments;
 
                 List<StateHistoryDto> states = storage.Client.CreateDocumentQuery<State>(StateDocumentCollectionUri, QueryOptions)
-                                                      .Where(s => s.JobId == jobId)
-                                                      .AsEnumerable()
-                                                      .Select(s => new StateHistoryDto
-                                                      {
-                                                          Data = s.Data.Trasnform(),
-                                                          CreatedAt = s.CreatedOn,
-                                                          Reason = s.Reason,
-                                                          StateName = s.Name
-                                                      }).ToList();
+                    .Where(s => s.JobId == jobId)
+                    .AsEnumerable()
+                    .Select(s => new StateHistoryDto
+                    {
+                        Data = s.Data.Trasnform(),
+                        CreatedAt = s.CreatedOn,
+                        Reason = s.Reason,
+                        StateName = s.Name
+                    }).ToList();
 
                 return new JobDetailsDto
                 {
@@ -113,7 +113,6 @@ namespace Hangfire.AzureDocumentDB
 
         public StatisticsDto GetStatistics()
         {
-            long count = 0;
             Dictionary<string, long> results = new Dictionary<string, long>();
 
             // get counts of jobs groupby on state
@@ -131,25 +130,18 @@ namespace Hangfire.AzureDocumentDB
             results.Add("Servers", servers);
 
             // get sum of stats:succeeded counters  raw / aggregate
-            count += storage.Client.CreateDocumentQuery<Counter>(ServerDocumentCollectionUri, QueryOptions)
-                            .Where(c => (c.Type == CounterTypes.Raw || c.Type == CounterTypes.Aggregrate) && c.Key == "stats:succeeded")
-                            .Sum(c => c.Value);
+            Dictionary<string, long> counters = storage.Client.CreateDocumentQuery<Counter>(CounterDocumentCollectionUri, QueryOptions)
+                .Where(c => c.Key == "stats:succeeded" || c.Key == "stats:deleted")
+                .AsEnumerable()
+                .GroupBy(c => c.Key)
+                .ToDictionary(g => g.Key, g => (long)g.Sum(c => c.Value));
 
-            results.Add("stats:succeeded", count);
+            results = results.Concat(counters).ToDictionary(k => k.Key, v => v.Value);
 
-            // get sum of stats:deleted counters / aggregatedcounter 
-            count = 0;
-            count += storage.Client.CreateDocumentQuery<Counter>(ServerDocumentCollectionUri, QueryOptions)
-                            .Where(c => (c.Type == CounterTypes.Raw || c.Type == CounterTypes.Aggregrate) && c.Key == "stats:deleted")
-                            .Sum(c => c.Value);
-
-            results.Add("stats:deleted", count);
-
-
-            count = 0;
-            count += storage.Client.CreateDocumentQuery<Set>(ServerDocumentCollectionUri, QueryOptions)
-                            .Where(s => s.Key == "recurring-jobs")
-                            .LongCount();
+            long count = 0;
+            count += storage.Client.CreateDocumentQuery<Set>(SetDocumentCollectionUri, QueryOptions)
+                .Where(s => s.Key == "recurring-jobs")
+                .LongCount();
 
             results.Add("recurring-jobs", count);
 
@@ -286,8 +278,8 @@ namespace Hangfire.AzureDocumentDB
                 .ToList();
 
             List<Entities.Job> filterJobs = storage.Client.CreateAttachmentQuery<Entities.Job>(JobDocumentCollectionUri, QueryOptions)
-                .Where(j => queues.Any(q => q.JobId == j.Id))
                 .AsEnumerable()
+                .Where(j => queues.Any(q => q.JobId == j.Id))
                 .ToList();
 
             Parallel.ForEach(queues, queueItem =>
@@ -362,8 +354,9 @@ namespace Hangfire.AzureDocumentDB
             Dictionary<DateTime, long> result = keys.ToDictionary(k => k.Value, v => default(long));
 
             Dictionary<string, int> data = storage.Client.CreateDocumentQuery<Counter>(CounterDocumentCollectionUri, QueryOptions)
-                .Where(c => c.Type == CounterTypes.Aggregrate && keys.ContainsKey(c.Key))
+                .Where(c => c.Type == CounterTypes.Aggregrate)
                 .AsEnumerable()
+                .Where(c => keys.ContainsKey(c.Key))
                 .ToDictionary(k => k.Key, k => k.Value);
 
             foreach (string key in keys.Keys)
