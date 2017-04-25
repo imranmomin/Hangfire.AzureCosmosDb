@@ -146,18 +146,18 @@ namespace Hangfire.AzureDocumentDB
 
             if (!string.IsNullOrEmpty(stateId))
             {
-                State data = Storage.Client.CreateDocumentQuery<State>(StateDocumentCollectionUri, QueryOptions)
+                State state = Storage.Client.CreateDocumentQuery<State>(StateDocumentCollectionUri, QueryOptions)
                     .Where(j => j.Id == stateId)
                     .AsEnumerable()
                     .FirstOrDefault();
 
-                if (data != null)
+                if (state != null)
                 {
                     return new StateData
                     {
-                        Name = data.Name,
-                        Reason = data.Reason,
-                        Data = data.Data.Trasnform()
+                        Name = state.Name,
+                        Reason = state.Reason,
+                        Data = state.Data
                     };
                 }
             }
@@ -256,6 +256,8 @@ namespace Hangfire.AzureDocumentDB
 
             return Storage.Client.CreateDocumentQuery<Set>(SetDocumentCollectionUri, QueryOptions)
                 .Where(s => s.Key == key)
+                .Select(s => s.Id)
+                .AsEnumerable()
                 .LongCount();
         }
 
