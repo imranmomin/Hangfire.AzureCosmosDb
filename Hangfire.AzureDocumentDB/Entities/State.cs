@@ -1,8 +1,8 @@
 ﻿using System;
-using System.Linq;
 using System.Collections.Generic;
-using Microsoft.Azure.Documents;
+
 using Newtonsoft.Json;
+using Microsoft.Azure.Documents;
 
 namespace Hangfire.AzureDocumentDB.Entities
 {
