@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
+  <metadata>
+    <id>Hangfire.Firebase</id>
+    <version>1.0.0-beta</version>
+    <authors>Imran Momin</authors>
+    <owners>Imran Momin</owners>
+    <licenseUrl>https://github.com/imranmomin/Hangfire.AzureDocumentDB/blob/master/LICENSE</licenseUrl>
+    <projectUrl>https://github.com/imranmomin/Hangfire.AzureDocumentDB</projectUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>This repo will add Microsoft Azure DocumentDB storage provider for Hangfire</description>
+    <copyright>Copyright 2017</copyright>
+    <tags>Hangfire Azure DocumentDB</tags>
+    <language>en-US</language>
+    <dependencies>
+      <group targetFramework=".NETFramework4.5">
+        <dependency id="Microsoft.Azure.DocumentDB" version="1.13.2" />
+        <dependency id="Hangfire.Core" version="1.6.12" />
+      </group>
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="Hangfire.AzureDocumentDB\bin\Release\Hangfire.AzureDocumentDB.dll" target="lib\net45\Hangfire.AzureDocumentDB.dll" />
+    <file src="Hangfire.AzureDocumentDB\bin\Release\Hangfire.AzureDocumentDB.XML" target="lib\net45\Hangfire.AzureDocumentDB.XML" />
+  </files>
+</package>
