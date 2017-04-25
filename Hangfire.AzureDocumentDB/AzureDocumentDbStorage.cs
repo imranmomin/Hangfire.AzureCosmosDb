@@ -105,7 +105,7 @@ namespace Hangfire.AzureDocumentDB
         /// Return the name of the database
         /// </summary>
         /// <returns></returns>
-        public override string ToString() => $"Firbase Database : {Options.DatabaseName}";
+        public override string ToString() => $"DoucmentDb Database : {Options.DatabaseName}";
 
         private void Initialize()
         {
