@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
   <metadata>
-    <id>Hangfire.Firebase</id>
+    <id>Hangfire.AzureDocumentDB</id>
     <version>1.0.0-beta</version>
     <authors>Imran Momin</authors>
     <owners>Imran Momin</owners>
