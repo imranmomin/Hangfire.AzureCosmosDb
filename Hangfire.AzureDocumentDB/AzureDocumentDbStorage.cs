@@ -35,9 +35,20 @@ namespace Hangfire.AzureDocumentDB
         /// <summary>
         /// Initializes the FirebaseStorage form the url auth secret provide.
         /// </summary>
+        /// <param name="url">The url string to Firebase Database</param>
+        /// <param name="authSecret">The secret key for the Firebase Database</param>
+        /// <param name="database">The name of the database to connect with</param>
+        /// <param name="options">The FirebaseStorage object to override any of the options</param>
+        /// <exception cref="ArgumentNullException"><paramref name="url"/> argument is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="authSecret"/> argument is null.</exception>
+        public AzureDocumentDbStorage(string url, string authSecret, string database, AzureDocumentDbStorageOptions options) : this(Transform(url, authSecret, database, options)) { }
+
+        /// <summary>
+        /// Initializes the FirebaseStorage form the url auth secret provide.
+        /// </summary>
         /// <param name="options">The FirebaseStorage object to override any of the options</param>
         /// <exception cref="ArgumentNullException"><paramref name="options"/> argument is null.</exception>
-        public AzureDocumentDbStorage(AzureDocumentDbStorageOptions options)
+        private AzureDocumentDbStorage(AzureDocumentDbStorageOptions options)
         {
             if (options == null) throw new ArgumentNullException(nameof(options));
             Options = options;
@@ -133,6 +144,17 @@ namespace Hangfire.AzureDocumentDB
             Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "sets" }).GetAwaiter().GetResult();
             logger.Info("Creating document collection : locks");
             Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "locks" }).GetAwaiter().GetResult();
+        }
+
+        private static AzureDocumentDbStorageOptions Transform(string url, string authSecret, string database, AzureDocumentDbStorageOptions options)
+        {
+            if (options == null) options = new AzureDocumentDbStorageOptions();
+
+            options.Endpoint = new Uri(url);
+            options.AuthSecret = authSecret;
+            options.DatabaseName = database;
+
+            return options;
         }
 
     }

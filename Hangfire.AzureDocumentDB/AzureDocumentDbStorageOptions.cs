@@ -16,7 +16,7 @@ namespace Hangfire.AzureDocumentDB
         /// <summary>
         /// Get or sets the name of the database to connect.
         /// </summary>
-        public string DatabaseName { get; set; }
+        internal string DatabaseName { get; set; }
 
         /// <summary>
         /// Get or sets the request timemout for IFirebaseConfig. Default value set to 30 seconds
