@@ -90,7 +90,6 @@
     <Compile Include="Entities\Set.cs" />
     <Compile Include="Entities\State.cs" />
     <Compile Include="ExpirationManager.cs" />
-    <Compile Include="Json\LowerCaseDelimitedPropertyNamesContractResovler.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Queue\Entities\FetchedJob.cs" />
     <Compile Include="Queue\Interface\IPersistentJobQueue.cs" />
