@@ -6,5 +6,7 @@ namespace Hangfire.AzureDocumentDB.Entities
     {
         [JsonProperty("name")]
         public string Name { get; set; }
+
+        public override DocumentTypes DocumentType { get; set; } = DocumentTypes.Lock;
     }
 }

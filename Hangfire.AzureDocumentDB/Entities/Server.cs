@@ -22,5 +22,7 @@ namespace Hangfire.AzureDocumentDB.Entities
         [JsonProperty("last_heartbeat")]
         [JsonConverter(typeof(UnixDateTimeConverter))]
         public DateTime LastHeartbeat { get; set; }
+
+        public override DocumentTypes DocumentType { get; set; } = DocumentTypes.Server;
     }
 }

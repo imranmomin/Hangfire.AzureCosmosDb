@@ -15,5 +15,21 @@ namespace Hangfire.AzureDocumentDB.Entities
         [JsonProperty("expire_on")]
         [JsonConverter(typeof(UnixDateTimeConverter))]
         public DateTime? ExpireOn { get; set; }
+
+        [JsonProperty("type")]
+        public abstract DocumentTypes DocumentType { get; set; }
+    }
+
+    internal enum DocumentTypes
+    {
+        Server,
+        Job,
+        Queue,
+        Counter,
+        List,
+        Hash,
+        Set,
+        State,
+        Lock
     }
 }
