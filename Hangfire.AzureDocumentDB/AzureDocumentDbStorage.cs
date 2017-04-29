@@ -22,6 +22,8 @@ namespace Hangfire.AzureDocumentDB
 
         internal DocumentClient Client { get; }
 
+        internal DocumentCollections Collections { get; set; }
+
         /// <summary>
         /// Initializes the FirebaseStorage form the url auth secret provide.
         /// </summary>
@@ -58,7 +60,7 @@ namespace Hangfire.AzureDocumentDB
             Client = new DocumentClient(options.Endpoint, options.AuthSecret, connectionPolicy);
             Client.OpenAsync().GetAwaiter().GetResult();
 
-            // create the database all the collections
+            Collections = new DocumentCollections(options.DatabaseName, options.CollectionPrefix, options.DefaultCollectionName);
             Initialize();
 
             Newtonsoft.Json.JsonConvert.DefaultSettings = () => new Newtonsoft.Json.JsonSerializerSettings
@@ -126,24 +128,33 @@ namespace Hangfire.AzureDocumentDB
             // create database
             logger.Info($"Creating database : {Options.DatabaseName}");
             Client.CreateDatabaseIfNotExistsAsync(new Database { Id = Options.DatabaseName }).GetAwaiter().GetResult();
-            logger.Info("Creating document collection : servers");
-            Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "servers" }).GetAwaiter().GetResult();
-            logger.Info("Creating document collection : queues");
-            Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "queues" }).GetAwaiter().GetResult();
-            logger.Info("Creating document collection : hashes");
-            Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "hashes" }).GetAwaiter().GetResult();
-            logger.Info("Creating document collection : lists");
-            Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "lists" }).GetAwaiter().GetResult();
-            logger.Info("Creating document collection : counters");
-            Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "counters" }).GetAwaiter().GetResult();
-            logger.Info("Creating document collection : jobs");
-            Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "jobs" }).GetAwaiter().GetResult();
-            logger.Info("Creating document collection : states");
-            Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "states" }).GetAwaiter().GetResult();
-            logger.Info("Creating document collection : sets");
-            Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "sets" }).GetAwaiter().GetResult();
-            logger.Info("Creating document collection : locks");
-            Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = "locks" }).GetAwaiter().GetResult();
+
+            if (string.IsNullOrEmpty(Options.DefaultCollectionName))
+            {
+                logger.Info("Creating document collection : servers");
+                Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = $"{Options.CollectionPrefix}servers" }).GetAwaiter().GetResult();
+                logger.Info("Creating document collection : queues");
+                Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = $"{Options.CollectionPrefix}queues" }).GetAwaiter().GetResult();
+                logger.Info("Creating document collection : hashes");
+                Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = $"{Options.CollectionPrefix}hashes" }).GetAwaiter().GetResult();
+                logger.Info("Creating document collection : lists");
+                Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = $"{Options.CollectionPrefix}lists" }).GetAwaiter().GetResult();
+                logger.Info("Creating document collection : counters");
+                Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = $"{Options.CollectionPrefix}counters" }).GetAwaiter().GetResult();
+                logger.Info("Creating document collection : jobs");
+                Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = $"{Options.CollectionPrefix}jobs" }).GetAwaiter().GetResult();
+                logger.Info("Creating document collection : states");
+                Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = $"{Options.CollectionPrefix}states" }).GetAwaiter().GetResult();
+                logger.Info("Creating document collection : sets");
+                Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = $"{Options.CollectionPrefix}sets" }).GetAwaiter().GetResult();
+                logger.Info("Creating document collection : locks");
+                Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = $"{Options.CollectionPrefix}locks" }).GetAwaiter().GetResult();
+            }
+            else
+            {
+                logger.Info($"Creating document collection : {Options.DefaultCollectionName}");
+                Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = Options.DefaultCollectionName }).GetAwaiter().GetResult();
+            }
         }
 
         private static AzureDocumentDbStorageOptions Transform(string url, string authSecret, string database, AzureDocumentDbStorageOptions options)
@@ -154,8 +165,44 @@ namespace Hangfire.AzureDocumentDB
             options.AuthSecret = authSecret;
             options.DatabaseName = database;
 
+            if (!string.IsNullOrEmpty(options.CollectionPrefix))
+            {
+                options.CollectionPrefix = $"{options.CollectionPrefix}_";
+            }
+
+            if (string.IsNullOrEmpty(options.DefaultCollectionName))
+            {
+                options.DefaultCollectionName = null;
+            }
+
             return options;
         }
 
+    }
+
+    internal class DocumentCollections
+    {
+        public readonly Uri JobDocumentCollectionUri;
+        public readonly Uri StateDocumentCollectionUri;
+        public readonly Uri SetDocumentCollectionUri;
+        public readonly Uri CounterDocumentCollectionUri;
+        public readonly Uri ServerDocumentCollectionUri;
+        public readonly Uri HashDocumentCollectionUri;
+        public readonly Uri ListDocumentCollectionUri;
+        public readonly Uri LockDocumentCollectionUri;
+        public readonly Uri QueueDocumentCollectionUri;
+
+        public DocumentCollections(string databaseName, string prefix, string defaultCollectionName)
+        {
+            JobDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(databaseName, defaultCollectionName ?? $"{prefix}jobs");
+            StateDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(databaseName, defaultCollectionName ?? $"{prefix}states");
+            SetDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(databaseName, defaultCollectionName ?? $"{prefix}sets");
+            CounterDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(databaseName, defaultCollectionName ?? $"{prefix}counters");
+            ServerDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(databaseName, defaultCollectionName ?? $"{prefix}servers");
+            HashDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(databaseName, defaultCollectionName ?? $"{prefix}hashes");
+            ListDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(databaseName, defaultCollectionName ?? $"{prefix}lists");
+            LockDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(databaseName, defaultCollectionName ?? $"{prefix}locks");
+            QueueDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(databaseName, defaultCollectionName ?? $"{prefix}queues");
+        }
     }
 }
