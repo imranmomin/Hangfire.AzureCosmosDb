@@ -10,13 +10,18 @@ namespace Hangfire.AzureDocumentDB
     public class AzureDocumentDbStorageOptions
     {
         internal Uri Endpoint { get; set; }
-
         internal string AuthSecret { get; set; }
+        internal string DatabaseName { get; set; }
 
         /// <summary>
-        /// Get or sets the name of the database to connect.
+        /// Get or sets the default collection to be used for all the documents
         /// </summary>
-        internal string DatabaseName { get; set; }
+        public string DefaultCollectionName { get; set; }
+
+        /// <summary>
+        /// Get or sets the prefix before the document collections. It will only applied of DefaultCollection name is empty
+        /// </summary>
+        public string CollectionPrefix { get; set; }
 
         /// <summary>
         /// Get or sets the request timemout for IFirebaseConfig. Default value set to 30 seconds
