@@ -22,14 +22,14 @@ namespace Hangfire.AzureDocumentDB.Entities
 
     internal enum DocumentTypes
     {
-        Server,
-        Job,
-        Queue,
-        Counter,
-        List,
-        Hash,
-        Set,
-        State,
-        Lock
+        Server = 1,
+        Job = 2,
+        Queue = 3,
+        Counter = 4,
+        List = 5,
+        Hash = 6,
+        Set = 7,
+        State = 8,
+        Lock = 9
     }
 }
