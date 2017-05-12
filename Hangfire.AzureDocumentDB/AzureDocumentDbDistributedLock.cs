@@ -24,23 +24,21 @@ namespace Hangfire.AzureDocumentDB
 
         private void Acquire(string name, TimeSpan timeout)
         {
-            Uri documentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "locks");
             FeedOptions queryOptions = new FeedOptions { MaxItemCount = 1 };
-
             System.Diagnostics.Stopwatch acquireStart = new System.Diagnostics.Stopwatch();
             acquireStart.Start();
 
             while (true)
             {
-                Lock @lock = storage.Client.CreateDocumentQuery<Lock>(documentCollectionUri, queryOptions)
-                                    .Where(l => l.Name == name)
-                                    .AsEnumerable()
-                                    .FirstOrDefault();
+                Lock @lock = storage.Client.CreateDocumentQuery<Lock>(storage.Collections.LockDocumentCollectionUri, queryOptions)
+                    .Where(l => l.Name == name && l.DocumentType == DocumentTypes.Lock)
+                    .AsEnumerable()
+                    .FirstOrDefault();
 
                 if (@lock == null)
                 {
                     @lock = new Lock { Name = name, ExpireOn = DateTime.UtcNow.Add(timeout) };
-                    ResourceResponse<Document> response = storage.Client.CreateDocumentAsync(documentCollectionUri, @lock).GetAwaiter().GetResult();
+                    ResourceResponse<Document> response = storage.Client.CreateDocumentAsync(storage.Collections.LockDocumentCollectionUri, @lock).GetAwaiter().GetResult();
                     if (response.StatusCode == HttpStatusCode.Created)
                     {
                         selfLink = response.Resource.SelfLink;

@@ -10,7 +10,6 @@ namespace Hangfire.AzureDocumentDB.Queue
     internal class FetchedJob : IFetchedJob
     {
         private readonly AzureDocumentDbStorage storage;
-        private readonly Uri QueueDocumentCollectionUri;
         private readonly FeedOptions QueryOptions = new FeedOptions { MaxItemCount = 1 };
 
         public FetchedJob(AzureDocumentDbStorage storage, Entities.Queue data)
@@ -20,7 +19,6 @@ namespace Hangfire.AzureDocumentDB.Queue
             JobId = data.JobId;
             Queue = data.Name;
             SelfLink = data.SelfLink;
-            QueueDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "queues");
         }
 
         private string Id { get; }
@@ -37,10 +35,10 @@ namespace Hangfire.AzureDocumentDB.Queue
 
         public void RemoveFromQueue()
         {
-           bool exists = storage.Client.CreateDocumentQuery(QueueDocumentCollectionUri, QueryOptions)
-                .Where(d => d.Id == Id)
-                .AsEnumerable()
-                .Any();
+            bool exists = storage.Client.CreateDocumentQuery(storage.Collections.QueueDocumentCollectionUri, QueryOptions)
+                 .Where(d => d.Id == Id)
+                 .AsEnumerable()
+                 .Any();
 
             if (exists) storage.Client.DeleteDocumentAsync(SelfLink).GetAwaiter().GetResult();
         }
@@ -53,7 +51,7 @@ namespace Hangfire.AzureDocumentDB.Queue
                 Name = Queue,
                 JobId = JobId
             };
-            storage.Client.UpsertDocumentAsync(QueueDocumentCollectionUri, data).GetAwaiter().GetResult();
+            storage.Client.UpsertDocumentAsync(storage.Collections.QueueDocumentCollectionUri, data).GetAwaiter().GetResult();
         }
     }
 }
