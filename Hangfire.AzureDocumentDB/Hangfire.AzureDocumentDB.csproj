@@ -71,6 +71,7 @@
   <ItemGroup>
     <Compile Include="AzureDocumentDbConnection.cs" />
     <Compile Include="AzureDocumentDbDistributedLock.cs" />
+    <Compile Include="AzureDocumentDbDistributedRetryException.cs" />
     <Compile Include="AzureDocumentDbDistributedLockException.cs" />
     <Compile Include="AzureDocumentDbMonitoringApi.cs" />
     <Compile Include="AzureDocumentDbStorage.cs" />
@@ -90,6 +91,7 @@
     <Compile Include="Entities\Set.cs" />
     <Compile Include="Entities\State.cs" />
     <Compile Include="ExpirationManager.cs" />
+    <Compile Include="Helper\AzureDocumentDBHelper.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Queue\Entities\FetchedJob.cs" />
     <Compile Include="Queue\Interface\IPersistentJobQueue.cs" />

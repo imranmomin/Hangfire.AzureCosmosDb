@@ -5,6 +5,7 @@ using System.Threading;
 using Microsoft.Azure.Documents.Client;
 
 using Hangfire.Storage;
+using Hangfire.AzureDocumentDB.Helper;
 
 namespace Hangfire.AzureDocumentDB.Queue
 {
@@ -43,7 +44,7 @@ namespace Hangfire.AzureDocumentDB.Queue
 
                         if (data != null)
                         {
-                            storage.Client.DeleteDocumentAsync(data.SelfLink).GetAwaiter().GetResult();
+                            storage.Client.DeleteDocumentWithRetriesAsync(data.SelfLink).GetAwaiter().GetResult();
                             return new FetchedJob(storage, data);
                         }
                     }
@@ -61,7 +62,7 @@ namespace Hangfire.AzureDocumentDB.Queue
                 Name = queue,
                 JobId = jobId
             };
-            storage.Client.CreateDocumentAsync(storage.Collections.QueueDocumentCollectionUri, data).GetAwaiter().GetResult();
+            storage.Client.CreateDocumentWithRetriesAsync(storage.Collections.QueueDocumentCollectionUri, data).GetAwaiter().GetResult();
         }
     }
 }

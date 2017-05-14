@@ -9,6 +9,7 @@ using Microsoft.Azure.Documents.Client;
 using Hangfire.States;
 using Hangfire.Storage;
 using Hangfire.AzureDocumentDB.Queue;
+using Hangfire.AzureDocumentDB.Helper;
 using Hangfire.AzureDocumentDB.Entities;
 
 namespace Hangfire.AzureDocumentDB
@@ -58,7 +59,7 @@ namespace Hangfire.AzureDocumentDB
                     Value = -1
                 };
 
-                connection.Storage.Client.CreateDocumentAsync(connection.Storage.Collections.CounterDocumentCollectionUri, data).GetAwaiter().GetResult();
+                connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.Collections.CounterDocumentCollectionUri, data).GetAwaiter().GetResult();
             });
         }
 
@@ -77,7 +78,7 @@ namespace Hangfire.AzureDocumentDB
                     ExpireOn = DateTime.UtcNow.Add(expireIn)
                 };
 
-                connection.Storage.Client.CreateDocumentAsync(connection.Storage.Collections.CounterDocumentCollectionUri, data).GetAwaiter().GetResult();
+                connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.Collections.CounterDocumentCollectionUri, data).GetAwaiter().GetResult();
             });
         }
 
@@ -94,7 +95,7 @@ namespace Hangfire.AzureDocumentDB
                     Value = 1
                 };
 
-                connection.Storage.Client.CreateDocumentAsync(connection.Storage.Collections.CounterDocumentCollectionUri, data).GetAwaiter().GetResult();
+                connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.Collections.CounterDocumentCollectionUri, data).GetAwaiter().GetResult();
             });
         }
 
@@ -113,7 +114,7 @@ namespace Hangfire.AzureDocumentDB
                     ExpireOn = DateTime.UtcNow.Add(expireIn)
                 };
 
-                connection.Storage.Client.CreateDocumentAsync(connection.Storage.Collections.CounterDocumentCollectionUri, data).GetAwaiter().GetResult();
+                connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.Collections.CounterDocumentCollectionUri, data).GetAwaiter().GetResult();
             });
         }
 
@@ -137,7 +138,7 @@ namespace Hangfire.AzureDocumentDB
                 if (job != null)
                 {
                     job.ExpireOn = DateTime.UtcNow.Add(expireIn);
-                    connection.Storage.Client.ReplaceDocumentAsync(job.SelfLink, job).GetAwaiter().GetResult();
+                    connection.Storage.Client.ReplaceDocumentWithRetriesAsync(job.SelfLink, job).GetAwaiter().GetResult();
                 }
             });
         }
@@ -156,7 +157,7 @@ namespace Hangfire.AzureDocumentDB
                 if (job != null && job.ExpireOn.HasValue)
                 {
                     job.ExpireOn = null;
-                    connection.Storage.Client.ReplaceDocumentAsync(job.SelfLink, job).GetAwaiter().GetResult();
+                    connection.Storage.Client.ReplaceDocumentWithRetriesAsync(job.SelfLink, job).GetAwaiter().GetResult();
                 }
             });
         }
@@ -189,12 +190,12 @@ namespace Hangfire.AzureDocumentDB
                         Data = state.SerializeData()
                     };
 
-                    ResourceResponse<Document> response = connection.Storage.Client.CreateDocumentAsync(connection.Storage.Collections.StateDocumentCollectionUri, data).GetAwaiter().GetResult();
+                    ResourceResponse<Document> response = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.Collections.StateDocumentCollectionUri, data).GetAwaiter().GetResult();
 
                     job.StateId = response.Resource.Id;
                     job.StateName = state.Name;
 
-                    connection.Storage.Client.ReplaceDocumentAsync(job.SelfLink, job).GetAwaiter().GetResult();
+                    connection.Storage.Client.ReplaceDocumentWithRetriesAsync(job.SelfLink, job).GetAwaiter().GetResult();
                 }
             });
         }
@@ -215,7 +216,7 @@ namespace Hangfire.AzureDocumentDB
                     Data = state.SerializeData()
                 };
 
-                connection.Storage.Client.CreateDocumentAsync(connection.Storage.Collections.StateDocumentCollectionUri, data).GetAwaiter().GetResult();
+                connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.Collections.StateDocumentCollectionUri, data).GetAwaiter().GetResult();
             });
         }
 
@@ -237,7 +238,7 @@ namespace Hangfire.AzureDocumentDB
 
                 if (set != null)
                 {
-                    connection.Storage.Client.DeleteDocumentAsync(set.SelfLink).GetAwaiter().GetResult();
+                    connection.Storage.Client.DeleteDocumentWithRetriesAsync(set.SelfLink).GetAwaiter().GetResult();
                 }
             });
         }
@@ -272,7 +273,7 @@ namespace Hangfire.AzureDocumentDB
                     };
                 }
 
-                connection.Storage.Client.UpsertDocumentAsync(connection.Storage.Collections.SetDocumentCollectionUri, set).GetAwaiter().GetResult();
+                connection.Storage.Client.UpsertDocumentWithRetriesAsync(connection.Storage.Collections.SetDocumentCollectionUri, set).GetAwaiter().GetResult();
             });
         }
 
@@ -292,7 +293,7 @@ namespace Hangfire.AzureDocumentDB
                     .AsEnumerable()
                     .ToList();
 
-                hashes.ForEach(hash => connection.Storage.Client.DeleteDocumentAsync(hash.SelfLink).GetAwaiter().GetResult());
+                hashes.ForEach(hash => connection.Storage.Client.DeleteDocumentWithRetriesAsync(hash.SelfLink).GetAwaiter().GetResult());
             });
         }
 
@@ -335,7 +336,7 @@ namespace Hangfire.AzureDocumentDB
                     if (hash != null) source.Id = hash.Id;
                 });
 
-                sources.ForEach(hash => connection.Storage.Client.UpsertDocumentAsync(connection.Storage.Collections.HashDocumentCollectionUri, hash).GetAwaiter().GetResult());
+                sources.ForEach(hash => connection.Storage.Client.UpsertDocumentWithRetriesAsync(connection.Storage.Collections.HashDocumentCollectionUri, hash).GetAwaiter().GetResult());
             });
         }
 
@@ -356,7 +357,7 @@ namespace Hangfire.AzureDocumentDB
                     Value = value
                 };
 
-                connection.Storage.Client.CreateDocumentAsync(connection.Storage.Collections.ListDocumentCollectionUri, data).GetAwaiter().GetResult();
+                connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.Collections.ListDocumentCollectionUri, data).GetAwaiter().GetResult();
             });
         }
 
@@ -375,7 +376,7 @@ namespace Hangfire.AzureDocumentDB
 
                 if (data != null)
                 {
-                    connection.Storage.Client.DeleteDocumentAsync(data.SelfLink).GetAwaiter().GetResult();
+                    connection.Storage.Client.DeleteDocumentWithRetriesAsync(data.SelfLink).GetAwaiter().GetResult();
                 }
             });
         }
@@ -393,7 +394,7 @@ namespace Hangfire.AzureDocumentDB
                     .Skip(keepStartingFrom).Take(keepEndingAt)
                     .ToList();
 
-                lists.ForEach(list => connection.Storage.Client.DeleteDocumentAsync(list.SelfLink).GetAwaiter().GetResult());
+                lists.ForEach(list => connection.Storage.Client.DeleteDocumentWithRetriesAsync(list.SelfLink).GetAwaiter().GetResult());
             });
         }
 

@@ -9,6 +9,7 @@ using Microsoft.Azure.Documents.Client;
 
 using Hangfire.Server;
 using Hangfire.Logging;
+using Hangfire.AzureDocumentDB.Helper;
 using Hangfire.AzureDocumentDB.Entities;
 
 namespace Hangfire.AzureDocumentDB
@@ -76,11 +77,11 @@ namespace Hangfire.AzureDocumentDB
                             aggregated.ExpireOn = data.Item2;
                         }
 
-                        ResourceResponse<Document> response = storage.Client.UpsertDocumentAsync(storage.Collections.CounterDocumentCollectionUri, aggregated).GetAwaiter().GetResult();
+                        ResourceResponse<Document> response = storage.Client.UpsertDocumentWithRetriesAsync(storage.Collections.CounterDocumentCollectionUri, aggregated).GetAwaiter().GetResult();
                         if (response.StatusCode == HttpStatusCode.Created || response.StatusCode == HttpStatusCode.OK)
                         {
                             List<Counter> deleteCountersr = rawCounters.Where(c => c.Key == key).ToList();
-                            deleteCountersr.ForEach(counter => storage.Client.DeleteDocumentAsync(counter.SelfLink).GetAwaiter().GetResult());
+                            deleteCountersr.ForEach(counter => storage.Client.DeleteDocumentWithRetriesAsync(counter.SelfLink).GetAwaiter().GetResult());
                         }
                     }
                 });

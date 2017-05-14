@@ -12,6 +12,7 @@ using Hangfire.Common;
 using Hangfire.Server;
 using Hangfire.Storage;
 using Hangfire.AzureDocumentDB.Queue;
+using Hangfire.AzureDocumentDB.Helper;
 using Hangfire.AzureDocumentDB.Entities;
 
 namespace Hangfire.AzureDocumentDB
@@ -54,7 +55,7 @@ namespace Hangfire.AzureDocumentDB
                 }).ToArray()
             };
 
-            ResourceResponse<Document> response = Storage.Client.CreateDocumentAsync(Storage.Collections.JobDocumentCollectionUri, entityJob).GetAwaiter().GetResult();
+            ResourceResponse<Document> response = Storage.Client.CreateDocumentWithRetriesAsync(Storage.Collections.JobDocumentCollectionUri, entityJob).GetAwaiter().GetResult();
             if (response.StatusCode == HttpStatusCode.Created || response.StatusCode == HttpStatusCode.OK)
             {
                 return entityJob.Id;
@@ -162,8 +163,8 @@ namespace Hangfire.AzureDocumentDB
 
             List<Parameter> parameters = Storage.Client.CreateDocumentQuery<Entities.Job>(Storage.Collections.JobDocumentCollectionUri, QueryOptions)
                 .Where(j => j.Id == id)
-                .AsEnumerable()
                 .SelectMany(j => j.Parameters)
+                .AsEnumerable()
                 .ToList();
 
             return parameters.Where(p => p.Name == name).Select(p => p.Value).FirstOrDefault();
@@ -196,7 +197,7 @@ namespace Hangfire.AzureDocumentDB
                 }
 
                 job.Parameters = parameters.ToArray();
-                Storage.Client.ReplaceDocumentAsync(job.SelfLink, job).GetAwaiter().GetResult();
+                Storage.Client.ReplaceDocumentWithRetriesAsync(job.SelfLink, job).GetAwaiter().GetResult();
             }
         }
 
@@ -221,9 +222,9 @@ namespace Hangfire.AzureDocumentDB
 
             return Storage.Client.CreateDocumentQuery<Set>(Storage.Collections.SetDocumentCollectionUri, QueryOptions)
                 .Where(s => s.Key == key && s.DocumentType == DocumentTypes.Set)
+                .Select(c => c.Value)
                 .AsEnumerable()
                 .Skip(startingFrom).Take(endingAt)
-                .Select(c => c.Value)
                 .ToList();
         }
 
@@ -307,7 +308,7 @@ namespace Hangfire.AzureDocumentDB
                 };
             }
 
-            Storage.Client.UpsertDocumentAsync(Storage.Collections.ServerDocumentCollectionUri, server).GetAwaiter().GetResult();
+            Storage.Client.UpsertDocumentWithRetriesAsync(Storage.Collections.ServerDocumentCollectionUri, server).GetAwaiter().GetResult();
         }
 
         public override void Heartbeat(string serverId)
@@ -323,7 +324,7 @@ namespace Hangfire.AzureDocumentDB
             if (server != null)
             {
                 server.LastHeartbeat = DateTime.UtcNow;
-                Storage.Client.ReplaceDocumentAsync(server.SelfLink, server).GetAwaiter().GetResult();
+                Storage.Client.ReplaceDocumentWithRetriesAsync(server.SelfLink, server).GetAwaiter().GetResult();
             }
         }
 
@@ -339,7 +340,7 @@ namespace Hangfire.AzureDocumentDB
 
             if (server != null)
             {
-                Storage.Client.DeleteDocumentAsync(server.SelfLink).GetAwaiter().GetResult();
+                Storage.Client.DeleteDocumentWithRetriesAsync(server.SelfLink).GetAwaiter().GetResult();
             }
         }
 
@@ -360,7 +361,7 @@ namespace Hangfire.AzureDocumentDB
                 .Select(s => s.SelfLink)
                 .ToArray();
 
-            Array.ForEach(selfLinks, selfLink => Storage.Client.DeleteDocumentAsync(selfLink).GetAwaiter().GetResult());
+            Array.ForEach(selfLinks, selfLink => Storage.Client.DeleteDocumentWithRetriesAsync(selfLink).GetAwaiter().GetResult());
             return selfLinks.Length;
         }
 
@@ -416,7 +417,7 @@ namespace Hangfire.AzureDocumentDB
                 if (hash != null) source.Id = hash.Id;
             });
 
-            sources.ForEach(hash => Storage.Client.UpsertDocumentAsync(Storage.Collections.HashDocumentCollectionUri, hash).GetAwaiter().GetResult());
+            sources.ForEach(hash => Storage.Client.UpsertDocumentWithRetriesAsync(Storage.Collections.HashDocumentCollectionUri, hash).GetAwaiter().GetResult());
         }
 
         public override long GetHashCount(string key)

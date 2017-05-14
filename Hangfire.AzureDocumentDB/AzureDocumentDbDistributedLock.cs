@@ -3,6 +3,7 @@ using System.Net;
 using System.Linq;
 
 using Microsoft.Azure.Documents;
+using Hangfire.AzureDocumentDB.Helper;
 using Microsoft.Azure.Documents.Client;
 using Hangfire.AzureDocumentDB.Entities;
 
@@ -30,15 +31,16 @@ namespace Hangfire.AzureDocumentDB
 
             while (true)
             {
-                Lock @lock = storage.Client.CreateDocumentQuery<Lock>(storage.Collections.LockDocumentCollectionUri, queryOptions)
-                    .Where(l => l.Name == name && l.DocumentType == DocumentTypes.Lock)
-                    .AsEnumerable()
-                    .FirstOrDefault();
+                bool exists = storage.Client.CreateDocumentQuery<Lock>(storage.Collections.LockDocumentCollectionUri, queryOptions)
+                     .Where(l => l.Name == name && l.DocumentType == DocumentTypes.Lock)
+                     .Select(l => 1)
+                     .AsEnumerable()
+                     .Any();
 
-                if (@lock == null)
+                if (exists == false)
                 {
-                    @lock = new Lock { Name = name, ExpireOn = DateTime.UtcNow.Add(timeout) };
-                    ResourceResponse<Document> response = storage.Client.CreateDocumentAsync(storage.Collections.LockDocumentCollectionUri, @lock).GetAwaiter().GetResult();
+                    Lock @lock = new Lock { Name = name, ExpireOn = DateTime.UtcNow.Add(timeout) };
+                    ResourceResponse<Document> response = storage.Client.CreateDocumentWithRetriesAsync(storage.Collections.LockDocumentCollectionUri, @lock).GetAwaiter().GetResult();
                     if (response.StatusCode == HttpStatusCode.Created)
                     {
                         selfLink = response.Resource.SelfLink;
@@ -61,7 +63,7 @@ namespace Hangfire.AzureDocumentDB
         {
             lock (syncLock)
             {
-                storage.Client.DeleteDocumentAsync(selfLink).GetAwaiter().GetResult();
+                storage.Client.DeleteDocumentWithRetriesAsync(selfLink).GetAwaiter().GetResult();
             }
         }
     }

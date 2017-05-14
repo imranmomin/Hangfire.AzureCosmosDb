@@ -8,6 +8,7 @@ using Microsoft.Azure.Documents.Client;
 
 using Hangfire.Server;
 using Hangfire.Logging;
+using Hangfire.AzureDocumentDB.Helper;
 using Hangfire.AzureDocumentDB.Entities;
 
 namespace Hangfire.AzureDocumentDB
@@ -58,7 +59,7 @@ namespace Hangfire.AzureDocumentDB
                         foreach (DocumentEntity entity in entities)
                         {
                             cancellationToken.ThrowIfCancellationRequested();
-                            storage.Client.DeleteDocumentAsync(entity.SelfLink).GetAwaiter().GetResult();
+                            storage.Client.DeleteDocumentWithRetriesAsync(entity.SelfLink).GetAwaiter().GetResult();
                         }
                     }
                 }
@@ -96,6 +97,7 @@ namespace Hangfire.AzureDocumentDB
                 case "sets": return storage.Collections.SetDocumentCollectionUri;
                 case "hashes": return storage.Collections.HashDocumentCollectionUri;
                 case "counters": return storage.Collections.CounterDocumentCollectionUri;
+                default: throw new ArgumentException($"{document} document not supported");
             }
 
             throw new ArgumentException("invalid document type", nameof(document));
