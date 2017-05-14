@@ -9,7 +9,7 @@ namespace Hangfire.AzureDocumentDB
     public class AzureDocumentDbDistributedLockException : Exception
     {
         /// <summary>
-        /// Initializes a new instance of the FirebaseDistributedLockException class with serialized data.
+        /// Initializes a new instance of the AzureDocumentDbDistributedLockException class with serialized data.
         /// </summary>
         /// <param name="message">The message that describes the error.</param>
         public AzureDocumentDbDistributedLockException(string message) : base(message)
