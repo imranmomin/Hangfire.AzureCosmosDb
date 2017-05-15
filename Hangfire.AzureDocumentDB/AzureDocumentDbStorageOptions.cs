@@ -5,7 +5,7 @@
 namespace Hangfire.AzureDocumentDB
 {
     /// <summary>
-    /// Options for FirebaseStorage
+    /// Options for AzureDocumentDbStorage
     /// </summary>
     public class AzureDocumentDbStorageOptions
     {
@@ -24,7 +24,7 @@ namespace Hangfire.AzureDocumentDB
         public string CollectionPrefix { get; set; }
 
         /// <summary>
-        /// Get or sets the request timemout for IFirebaseConfig. Default value set to 30 seconds
+        /// Get or sets the request timemout for DocumentDB client. Default value set to 30 seconds
         /// </summary>
         public TimeSpan RequestTimeout { get; set; }
 
