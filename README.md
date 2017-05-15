@@ -6,20 +6,15 @@
 
 This repo will add a [Microsoft Azure DocumentDB](https://azure.microsoft.com/en-ca/services/documentdb) storage support to [Hangfire](http://hangfire.io) - fire-and-forget, delayed and recurring tasks runner for .NET. Scalable and reliable background job runner. Supports multiple servers, CPU and I/O intensive, long-running and short-running jobs.
 
-Installation
-
--------------
+## Installation
 
 [Hangfire.AzureDocumentDB](https://www.nuget.org/packages/Hangfire.AzureDocumentDB) is available as a NuGet package. Install it using the NuGet Package Console window:
 
 ```powershell
-
 PM> Install-Package Hangfire.AzureDocumentDB
 ```
 
-Usage
-
--------------
+## Usage
 
 Use one the following ways to initialize `AzureDocumentDbStorage`
 
@@ -47,12 +42,15 @@ Hangfire.AzureDocumentDB.AzureDocumentDbStorage azureDocumentDBStorage = new Han
 GlobalConfiguration.Configuration.UseStorage(azureDocumentDBStorage);
 ```
 
-Limitations
+To set a default collection for all the documents. We will need to set the property
+```csharp
+Hangfire.AzureDocumentDB.AzureDocumentDbStorageOptions azureDocumentDBStorageOptions = new Hangfire.AzureDocumentDB.AzureDocumentDbStorageOptions
+{
+    DefaultCollectionName = "Hangfire_jobs"
+};
+```
 
--------------
-
-Currently, the storage will create individual collections. In future will try to get an option to use the specified collections.
-
+If the default collection is not defined, the library will create seperate collections for each document type.
 * Servers
 * Queues
 * Jobs
@@ -63,9 +61,7 @@ Currently, the storage will create individual collections. In future will try to
 * States
 * Locks
 
-Questions? Problems?
-
--------------
+## Questions? Problems?
 
 Open-source project are developing more smoothly, when all discussions are held in public.
 
