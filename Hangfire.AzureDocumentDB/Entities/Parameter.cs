@@ -2,7 +2,7 @@
 
 namespace Hangfire.AzureDocumentDB.Entities
 {
-    internal class Parameter : DocumentEntity
+    internal class Parameter
     {
         [JsonProperty("name")]
         public string Name { get; set; }

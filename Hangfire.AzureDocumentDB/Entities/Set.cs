@@ -12,5 +12,7 @@ namespace Hangfire.AzureDocumentDB.Entities
 
         [JsonProperty("score")]
         public double? Score { get; set; }
+
+        public override DocumentTypes DocumentType { get; set; } = DocumentTypes.Set;
     }
 }

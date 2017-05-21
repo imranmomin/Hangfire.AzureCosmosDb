@@ -5,6 +5,7 @@ using System.Threading;
 using Microsoft.Azure.Documents.Client;
 
 using Hangfire.Storage;
+using Hangfire.AzureDocumentDB.Helper;
 
 namespace Hangfire.AzureDocumentDB.Queue
 {
@@ -16,14 +17,12 @@ namespace Hangfire.AzureDocumentDB.Queue
         private readonly TimeSpan checkInterval;
         private readonly object syncLock = new object();
 
-        private readonly Uri QueueDocumentCollectionUri;
         private readonly FeedOptions QueryOptions = new FeedOptions { MaxItemCount = 1 };
 
         public JobQueue(AzureDocumentDbStorage storage)
         {
             this.storage = storage;
             checkInterval = storage.Options.QueuePollInterval;
-            QueueDocumentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "queues");
         }
 
         public IFetchedJob Dequeue(string[] queues, CancellationToken cancellationToken)
@@ -38,14 +37,14 @@ namespace Hangfire.AzureDocumentDB.Queue
                     {
                         string queue = queues.ElementAt(index);
 
-                        Entities.Queue data = storage.Client.CreateDocumentQuery<Entities.Queue>(QueueDocumentCollectionUri, QueryOptions)
-                            .Where(q => q.Name == queue)
+                        Entities.Queue data = storage.Client.CreateDocumentQuery<Entities.Queue>(storage.Collections.QueueDocumentCollectionUri, QueryOptions)
+                            .Where(q => q.Name == queue && q.DocumentType == Entities.DocumentTypes.Queue)
                             .AsEnumerable()
                             .FirstOrDefault();
 
                         if (data != null)
                         {
-                            storage.Client.DeleteDocumentAsync(data.SelfLink).GetAwaiter().GetResult();
+                            storage.Client.DeleteDocumentWithRetriesAsync(data.SelfLink).GetAwaiter().GetResult();
                             return new FetchedJob(storage, data);
                         }
                     }
@@ -63,7 +62,7 @@ namespace Hangfire.AzureDocumentDB.Queue
                 Name = queue,
                 JobId = jobId
             };
-            storage.Client.CreateDocumentAsync(QueueDocumentCollectionUri, data).GetAwaiter().GetResult();
+            storage.Client.CreateDocumentWithRetriesAsync(storage.Collections.QueueDocumentCollectionUri, data).GetAwaiter().GetResult();
         }
     }
 }

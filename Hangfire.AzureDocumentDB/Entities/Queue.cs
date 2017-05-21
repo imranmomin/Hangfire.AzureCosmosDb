@@ -9,5 +9,7 @@ namespace Hangfire.AzureDocumentDB.Entities
 
         [JsonProperty("job_id")]
         public string JobId { get; set; }
+
+        public override DocumentTypes DocumentType { get; set; } = DocumentTypes.Queue;
     }
 }

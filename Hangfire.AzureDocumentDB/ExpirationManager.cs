@@ -8,6 +8,7 @@ using Microsoft.Azure.Documents.Client;
 
 using Hangfire.Server;
 using Hangfire.Logging;
+using Hangfire.AzureDocumentDB.Helper;
 using Hangfire.AzureDocumentDB.Entities;
 
 namespace Hangfire.AzureDocumentDB
@@ -37,41 +38,70 @@ namespace Hangfire.AzureDocumentDB
             foreach (string document in documents)
             {
                 Logger.Debug($"Removing outdated records from the '{document}' document.");
+                DocumentTypes type = document.ToDocumentType();
 
                 using (new AzureDocumentDbDistributedLock(distributedLockKey, defaultLockTimeout, storage))
                 {
-                    string responseContinuation = null;
-                    Uri collectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, document);
+                    Uri collectionUri = document.ToDocumentCollectionUri(storage);
+                    FeedOptions QueryOptions = new FeedOptions { MaxItemCount = 50, };
+                    IDocumentQuery<DocumentEntity> query = storage.Client.CreateDocumentQuery<DocumentEntity>(collectionUri, QueryOptions)
+                        .Where(d => d.DocumentType == type)
+                        .AsDocumentQuery();
 
-                    do
+                    while (query.HasMoreResults)
                     {
-                        FeedOptions QueryOptions = new FeedOptions { MaxItemCount = 50, RequestContinuation = responseContinuation };
-                        IDocumentQuery<DocumentEntity> query = storage.Client.CreateDocumentQuery<DocumentEntity>(collectionUri, QueryOptions)
-                            .AsDocumentQuery();
+                        FeedResponse<DocumentEntity> response = query.ExecuteNextAsync<DocumentEntity>(cancellationToken).GetAwaiter().GetResult();
 
-                        if (query.HasMoreResults)
+                        List<DocumentEntity> entities = response
+                            .Where(c => c.ExpireOn < DateTime.UtcNow)
+                            .Where(entity => document != "counters" || !(entity is Counter) || ((Counter)entity).Type != CounterTypes.Raw).ToList();
+
+                        foreach (DocumentEntity entity in entities)
                         {
-                            FeedResponse<DocumentEntity> response = query.ExecuteNextAsync<DocumentEntity>(cancellationToken).GetAwaiter().GetResult();
-                            responseContinuation = response.ResponseContinuation;
-
-                            List<DocumentEntity> entities = response
-                                .Where(c => c.ExpireOn < DateTime.UtcNow)
-                                .Where(entity => document != "counters" || !(entity is Counter) || ((Counter)entity).Type != CounterTypes.Raw).ToList();
-
-                            foreach (DocumentEntity entity in entities)
-                            {
-                                cancellationToken.ThrowIfCancellationRequested();
-                                storage.Client.DeleteDocumentAsync(entity.SelfLink).GetAwaiter().GetResult();
-                            }
+                            cancellationToken.ThrowIfCancellationRequested();
+                            storage.Client.DeleteDocumentWithRetriesAsync(entity.SelfLink).GetAwaiter().GetResult();
                         }
-
-                    } while (!string.IsNullOrEmpty(responseContinuation));
-
+                    }
                 }
 
                 Logger.Trace($"Outdated records removed from the '{document}' document.");
                 cancellationToken.WaitHandle.WaitOne(checkInterval);
             }
+        }
+    }
+
+    internal static class ExpirationManagerExtenison
+    {
+        internal static DocumentTypes ToDocumentType(this string document)
+        {
+            switch (document)
+            {
+                case "locks": return DocumentTypes.Lock;
+                case "jobs": return DocumentTypes.Job;
+                case "lists": return DocumentTypes.List;
+                case "sets": return DocumentTypes.Set;
+                case "hashes": return DocumentTypes.Hash;
+                case "counters": return DocumentTypes.Counter;
+            }
+
+            throw new ArgumentException("invalid document type", nameof(document));
+        }
+
+        internal static Uri ToDocumentCollectionUri(this string document, AzureDocumentDbStorage storage)
+        {
+            switch (document)
+            {
+                case "locks": return storage.Collections.LockDocumentCollectionUri;
+                case "jobs": return storage.Collections.JobDocumentCollectionUri;
+                case "lists": return storage.Collections.ListDocumentCollectionUri;
+                case "sets": return storage.Collections.SetDocumentCollectionUri;
+                case "hashes": return storage.Collections.HashDocumentCollectionUri;
+                case "counters": return storage.Collections.CounterDocumentCollectionUri;
+                default: throw new ArgumentException($"{document} document not supported");
+            }
+
+            throw new ArgumentException("invalid document type", nameof(document));
+
         }
     }
 }

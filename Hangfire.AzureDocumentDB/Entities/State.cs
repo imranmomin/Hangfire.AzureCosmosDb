@@ -20,8 +20,10 @@ namespace Hangfire.AzureDocumentDB.Entities
         [JsonProperty("created_on")]
         [JsonConverter(typeof(UnixDateTimeConverter))]
         public DateTime CreatedOn { get; set; }
-        
+
         [JsonProperty("data")]
         public Dictionary<string, string> Data { get; set; }
+
+        public override DocumentTypes DocumentType { get; set; } = DocumentTypes.State;
     }
 }

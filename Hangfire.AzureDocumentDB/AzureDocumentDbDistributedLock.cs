@@ -3,6 +3,7 @@ using System.Net;
 using System.Linq;
 
 using Microsoft.Azure.Documents;
+using Hangfire.AzureDocumentDB.Helper;
 using Microsoft.Azure.Documents.Client;
 using Hangfire.AzureDocumentDB.Entities;
 
@@ -24,23 +25,22 @@ namespace Hangfire.AzureDocumentDB
 
         private void Acquire(string name, TimeSpan timeout)
         {
-            Uri documentCollectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, "locks");
             FeedOptions queryOptions = new FeedOptions { MaxItemCount = 1 };
-
             System.Diagnostics.Stopwatch acquireStart = new System.Diagnostics.Stopwatch();
             acquireStart.Start();
 
             while (true)
             {
-                Lock @lock = storage.Client.CreateDocumentQuery<Lock>(documentCollectionUri, queryOptions)
-                                    .Where(l => l.Name == name)
-                                    .AsEnumerable()
-                                    .FirstOrDefault();
+                bool exists = storage.Client.CreateDocumentQuery<Lock>(storage.Collections.LockDocumentCollectionUri, queryOptions)
+                     .Where(l => l.Name == name && l.DocumentType == DocumentTypes.Lock)
+                     .Select(l => 1)
+                     .AsEnumerable()
+                     .Any();
 
-                if (@lock == null)
+                if (exists == false)
                 {
-                    @lock = new Lock { Name = name, ExpireOn = DateTime.UtcNow.Add(timeout) };
-                    ResourceResponse<Document> response = storage.Client.CreateDocumentAsync(documentCollectionUri, @lock).GetAwaiter().GetResult();
+                    Lock @lock = new Lock { Name = name, ExpireOn = DateTime.UtcNow.Add(timeout) };
+                    ResourceResponse<Document> response = storage.Client.CreateDocumentWithRetriesAsync(storage.Collections.LockDocumentCollectionUri, @lock).GetAwaiter().GetResult();
                     if (response.StatusCode == HttpStatusCode.Created)
                     {
                         selfLink = response.Resource.SelfLink;
@@ -63,7 +63,7 @@ namespace Hangfire.AzureDocumentDB
         {
             lock (syncLock)
             {
-                storage.Client.DeleteDocumentAsync(selfLink).GetAwaiter().GetResult();
+                storage.Client.DeleteDocumentWithRetriesAsync(selfLink).GetAwaiter().GetResult();
             }
         }
     }

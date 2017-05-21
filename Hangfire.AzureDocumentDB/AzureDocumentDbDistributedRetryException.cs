@@ -6,13 +6,13 @@ namespace Hangfire.AzureDocumentDB
     /// Represents errors that occur while acquiring a distributed lock.
     /// </summary>
     [Serializable]
-    public class AzureDocumentDbDistributedLockException : Exception
+    public class AzureDocumentDbDistributedRetryException : Exception
     {
         /// <summary>
-        /// Initializes a new instance of the AzureDocumentDbDistributedLockException class with serialized data.
+        /// Initializes a new instance of the AzureDocumentDbDistributedRetryException class with serialized data.
         /// </summary>
         /// <param name="message">The message that describes the error.</param>
-        public AzureDocumentDbDistributedLockException(string message) : base(message)
+        public AzureDocumentDbDistributedRetryException(string message) : base(message)
         {
         }
     }

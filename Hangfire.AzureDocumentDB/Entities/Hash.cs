@@ -12,5 +12,7 @@ namespace Hangfire.AzureDocumentDB.Entities
 
         [JsonProperty("value")]
         public string Value { get; set; }
+
+        public override DocumentTypes DocumentType { get; set; } = DocumentTypes.Hash;
     }
 }
