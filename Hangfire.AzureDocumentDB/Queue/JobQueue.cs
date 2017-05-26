@@ -37,7 +37,7 @@ namespace Hangfire.AzureDocumentDB.Queue
                     {
                         string queue = queues.ElementAt(index);
 
-                        Entities.Queue data = storage.Client.CreateDocumentQuery<Entities.Queue>(storage.Collections.QueueDocumentCollectionUri, QueryOptions)
+                        Entities.Queue data = storage.Client.CreateDocumentQuery<Entities.Queue>(storage.CollectionUri, QueryOptions)
                             .Where(q => q.Name == queue && q.DocumentType == Entities.DocumentTypes.Queue)
                             .AsEnumerable()
                             .FirstOrDefault();
@@ -62,7 +62,7 @@ namespace Hangfire.AzureDocumentDB.Queue
                 Name = queue,
                 JobId = jobId
             };
-            storage.Client.CreateDocumentWithRetriesAsync(storage.Collections.QueueDocumentCollectionUri, data).GetAwaiter().GetResult();
+            storage.Client.CreateDocumentWithRetriesAsync(storage.CollectionUri, data).GetAwaiter().GetResult();
         }
     }
 }

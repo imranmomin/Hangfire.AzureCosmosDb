@@ -12,16 +12,7 @@ namespace Hangfire.AzureDocumentDB
         internal Uri Endpoint { get; set; }
         internal string AuthSecret { get; set; }
         internal string DatabaseName { get; set; }
-
-        /// <summary>
-        /// Get or sets the default collection to be used for all the documents
-        /// </summary>
-        public string DefaultCollectionName { get; set; }
-
-        /// <summary>
-        /// Get or sets the prefix before the document collections. It will only applied of DefaultCollection name is empty
-        /// </summary>
-        public string CollectionPrefix { get; set; }
+        internal string CollectionName { get; set; }
 
         /// <summary>
         /// Get or sets the request timemout for DocumentDB client. Default value set to 30 seconds

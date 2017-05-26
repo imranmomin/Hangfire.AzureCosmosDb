@@ -1,5 +1,4 @@
-﻿using System;
-using System.Linq;
+﻿using System.Linq;
 
 using Hangfire.Storage;
 
@@ -35,7 +34,8 @@ namespace Hangfire.AzureDocumentDB.Queue
 
         public void RemoveFromQueue()
         {
-            bool exists = storage.Client.CreateDocumentQuery(storage.Collections.QueueDocumentCollectionUri, QueryOptions)
+            // TODO: move to stored procedure
+            bool exists = storage.Client.CreateDocumentQuery(storage.CollectionUri, QueryOptions)
                  .Where(d => d.Id == Id)
                  .AsEnumerable()
                  .Any();
@@ -51,7 +51,7 @@ namespace Hangfire.AzureDocumentDB.Queue
                 Name = Queue,
                 JobId = JobId
             };
-            storage.Client.UpsertDocumentAsync(storage.Collections.QueueDocumentCollectionUri, data).GetAwaiter().GetResult();
+            storage.Client.UpsertDocumentAsync(storage.CollectionUri, data).GetAwaiter().GetResult();
         }
     }
 }

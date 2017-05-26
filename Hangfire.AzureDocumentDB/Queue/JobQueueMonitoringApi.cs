@@ -21,7 +21,7 @@ namespace Hangfire.AzureDocumentDB.Queue
 
         public int GetEnqueuedCount(string queue)
         {
-            return storage.Client.CreateDocumentQuery<Entities.Queue>(storage.Collections.QueueDocumentCollectionUri, QueryOptions)
+            return storage.Client.CreateDocumentQuery<Entities.Queue>(storage.CollectionUri, QueryOptions)
                 .Where(q => q.Name == queue && q.DocumentType == Entities.DocumentTypes.Queue)
                 .AsEnumerable()
                 .Select(q => 1)
@@ -30,7 +30,7 @@ namespace Hangfire.AzureDocumentDB.Queue
 
         public IEnumerable<string> GetEnqueuedJobIds(string queue, int from, int perPage)
         {
-            return storage.Client.CreateDocumentQuery<Entities.Queue>(storage.Collections.QueueDocumentCollectionUri, QueryOptions)
+            return storage.Client.CreateDocumentQuery<Entities.Queue>(storage.CollectionUri, QueryOptions)
                  .Where(q => q.Name == queue && q.DocumentType == Entities.DocumentTypes.Queue)
                  .AsEnumerable()
                  .Skip(from).Take(perPage)

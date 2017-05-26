@@ -31,7 +31,7 @@ namespace Hangfire.AzureDocumentDB
 
             while (true)
             {
-                bool exists = storage.Client.CreateDocumentQuery<Lock>(storage.Collections.LockDocumentCollectionUri, queryOptions)
+                bool exists = storage.Client.CreateDocumentQuery<Lock>(storage.CollectionUri, queryOptions)
                      .Where(l => l.Name == name && l.DocumentType == DocumentTypes.Lock)
                      .Select(l => 1)
                      .AsEnumerable()
@@ -40,7 +40,7 @@ namespace Hangfire.AzureDocumentDB
                 if (exists == false)
                 {
                     Lock @lock = new Lock { Name = name, ExpireOn = DateTime.UtcNow.Add(timeout) };
-                    ResourceResponse<Document> response = storage.Client.CreateDocumentWithRetriesAsync(storage.Collections.LockDocumentCollectionUri, @lock).GetAwaiter().GetResult();
+                    ResourceResponse<Document> response = storage.Client.CreateDocumentWithRetriesAsync(storage.CollectionUri, @lock).GetAwaiter().GetResult();
                     if (response.StatusCode == HttpStatusCode.Created)
                     {
                         selfLink = response.Resource.SelfLink;

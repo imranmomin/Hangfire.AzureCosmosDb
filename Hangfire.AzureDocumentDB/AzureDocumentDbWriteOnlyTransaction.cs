@@ -59,7 +59,7 @@ namespace Hangfire.AzureDocumentDB
                     Value = -1
                 };
 
-                connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.Collections.CounterDocumentCollectionUri, data).GetAwaiter().GetResult();
+                connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data).GetAwaiter().GetResult();
             });
         }
 
@@ -78,7 +78,7 @@ namespace Hangfire.AzureDocumentDB
                     ExpireOn = DateTime.UtcNow.Add(expireIn)
                 };
 
-                connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.Collections.CounterDocumentCollectionUri, data).GetAwaiter().GetResult();
+                connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data).GetAwaiter().GetResult();
             });
         }
 
@@ -95,7 +95,7 @@ namespace Hangfire.AzureDocumentDB
                     Value = 1
                 };
 
-                connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.Collections.CounterDocumentCollectionUri, data).GetAwaiter().GetResult();
+                connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data).GetAwaiter().GetResult();
             });
         }
 
@@ -114,7 +114,7 @@ namespace Hangfire.AzureDocumentDB
                     ExpireOn = DateTime.UtcNow.Add(expireIn)
                 };
 
-                connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.Collections.CounterDocumentCollectionUri, data).GetAwaiter().GetResult();
+                connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data).GetAwaiter().GetResult();
             });
         }
 
@@ -130,7 +130,7 @@ namespace Hangfire.AzureDocumentDB
             QueueCommand(() =>
             {
                 // TODO: move to stored procedure
-                Job job = connection.Storage.Client.CreateDocumentQuery<Job>(connection.Storage.Collections.JobDocumentCollectionUri, QueryOptions)
+                Job job = connection.Storage.Client.CreateDocumentQuery<Job>(connection.Storage.CollectionUri, QueryOptions)
                     .Where(j => j.Id == jobId)
                     .AsEnumerable()
                     .FirstOrDefault();
@@ -149,7 +149,7 @@ namespace Hangfire.AzureDocumentDB
 
             QueueCommand(() =>
             {
-                Job job = connection.Storage.Client.CreateDocumentQuery<Job>(connection.Storage.Collections.JobDocumentCollectionUri, QueryOptions)
+                Job job = connection.Storage.Client.CreateDocumentQuery<Job>(connection.Storage.CollectionUri, QueryOptions)
                     .Where(j => j.Id == jobId)
                     .AsEnumerable()
                     .FirstOrDefault();
@@ -174,7 +174,7 @@ namespace Hangfire.AzureDocumentDB
             QueueCommand(() =>
             {
                 // TODO: move to stored procedure
-                Job job = connection.Storage.Client.CreateDocumentQuery<Job>(connection.Storage.Collections.JobDocumentCollectionUri, QueryOptions)
+                Job job = connection.Storage.Client.CreateDocumentQuery<Job>(connection.Storage.CollectionUri, QueryOptions)
                     .Where(j => j.Id == jobId)
                     .AsEnumerable()
                     .FirstOrDefault();
@@ -190,7 +190,7 @@ namespace Hangfire.AzureDocumentDB
                         Data = state.SerializeData()
                     };
 
-                    ResourceResponse<Document> response = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.Collections.StateDocumentCollectionUri, data).GetAwaiter().GetResult();
+                    ResourceResponse<Document> response = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data).GetAwaiter().GetResult();
 
                     job.StateId = response.Resource.Id;
                     job.StateName = state.Name;
@@ -216,7 +216,7 @@ namespace Hangfire.AzureDocumentDB
                     Data = state.SerializeData()
                 };
 
-                connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.Collections.StateDocumentCollectionUri, data).GetAwaiter().GetResult();
+                connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data).GetAwaiter().GetResult();
             });
         }
 
@@ -231,7 +231,7 @@ namespace Hangfire.AzureDocumentDB
 
             QueueCommand(() =>
             {
-                Set set = connection.Storage.Client.CreateDocumentQuery<Set>(connection.Storage.Collections.SetDocumentCollectionUri, QueryOptions)
+                Set set = connection.Storage.Client.CreateDocumentQuery<Set>(connection.Storage.CollectionUri, QueryOptions)
                      .Where(s => s.Key == key && s.Value == value && s.DocumentType == DocumentTypes.Set)
                      .AsEnumerable()
                      .FirstOrDefault();
@@ -252,7 +252,7 @@ namespace Hangfire.AzureDocumentDB
 
             QueueCommand(() =>
             {
-                Set set = connection.Storage.Client.CreateDocumentQuery<Set>(connection.Storage.Collections.SetDocumentCollectionUri, QueryOptions)
+                Set set = connection.Storage.Client.CreateDocumentQuery<Set>(connection.Storage.CollectionUri, QueryOptions)
                     .Where(s => s.Key == key && s.Value == value && s.DocumentType == DocumentTypes.Set)
                     .AsEnumerable()
                     .FirstOrDefault();
@@ -273,7 +273,7 @@ namespace Hangfire.AzureDocumentDB
                     };
                 }
 
-                connection.Storage.Client.UpsertDocumentWithRetriesAsync(connection.Storage.Collections.SetDocumentCollectionUri, set).GetAwaiter().GetResult();
+                connection.Storage.Client.UpsertDocumentWithRetriesAsync(connection.Storage.CollectionUri, set).GetAwaiter().GetResult();
             });
         }
 
@@ -288,7 +288,7 @@ namespace Hangfire.AzureDocumentDB
             QueueCommand(() =>
             {
                 // TODO: move to stored procedure
-                List<Hash> hashes = connection.Storage.Client.CreateDocumentQuery<Hash>(connection.Storage.Collections.HashDocumentCollectionUri, QueryOptions)
+                List<Hash> hashes = connection.Storage.Client.CreateDocumentQuery<Hash>(connection.Storage.CollectionUri, QueryOptions)
                     .Where(h => h.Key == key && h.DocumentType == DocumentTypes.Hash)
                     .AsEnumerable()
                     .ToList();
@@ -325,7 +325,7 @@ namespace Hangfire.AzureDocumentDB
                     Value = epoch(k.Value)
                 }).ToList();
 
-                List<Hash> hashes = connection.Storage.Client.CreateDocumentQuery<Hash>(connection.Storage.Collections.HashDocumentCollectionUri, QueryOptions)
+                List<Hash> hashes = connection.Storage.Client.CreateDocumentQuery<Hash>(connection.Storage.CollectionUri, QueryOptions)
                     .Where(h => h.Key == key && h.DocumentType == DocumentTypes.Hash)
                     .AsEnumerable()
                     .ToList();
@@ -336,7 +336,7 @@ namespace Hangfire.AzureDocumentDB
                     if (hash != null) source.Id = hash.Id;
                 });
 
-                sources.ForEach(hash => connection.Storage.Client.UpsertDocumentWithRetriesAsync(connection.Storage.Collections.HashDocumentCollectionUri, hash).GetAwaiter().GetResult());
+                sources.ForEach(hash => connection.Storage.Client.UpsertDocumentWithRetriesAsync(connection.Storage.CollectionUri, hash).GetAwaiter().GetResult());
             });
         }
 
@@ -357,7 +357,7 @@ namespace Hangfire.AzureDocumentDB
                     Value = value
                 };
 
-                connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.Collections.ListDocumentCollectionUri, data).GetAwaiter().GetResult();
+                connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data).GetAwaiter().GetResult();
             });
         }
 
@@ -369,7 +369,7 @@ namespace Hangfire.AzureDocumentDB
             QueueCommand(() =>
             {
                 // TODO: move to stored procedure
-                List data = connection.Storage.Client.CreateDocumentQuery<List>(connection.Storage.Collections.ListDocumentCollectionUri, QueryOptions)
+                List data = connection.Storage.Client.CreateDocumentQuery<List>(connection.Storage.CollectionUri, QueryOptions)
                     .Where(l => l.Key == key && l.Value == value && l.DocumentType == DocumentTypes.List)
                     .AsEnumerable()
                     .FirstOrDefault();
@@ -388,7 +388,7 @@ namespace Hangfire.AzureDocumentDB
             QueueCommand(() =>
             {
                 // TODO: move to stored procedure
-                List<List> lists = connection.Storage.Client.CreateDocumentQuery<List>(connection.Storage.Collections.ListDocumentCollectionUri, QueryOptions)
+                List<List> lists = connection.Storage.Client.CreateDocumentQuery<List>(connection.Storage.CollectionUri, QueryOptions)
                     .Where(l => l.Key == key && l.DocumentType == DocumentTypes.List)
                     .AsEnumerable()
                     .Skip(keepStartingFrom).Take(keepEndingAt)

@@ -55,7 +55,7 @@ namespace Hangfire.AzureDocumentDB
                 }).ToArray()
             };
 
-            ResourceResponse<Document> response = Storage.Client.CreateDocumentWithRetriesAsync(Storage.Collections.JobDocumentCollectionUri, entityJob).GetAwaiter().GetResult();
+            ResourceResponse<Document> response = Storage.Client.CreateDocumentWithRetriesAsync(Storage.CollectionUri, entityJob).GetAwaiter().GetResult();
             if (response.StatusCode == HttpStatusCode.Created || response.StatusCode == HttpStatusCode.OK)
             {
                 return entityJob.Id;
@@ -86,7 +86,7 @@ namespace Hangfire.AzureDocumentDB
         {
             if (jobId == null) throw new ArgumentNullException(nameof(jobId));
 
-            Entities.Job data = Storage.Client.CreateDocumentQuery<Entities.Job>(Storage.Collections.JobDocumentCollectionUri, QueryOptions)
+            Entities.Job data = Storage.Client.CreateDocumentQuery<Entities.Job>(Storage.CollectionUri, QueryOptions)
                 .Where(j => j.Id == jobId)
                 .AsEnumerable()
                 .FirstOrDefault();
@@ -124,29 +124,20 @@ namespace Hangfire.AzureDocumentDB
         {
             if (jobId == null) throw new ArgumentNullException(nameof(jobId));
 
-            // TODO: move to stored procedure
-            string stateId = Storage.Client.CreateDocumentQuery<Entities.Job>(Storage.Collections.JobDocumentCollectionUri, QueryOptions)
-                .Where(j => j.Id == jobId)
-                .Select(j => j.StateId)
+            State state = Storage.Client.CreateDocumentQuery<State>(Storage.CollectionUri, QueryOptions)
+                .Where(s => s.JobId == jobId)
                 .AsEnumerable()
+                .OrderByDescending(s => s.CreatedOn)
                 .FirstOrDefault();
 
-            if (!string.IsNullOrEmpty(stateId))
+            if (state != null)
             {
-                State state = Storage.Client.CreateDocumentQuery<State>(Storage.Collections.StateDocumentCollectionUri, QueryOptions)
-                    .Where(s => s.Id == stateId)
-                    .AsEnumerable()
-                    .FirstOrDefault();
-
-                if (state != null)
+                return new StateData
                 {
-                    return new StateData
-                    {
-                        Name = state.Name,
-                        Reason = state.Reason,
-                        Data = state.Data
-                    };
-                }
+                    Name = state.Name,
+                    Reason = state.Reason,
+                    Data = state.Data
+                };
             }
 
             return null;
@@ -161,7 +152,7 @@ namespace Hangfire.AzureDocumentDB
             if (id == null) throw new ArgumentNullException(nameof(id));
             if (name == null) throw new ArgumentNullException(nameof(name));
 
-            List<Parameter> parameters = Storage.Client.CreateDocumentQuery<Entities.Job>(Storage.Collections.JobDocumentCollectionUri, QueryOptions)
+            List<Parameter> parameters = Storage.Client.CreateDocumentQuery<Entities.Job>(Storage.CollectionUri, QueryOptions)
                 .Where(j => j.Id == id)
                 .SelectMany(j => j.Parameters)
                 .AsEnumerable()
@@ -175,7 +166,7 @@ namespace Hangfire.AzureDocumentDB
             if (id == null) throw new ArgumentNullException(nameof(id));
             if (name == null) throw new ArgumentNullException(nameof(name));
 
-            Entities.Job job = Storage.Client.CreateDocumentQuery<Entities.Job>(Storage.Collections.JobDocumentCollectionUri, QueryOptions)
+            Entities.Job job = Storage.Client.CreateDocumentQuery<Entities.Job>(Storage.CollectionUri, QueryOptions)
                 .Where(j => j.Id == id)
                 .AsEnumerable()
                 .FirstOrDefault();
@@ -209,7 +200,7 @@ namespace Hangfire.AzureDocumentDB
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            DateTime? expireOn = Storage.Client.CreateDocumentQuery<Set>(Storage.Collections.SetDocumentCollectionUri, QueryOptions)
+            DateTime? expireOn = Storage.Client.CreateDocumentQuery<Set>(Storage.CollectionUri, QueryOptions)
                 .Where(s => s.Key == key && s.DocumentType == DocumentTypes.Set)
                 .Min(s => s.ExpireOn);
 
@@ -220,7 +211,7 @@ namespace Hangfire.AzureDocumentDB
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            return Storage.Client.CreateDocumentQuery<Set>(Storage.Collections.SetDocumentCollectionUri, QueryOptions)
+            return Storage.Client.CreateDocumentQuery<Set>(Storage.CollectionUri, QueryOptions)
                 .Where(s => s.Key == key && s.DocumentType == DocumentTypes.Set)
                 .Select(c => c.Value)
                 .AsEnumerable()
@@ -232,7 +223,7 @@ namespace Hangfire.AzureDocumentDB
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            return Storage.Client.CreateDocumentQuery<Counter>(Storage.Collections.CounterDocumentCollectionUri, QueryOptions)
+            return Storage.Client.CreateDocumentQuery<Counter>(Storage.CollectionUri, QueryOptions)
                 .Where(c => c.Key == key && c.DocumentType == DocumentTypes.Counter)
                 .Sum(c => c.Value);
         }
@@ -241,7 +232,7 @@ namespace Hangfire.AzureDocumentDB
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            return Storage.Client.CreateDocumentQuery<Set>(Storage.Collections.SetDocumentCollectionUri, QueryOptions)
+            return Storage.Client.CreateDocumentQuery<Set>(Storage.CollectionUri, QueryOptions)
                 .Where(s => s.Key == key && s.DocumentType == DocumentTypes.Set)
                 .Select(s => 1)
                 .AsEnumerable()
@@ -252,7 +243,7 @@ namespace Hangfire.AzureDocumentDB
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            List<string> sets = Storage.Client.CreateDocumentQuery<Set>(Storage.Collections.SetDocumentCollectionUri, QueryOptions)
+            List<string> sets = Storage.Client.CreateDocumentQuery<Set>(Storage.CollectionUri, QueryOptions)
                 .Where(s => s.Key == key && s.DocumentType == DocumentTypes.Set)
                 .Select(s => s.Value)
                 .AsEnumerable()
@@ -266,7 +257,7 @@ namespace Hangfire.AzureDocumentDB
             if (key == null) throw new ArgumentNullException(nameof(key));
             if (toScore < fromScore) throw new ArgumentException("The `toScore` value must be higher or equal to the `fromScore` value.");
 
-            return Storage.Client.CreateDocumentQuery<Set>(Storage.Collections.SetDocumentCollectionUri, QueryOptions)
+            return Storage.Client.CreateDocumentQuery<Set>(Storage.CollectionUri, QueryOptions)
                 .Where(s => s.Key == key && s.DocumentType == DocumentTypes.Set)
                 .OrderBy(s => s.Score)
                 .Where(s => s.Score >= fromScore && s.Score <= toScore)
@@ -285,7 +276,7 @@ namespace Hangfire.AzureDocumentDB
             if (context == null) throw new ArgumentNullException(nameof(context));
 
             // TODO: move to stored procedure
-            Entities.Server server = Storage.Client.CreateDocumentQuery<Entities.Server>(Storage.Collections.ServerDocumentCollectionUri, QueryOptions)
+            Entities.Server server = Storage.Client.CreateDocumentQuery<Entities.Server>(Storage.CollectionUri, QueryOptions)
                 .Where(s => s.ServerId == serverId)
                 .AsEnumerable()
                 .FirstOrDefault();
@@ -308,7 +299,7 @@ namespace Hangfire.AzureDocumentDB
                 };
             }
 
-            Storage.Client.UpsertDocumentWithRetriesAsync(Storage.Collections.ServerDocumentCollectionUri, server).GetAwaiter().GetResult();
+            Storage.Client.UpsertDocumentWithRetriesAsync(Storage.CollectionUri, server).GetAwaiter().GetResult();
         }
 
         public override void Heartbeat(string serverId)
@@ -316,7 +307,7 @@ namespace Hangfire.AzureDocumentDB
             if (serverId == null) throw new ArgumentNullException(nameof(serverId));
 
             // TODO: move to stored procedure
-            Entities.Server server = Storage.Client.CreateDocumentQuery<Entities.Server>(Storage.Collections.ServerDocumentCollectionUri, QueryOptions)
+            Entities.Server server = Storage.Client.CreateDocumentQuery<Entities.Server>(Storage.CollectionUri, QueryOptions)
                 .Where(s => s.ServerId == serverId)
                 .AsEnumerable()
                 .FirstOrDefault();
@@ -333,7 +324,7 @@ namespace Hangfire.AzureDocumentDB
             if (serverId == null) throw new ArgumentNullException(nameof(serverId));
 
             // TODO: move to stored procedure
-            Entities.Server server = Storage.Client.CreateDocumentQuery<Entities.Server>(Storage.Collections.ServerDocumentCollectionUri, QueryOptions)
+            Entities.Server server = Storage.Client.CreateDocumentQuery<Entities.Server>(Storage.CollectionUri, QueryOptions)
                 .Where(s => s.ServerId == serverId)
                 .AsEnumerable()
                 .FirstOrDefault();
@@ -348,13 +339,13 @@ namespace Hangfire.AzureDocumentDB
         {
             if (timeOut.Duration() != timeOut)
             {
-                throw new ArgumentException(@"The `timeOut` value must be positive.", nameof(timeOut));
+                throw new ArgumentException(@"invalid document type", nameof(timeOut));
             }
 
             DateTime lastHeartbeat = DateTime.UtcNow.Add(timeOut.Negate());
 
             // TODO: move to stored procedure
-            string[] selfLinks = Storage.Client.CreateDocumentQuery<Entities.Server>(Storage.Collections.ServerDocumentCollectionUri, QueryOptions)
+            string[] selfLinks = Storage.Client.CreateDocumentQuery<Entities.Server>(Storage.CollectionUri, QueryOptions)
                 .Where(s => s.DocumentType == DocumentTypes.Server)
                 .AsEnumerable()
                 .Where(s => s.LastHeartbeat < lastHeartbeat)
@@ -373,7 +364,7 @@ namespace Hangfire.AzureDocumentDB
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            return Storage.Client.CreateDocumentQuery<Hash>(Storage.Collections.HashDocumentCollectionUri, QueryOptions)
+            return Storage.Client.CreateDocumentQuery<Hash>(Storage.CollectionUri, QueryOptions)
                 .Where(h => h.Key == key && h.DocumentType == DocumentTypes.Hash)
                 .AsEnumerable()
                 .ToDictionary(h => h.Field, h => h.Value);
@@ -405,8 +396,7 @@ namespace Hangfire.AzureDocumentDB
                 Value = epoch(k.Value)
             }).ToList();
 
-
-            List<Hash> hashes = Storage.Client.CreateDocumentQuery<Hash>(Storage.Collections.HashDocumentCollectionUri, QueryOptions)
+            List<Hash> hashes = Storage.Client.CreateDocumentQuery<Hash>(Storage.CollectionUri, QueryOptions)
                 .Where(h => h.Key == key && h.DocumentType == DocumentTypes.Hash)
                 .AsEnumerable()
                 .ToList();
@@ -417,14 +407,14 @@ namespace Hangfire.AzureDocumentDB
                 if (hash != null) source.Id = hash.Id;
             });
 
-            sources.ForEach(hash => Storage.Client.UpsertDocumentWithRetriesAsync(Storage.Collections.HashDocumentCollectionUri, hash).GetAwaiter().GetResult());
+            sources.ForEach(hash => Storage.Client.UpsertDocumentWithRetriesAsync(Storage.CollectionUri, hash).GetAwaiter().GetResult());
         }
 
         public override long GetHashCount(string key)
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            return Storage.Client.CreateDocumentQuery<Hash>(Storage.Collections.HashDocumentCollectionUri, QueryOptions)
+            return Storage.Client.CreateDocumentQuery<Hash>(Storage.CollectionUri, QueryOptions)
                 .Where(h => h.Key == key && h.DocumentType == DocumentTypes.Hash)
                 .Select(h => 1)
                 .AsEnumerable()
@@ -436,7 +426,7 @@ namespace Hangfire.AzureDocumentDB
             if (key == null) throw new ArgumentNullException(nameof(key));
             if (name == null) throw new ArgumentNullException(nameof(name));
 
-            return Storage.Client.CreateDocumentQuery<Hash>(Storage.Collections.HashDocumentCollectionUri, QueryOptions)
+            return Storage.Client.CreateDocumentQuery<Hash>(Storage.CollectionUri, QueryOptions)
                 .Where(h => h.Key == key && h.Field == name && h.DocumentType == DocumentTypes.Hash)
                 .Select(h => h.Value)
                 .AsEnumerable()
@@ -447,7 +437,7 @@ namespace Hangfire.AzureDocumentDB
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            DateTime? expireOn = Storage.Client.CreateDocumentQuery<Hash>(Storage.Collections.HashDocumentCollectionUri, QueryOptions)
+            DateTime? expireOn = Storage.Client.CreateDocumentQuery<Hash>(Storage.CollectionUri, QueryOptions)
                 .Where(h => h.Key == key && h.DocumentType == DocumentTypes.Hash)
                 .Min(h => h.ExpireOn);
 
@@ -462,7 +452,7 @@ namespace Hangfire.AzureDocumentDB
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            return Storage.Client.CreateDocumentQuery<List>(Storage.Collections.ListDocumentCollectionUri, QueryOptions)
+            return Storage.Client.CreateDocumentQuery<List>(Storage.CollectionUri, QueryOptions)
                 .Where(l => l.Key == key && l.DocumentType == DocumentTypes.List)
                 .Select(l => l.Value)
                 .AsEnumerable()
@@ -473,7 +463,7 @@ namespace Hangfire.AzureDocumentDB
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            return Storage.Client.CreateDocumentQuery<List>(Storage.Collections.ListDocumentCollectionUri, QueryOptions)
+            return Storage.Client.CreateDocumentQuery<List>(Storage.CollectionUri, QueryOptions)
                 .Where(l => l.Key == key && l.DocumentType == DocumentTypes.List)
                 .AsEnumerable()
                 .OrderBy(l => l.ExpireOn)
@@ -486,7 +476,7 @@ namespace Hangfire.AzureDocumentDB
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            DateTime? expireOn = Storage.Client.CreateDocumentQuery<List>(Storage.Collections.ListDocumentCollectionUri, QueryOptions)
+            DateTime? expireOn = Storage.Client.CreateDocumentQuery<List>(Storage.CollectionUri, QueryOptions)
                 .Where(l => l.Key == key && l.DocumentType == DocumentTypes.List)
                 .Min(l => l.ExpireOn);
 
@@ -497,7 +487,7 @@ namespace Hangfire.AzureDocumentDB
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            return Storage.Client.CreateDocumentQuery<List>(Storage.Collections.ListDocumentCollectionUri, QueryOptions)
+            return Storage.Client.CreateDocumentQuery<List>(Storage.CollectionUri, QueryOptions)
                 .Where(l => l.Key == key && l.DocumentType == DocumentTypes.List)
                 .Select(l => 1)
                 .AsEnumerable()

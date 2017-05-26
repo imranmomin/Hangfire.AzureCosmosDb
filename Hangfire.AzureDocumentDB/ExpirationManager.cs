@@ -42,9 +42,8 @@ namespace Hangfire.AzureDocumentDB
 
                 using (new AzureDocumentDbDistributedLock(distributedLockKey, defaultLockTimeout, storage))
                 {
-                    Uri collectionUri = document.ToDocumentCollectionUri(storage);
                     FeedOptions QueryOptions = new FeedOptions { MaxItemCount = 50, };
-                    IDocumentQuery<DocumentEntity> query = storage.Client.CreateDocumentQuery<DocumentEntity>(collectionUri, QueryOptions)
+                    IDocumentQuery<DocumentEntity> query = storage.Client.CreateDocumentQuery<DocumentEntity>(storage.CollectionUri, QueryOptions)
                         .Where(d => d.DocumentType == type)
                         .AsDocumentQuery();
 
@@ -56,6 +55,7 @@ namespace Hangfire.AzureDocumentDB
                             .Where(c => c.ExpireOn < DateTime.UtcNow)
                             .Where(entity => document != "counters" || !(entity is Counter) || ((Counter)entity).Type != CounterTypes.Raw).ToList();
 
+                        // TODO: move to stored procedure. Bulk delete
                         foreach (DocumentEntity entity in entities)
                         {
                             cancellationToken.ThrowIfCancellationRequested();
@@ -84,24 +84,7 @@ namespace Hangfire.AzureDocumentDB
                 case "counters": return DocumentTypes.Counter;
             }
 
-            throw new ArgumentException("invalid document type", nameof(document));
-        }
-
-        internal static Uri ToDocumentCollectionUri(this string document, AzureDocumentDbStorage storage)
-        {
-            switch (document)
-            {
-                case "locks": return storage.Collections.LockDocumentCollectionUri;
-                case "jobs": return storage.Collections.JobDocumentCollectionUri;
-                case "lists": return storage.Collections.ListDocumentCollectionUri;
-                case "sets": return storage.Collections.SetDocumentCollectionUri;
-                case "hashes": return storage.Collections.HashDocumentCollectionUri;
-                case "counters": return storage.Collections.CounterDocumentCollectionUri;
-                default: throw new ArgumentException($"{document} document not supported");
-            }
-
-            throw new ArgumentException("invalid document type", nameof(document));
-
+            throw new ArgumentException(@"invalid document type", nameof(document));
         }
     }
 }
