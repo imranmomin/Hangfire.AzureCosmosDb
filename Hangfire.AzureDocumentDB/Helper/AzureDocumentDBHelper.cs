@@ -32,20 +32,20 @@ namespace Hangfire.AzureDocumentDB.Helper
 
         private static async Task<TResult> ExecuteWithRetries<TResult>(Func<Task<TResult>> function)
         {
-            TimeSpan sleepTime = TimeSpan.Zero;
             int retriesCount = 0;
 
             while (retriesCount < 3)
             {
                 retriesCount += 1;
 
+                TimeSpan sleepTime;
                 try
                 {
                     return await function();
                 }
                 catch (DocumentClientException documentException)
                 {
-                    if ((int)documentException.StatusCode != RequestRateTooLargeException)
+                    if (documentException.StatusCode != null && (int)documentException.StatusCode != RequestRateTooLargeException)
                     {
                         throw;
                     }
@@ -59,7 +59,7 @@ namespace Hangfire.AzureDocumentDB.Helper
                     }
 
                     DocumentClientException documentException = (DocumentClientException)ex.InnerException;
-                    if ((int)documentException.StatusCode != RequestRateTooLargeException)
+                    if (documentException.StatusCode != null && (int)documentException.StatusCode != RequestRateTooLargeException)
                     {
                         throw;
                     }
