@@ -10,7 +10,7 @@ namespace Hangfire.AzureDocumentDB.Entities
         [JsonProperty("value")]
         public int Value { get; set; }
 
-        [JsonProperty("country_type")]
+        [JsonProperty("counter_type")]
         public CounterTypes Type { get; set; }
 
         public override DocumentTypes DocumentType { get; set; } = DocumentTypes.Counter;
