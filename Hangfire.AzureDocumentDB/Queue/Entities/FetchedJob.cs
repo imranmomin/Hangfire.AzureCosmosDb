@@ -1,15 +1,11 @@
 ﻿using System.Linq;
-
 using Hangfire.Storage;
-
-using Microsoft.Azure.Documents.Client;
 
 namespace Hangfire.AzureDocumentDB.Queue
 {
     internal class FetchedJob : IFetchedJob
     {
         private readonly AzureDocumentDbStorage storage;
-        private readonly FeedOptions QueryOptions = new FeedOptions { MaxItemCount = 1 };
 
         public FetchedJob(AzureDocumentDbStorage storage, Entities.Queue data)
         {
@@ -35,7 +31,7 @@ namespace Hangfire.AzureDocumentDB.Queue
         public void RemoveFromQueue()
         {
             // TODO: move to stored procedure
-            bool exists = storage.Client.CreateDocumentQuery(storage.CollectionUri, QueryOptions)
+            bool exists = storage.Client.CreateDocumentQuery(storage.CollectionUri)
                  .Where(d => d.Id == Id)
                  .AsEnumerable()
                  .Any();

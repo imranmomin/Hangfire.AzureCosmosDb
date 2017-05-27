@@ -125,13 +125,13 @@ namespace Hangfire.AzureDocumentDB
         private void Initialize()
         {
             ILog logger = LogProvider.For<AzureDocumentDbStorage>();
-            Uri databaseUri = UriFactory.CreateDatabaseUri(Options.DatabaseName);
 
             // create database
             logger.Info($"Creating database : {Options.DatabaseName}");
             Client.CreateDatabaseIfNotExistsAsync(new Database { Id = Options.DatabaseName }).GetAwaiter().GetResult();
 
             logger.Info($"Creating document collection : {Options.CollectionName}");
+            Uri databaseUri = UriFactory.CreateDatabaseUri(Options.DatabaseName);
             Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = Options.CollectionName }).GetAwaiter().GetResult();
             CollectionUri = UriFactory.CreateDocumentCollectionUri(Options.DatabaseName, Options.CollectionName);
         }

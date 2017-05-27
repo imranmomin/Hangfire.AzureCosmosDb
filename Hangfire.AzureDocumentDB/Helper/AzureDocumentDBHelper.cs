@@ -6,9 +6,10 @@ using Microsoft.Azure.Documents.Client;
 
 namespace Hangfire.AzureDocumentDB.Helper
 {
+    // ReSharper disable once InconsistentNaming
     internal static class AzureDocumentDBHelper
     {
-        private const int RequestRateTooLargeException = 429;
+        private const int REQUEST_RATE_TOO_LARGE_EXCEPTION = 429;
 
         internal static async Task<ResourceResponse<Document>> CreateDocumentWithRetriesAsync(this DocumentClient client, Uri documentCollectionUri, object document, RequestOptions options = null, bool disableAutomaticIdGeneration = false)
         {
@@ -45,7 +46,7 @@ namespace Hangfire.AzureDocumentDB.Helper
                 }
                 catch (DocumentClientException documentException)
                 {
-                    if (documentException.StatusCode != null && (int)documentException.StatusCode != RequestRateTooLargeException)
+                    if (documentException.StatusCode != null && (int)documentException.StatusCode != REQUEST_RATE_TOO_LARGE_EXCEPTION)
                     {
                         throw;
                     }
@@ -59,7 +60,7 @@ namespace Hangfire.AzureDocumentDB.Helper
                     }
 
                     DocumentClientException documentException = (DocumentClientException)ex.InnerException;
-                    if (documentException.StatusCode != null && (int)documentException.StatusCode != RequestRateTooLargeException)
+                    if (documentException.StatusCode != null && (int)documentException.StatusCode != REQUEST_RATE_TOO_LARGE_EXCEPTION)
                     {
                         throw;
                     }
@@ -69,7 +70,7 @@ namespace Hangfire.AzureDocumentDB.Helper
                 await Task.Delay(sleepTime);
             }
 
-            throw new AzureDocumentDbDistributedRetryException($"Failed to execute the task after 3 retries. Please check the rate limits on the collection/database");
+            throw new AzureDocumentDbDistributedRetryException("Failed to execute the task after 3 retries. Please check the rate limits on the collection/database");
         }
 
     }

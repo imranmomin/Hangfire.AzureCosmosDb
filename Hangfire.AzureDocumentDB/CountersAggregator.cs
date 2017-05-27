@@ -18,13 +18,12 @@ namespace Hangfire.AzureDocumentDB
     internal class CountersAggregator : IServerComponent
 #pragma warning restore 618
     {
-        private static readonly ILog Logger = LogProvider.For<CountersAggregator>();
-        private const string distributedLockKey = "countersaggragator";
+        private static readonly ILog logger = LogProvider.For<CountersAggregator>();
+        private const string DISTRIBUTED_LOCK_KEY = "countersaggragator";
         private static readonly TimeSpan defaultLockTimeout = TimeSpan.FromMinutes(5);
         private readonly TimeSpan checkInterval;
-
         private readonly AzureDocumentDbStorage storage;
-        private readonly FeedOptions QueryOptions = new FeedOptions { MaxItemCount = 1000 };
+        private readonly FeedOptions queryOptions = new FeedOptions { MaxItemCount = 1000 };
 
         public CountersAggregator(AzureDocumentDbStorage storage)
         {
@@ -37,11 +36,11 @@ namespace Hangfire.AzureDocumentDB
         public void Execute(CancellationToken cancellationToken)
         {
             // TODO: move to stored procedure
-            Logger.Debug("Aggregating records in 'Counter' table.");
+            logger.Debug("Aggregating records in 'Counter' table.");
 
-            using (new AzureDocumentDbDistributedLock(distributedLockKey, defaultLockTimeout, storage))
+            using (new AzureDocumentDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage))
             {
-                List<Counter> rawCounters = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri, QueryOptions)
+                List<Counter> rawCounters = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri, queryOptions)
                     .Where(c => c.Type == CounterTypes.Raw && c.DocumentType == DocumentTypes.Counter)
                     .AsEnumerable()
                     .ToList();
@@ -56,7 +55,7 @@ namespace Hangfire.AzureDocumentDB
                     Tuple<int, DateTime?> data;
                     if (counters.TryGetValue(key, out data))
                     {
-                        Counter aggregated = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri, QueryOptions)
+                        Counter aggregated = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri, queryOptions)
                              .Where(c => c.Key == key && c.Type == CounterTypes.Aggregrate && c.DocumentType == DocumentTypes.Counter)
                              .AsEnumerable()
                              .FirstOrDefault();
@@ -87,7 +86,7 @@ namespace Hangfire.AzureDocumentDB
                 });
             }
 
-            Logger.Trace("Records from the 'Counter' table aggregated.");
+            logger.Trace("Records from the 'Counter' table aggregated.");
             cancellationToken.WaitHandle.WaitOne(checkInterval);
         }
 

@@ -1,6 +1,7 @@
 ﻿using System;
 using Hangfire.AzureDocumentDB;
 
+// ReSharper disable UnusedMember.Global
 namespace Hangfire
 {
     /// <summary>

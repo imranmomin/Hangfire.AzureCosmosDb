@@ -16,8 +16,7 @@ namespace Hangfire.AzureDocumentDB.Queue
         private readonly TimeSpan defaultLockTimeout = TimeSpan.FromMinutes(1);
         private readonly TimeSpan checkInterval;
         private readonly object syncLock = new object();
-
-        private readonly FeedOptions QueryOptions = new FeedOptions { MaxItemCount = 1 };
+        private readonly FeedOptions queryOptions = new FeedOptions { MaxItemCount = 1 };
 
         public JobQueue(AzureDocumentDbStorage storage)
         {
@@ -37,7 +36,7 @@ namespace Hangfire.AzureDocumentDB.Queue
                     {
                         string queue = queues.ElementAt(index);
 
-                        Entities.Queue data = storage.Client.CreateDocumentQuery<Entities.Queue>(storage.CollectionUri, QueryOptions)
+                        Entities.Queue data = storage.Client.CreateDocumentQuery<Entities.Queue>(storage.CollectionUri, queryOptions)
                             .Where(q => q.Name == queue && q.DocumentType == Entities.DocumentTypes.Queue)
                             .AsEnumerable()
                             .FirstOrDefault();

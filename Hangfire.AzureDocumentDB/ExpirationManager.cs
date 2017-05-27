@@ -17,12 +17,11 @@ namespace Hangfire.AzureDocumentDB
     internal class ExpirationManager : IServerComponent
 #pragma warning restore 618
     {
-        private static readonly ILog Logger = LogProvider.For<ExpirationManager>();
-        private const string distributedLockKey = "expirationmanager";
+        private static readonly ILog logger = LogProvider.For<ExpirationManager>();
+        private const string DISTRIBUTED_LOCK_KEY = "expirationmanager";
         private static readonly TimeSpan defaultLockTimeout = TimeSpan.FromMinutes(5);
         private static readonly string[] documents = { "locks", "jobs", "lists", "sets", "hashes", "counters" };
         private readonly TimeSpan checkInterval;
-
         private readonly AzureDocumentDbStorage storage;
 
         public ExpirationManager(AzureDocumentDbStorage storage)
@@ -37,13 +36,13 @@ namespace Hangfire.AzureDocumentDB
         {
             foreach (string document in documents)
             {
-                Logger.Debug($"Removing outdated records from the '{document}' document.");
+                logger.Debug($"Removing outdated records from the '{document}' document.");
                 DocumentTypes type = document.ToDocumentType();
 
-                using (new AzureDocumentDbDistributedLock(distributedLockKey, defaultLockTimeout, storage))
+                using (new AzureDocumentDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage))
                 {
-                    FeedOptions QueryOptions = new FeedOptions { MaxItemCount = 50, };
-                    IDocumentQuery<DocumentEntity> query = storage.Client.CreateDocumentQuery<DocumentEntity>(storage.CollectionUri, QueryOptions)
+                    FeedOptions queryOptions = new FeedOptions { MaxItemCount = 50, };
+                    IDocumentQuery<DocumentEntity> query = storage.Client.CreateDocumentQuery<DocumentEntity>(storage.CollectionUri, queryOptions)
                         .Where(d => d.DocumentType == type)
                         .AsDocumentQuery();
 
@@ -64,7 +63,7 @@ namespace Hangfire.AzureDocumentDB
                     }
                 }
 
-                Logger.Trace($"Outdated records removed from the '{document}' document.");
+                logger.Trace($"Outdated records removed from the '{document}' document.");
                 cancellationToken.WaitHandle.WaitOne(checkInterval);
             }
         }

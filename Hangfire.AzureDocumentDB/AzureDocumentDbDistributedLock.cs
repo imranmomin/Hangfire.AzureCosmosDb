@@ -54,8 +54,8 @@ namespace Hangfire.AzureDocumentDB
                     throw new AzureDocumentDbDistributedLockException($"Could not place a lock on the resource '{name}': Lock timeout.");
                 }
 
-                // sleep for 500 millisecond
-                System.Threading.Thread.Sleep(500);
+                // sleep for 1000 millisecond
+                System.Threading.Thread.Sleep(1000);
             }
         }
 

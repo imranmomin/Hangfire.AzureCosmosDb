@@ -1,15 +1,12 @@
 ﻿using System.Linq;
 using System.Collections.Generic;
 
-using Microsoft.Azure.Documents.Client;
-
 namespace Hangfire.AzureDocumentDB.Queue
 {
     internal class JobQueueMonitoringApi : IPersistentJobQueueMonitoringApi
     {
         private readonly AzureDocumentDbStorage storage;
         private readonly IEnumerable<string> queues;
-        private readonly FeedOptions QueryOptions = new FeedOptions { MaxItemCount = 100 };
 
         public JobQueueMonitoringApi(AzureDocumentDbStorage storage)
         {
@@ -21,7 +18,7 @@ namespace Hangfire.AzureDocumentDB.Queue
 
         public int GetEnqueuedCount(string queue)
         {
-            return storage.Client.CreateDocumentQuery<Entities.Queue>(storage.CollectionUri, QueryOptions)
+            return storage.Client.CreateDocumentQuery<Entities.Queue>(storage.CollectionUri)
                 .Where(q => q.Name == queue && q.DocumentType == Entities.DocumentTypes.Queue)
                 .AsEnumerable()
                 .Select(q => 1)
@@ -30,7 +27,7 @@ namespace Hangfire.AzureDocumentDB.Queue
 
         public IEnumerable<string> GetEnqueuedJobIds(string queue, int from, int perPage)
         {
-            return storage.Client.CreateDocumentQuery<Entities.Queue>(storage.CollectionUri, QueryOptions)
+            return storage.Client.CreateDocumentQuery<Entities.Queue>(storage.CollectionUri)
                  .Where(q => q.Name == queue && q.DocumentType == Entities.DocumentTypes.Queue)
                  .AsEnumerable()
                  .Skip(from).Take(perPage)
