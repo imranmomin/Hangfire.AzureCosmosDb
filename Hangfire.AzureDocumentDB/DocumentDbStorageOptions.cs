@@ -2,26 +2,17 @@
 // ReSharper disable MemberCanBePrivate.Global
 // ReSharper disable AutoPropertyCanBeMadeGetOnly.Global
 
-namespace Hangfire.AzureDocumentDB
+namespace Hangfire.Azure
 {
     /// <summary>
-    /// Options for AzureDocumentDbStorage
+    /// Options for DocumentDbStorage
     /// </summary>
-    public class AzureDocumentDbStorageOptions
+    public class DocumentDbStorageOptions
     {
         internal Uri Endpoint { get; set; }
         internal string AuthSecret { get; set; }
         internal string DatabaseName { get; set; }
-
-        /// <summary>
-        /// Get or sets the default collection to be used for all the documents
-        /// </summary>
-        public string DefaultCollectionName { get; set; }
-
-        /// <summary>
-        /// Get or sets the prefix before the document collections. It will only applied of DefaultCollection name is empty
-        /// </summary>
-        public string CollectionPrefix { get; set; }
+        internal string CollectionName { get; set; }
 
         /// <summary>
         /// Get or sets the request timemout for DocumentDB client. Default value set to 30 seconds
@@ -52,7 +43,7 @@ namespace Hangfire.AzureDocumentDB
         /// <summary>
         /// Create an instance of AzureDocumentDB Storage option with default values
         /// </summary>
-        public AzureDocumentDbStorageOptions()
+        public DocumentDbStorageOptions()
         {
             RequestTimeout = TimeSpan.FromSeconds(30);
             Queues = new[] { "default", "critical" };

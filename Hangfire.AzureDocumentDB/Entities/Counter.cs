@@ -1,9 +1,8 @@
-﻿using System;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 
-namespace Hangfire.AzureDocumentDB.Entities
+namespace Hangfire.Azure.Documents
 {
-    internal class Counter : DocumentEntity
+    internal class Counter : DocumentBase
     {
         [JsonProperty("key")]
         public string Key { get; set; }
@@ -11,10 +10,10 @@ namespace Hangfire.AzureDocumentDB.Entities
         [JsonProperty("value")]
         public int Value { get; set; }
 
-        [JsonProperty("country_type")]
+        [JsonProperty("counter_type")]
         public CounterTypes Type { get; set; }
 
-        public override DocumentTypes DocumentType { get; set; } = DocumentTypes.Counter;
+        public override DocumentTypes DocumentType => DocumentTypes.Counter;
     }
 
     internal enum CounterTypes

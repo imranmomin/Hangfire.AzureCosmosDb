@@ -1,8 +1,8 @@
 ﻿using Newtonsoft.Json;
 
-namespace Hangfire.AzureDocumentDB.Entities
+namespace Hangfire.Azure.Documents
 {
-    internal class List : DocumentEntity
+    internal class List : DocumentBase
     {
         [JsonProperty("key")]
         public string Key { get; set; }
@@ -10,6 +10,6 @@ namespace Hangfire.AzureDocumentDB.Entities
         [JsonProperty("value")]
         public string Value { get; set; }
 
-        public override DocumentTypes DocumentType { get; set; } = DocumentTypes.List;
+        public override DocumentTypes DocumentType => DocumentTypes.List;
     }
 }

@@ -1,8 +1,8 @@
 ﻿using Newtonsoft.Json;
 
-namespace Hangfire.AzureDocumentDB.Entities
+namespace Hangfire.Azure.Documents
 {
-    class Queue : DocumentEntity
+    class Queue : DocumentBase
     {
         [JsonProperty("name")]
         public string Name { get; set; }
@@ -10,6 +10,6 @@ namespace Hangfire.AzureDocumentDB.Entities
         [JsonProperty("job_id")]
         public string JobId { get; set; }
 
-        public override DocumentTypes DocumentType { get; set; } = DocumentTypes.Queue;
+        public override DocumentTypes DocumentType => DocumentTypes.Queue;
     }
 }

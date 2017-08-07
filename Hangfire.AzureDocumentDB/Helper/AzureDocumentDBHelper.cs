@@ -4,11 +4,12 @@ using System.Threading.Tasks;
 using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 
-namespace Hangfire.AzureDocumentDB.Helper
+namespace Hangfire.Azure.Documents.Helper
 {
+    // ReSharper disable once InconsistentNaming
     internal static class AzureDocumentDBHelper
     {
-        private const int RequestRateTooLargeException = 429;
+        private const int REQUEST_RATE_TOO_LARGE_EXCEPTION = 429;
 
         internal static async Task<ResourceResponse<Document>> CreateDocumentWithRetriesAsync(this DocumentClient client, Uri documentCollectionUri, object document, RequestOptions options = null, bool disableAutomaticIdGeneration = false)
         {
@@ -32,20 +33,20 @@ namespace Hangfire.AzureDocumentDB.Helper
 
         private static async Task<TResult> ExecuteWithRetries<TResult>(Func<Task<TResult>> function)
         {
-            TimeSpan sleepTime = TimeSpan.Zero;
             int retriesCount = 0;
 
             while (retriesCount < 3)
             {
                 retriesCount += 1;
 
+                TimeSpan sleepTime;
                 try
                 {
-                    return await function();
+                    return await function().ConfigureAwait(false);
                 }
                 catch (DocumentClientException documentException)
                 {
-                    if ((int)documentException.StatusCode != RequestRateTooLargeException)
+                    if (documentException.StatusCode != null && (int)documentException.StatusCode != REQUEST_RATE_TOO_LARGE_EXCEPTION)
                     {
                         throw;
                     }
@@ -59,7 +60,7 @@ namespace Hangfire.AzureDocumentDB.Helper
                     }
 
                     DocumentClientException documentException = (DocumentClientException)ex.InnerException;
-                    if ((int)documentException.StatusCode != RequestRateTooLargeException)
+                    if (documentException.StatusCode != null && (int)documentException.StatusCode != REQUEST_RATE_TOO_LARGE_EXCEPTION)
                     {
                         throw;
                     }
@@ -69,7 +70,7 @@ namespace Hangfire.AzureDocumentDB.Helper
                 await Task.Delay(sleepTime);
             }
 
-            throw new AzureDocumentDbDistributedRetryException($"Failed to execute the task after 3 retries. Please check the rate limits on the collection/database");
+            throw new DocumentDbRetryException("Failed to execute the task after 3 retries. Please check the rate limits on the collection/database");
         }
 
     }

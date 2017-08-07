@@ -1,70 +1,47 @@
 ﻿using System;
-using System.Linq;
 using System.Threading;
-using System.Collections.Generic;
-
-using Microsoft.Azure.Documents.Linq;
-using Microsoft.Azure.Documents.Client;
+using System.Threading.Tasks;
 
 using Hangfire.Server;
 using Hangfire.Logging;
-using Hangfire.AzureDocumentDB.Helper;
-using Hangfire.AzureDocumentDB.Entities;
+using Hangfire.Azure.Documents;
+using Microsoft.Azure.Documents.Client;
 
-namespace Hangfire.AzureDocumentDB
+namespace Hangfire.Azure
 {
 #pragma warning disable 618
     internal class ExpirationManager : IServerComponent
 #pragma warning restore 618
     {
-        private static readonly ILog Logger = LogProvider.For<ExpirationManager>();
-        private const string distributedLockKey = "expirationmanager";
+        private static readonly ILog logger = LogProvider.For<ExpirationManager>();
+        private const string DISTRIBUTED_LOCK_KEY = "expirationmanager";
         private static readonly TimeSpan defaultLockTimeout = TimeSpan.FromMinutes(5);
         private static readonly string[] documents = { "locks", "jobs", "lists", "sets", "hashes", "counters" };
         private readonly TimeSpan checkInterval;
+        private readonly DocumentDbStorage storage;
+        private readonly Uri spDeleteExpiredDocumentsUri;
 
-        private readonly AzureDocumentDbStorage storage;
-
-        public ExpirationManager(AzureDocumentDbStorage storage)
+        public ExpirationManager(DocumentDbStorage storage)
         {
-            if (storage == null) throw new ArgumentNullException(nameof(storage));
-
-            this.storage = storage;
+            this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
             checkInterval = storage.Options.ExpirationCheckInterval;
+            spDeleteExpiredDocumentsUri = UriFactory.CreateStoredProcedureUri(storage.Options.DatabaseName, storage.Options.CollectionName, "deleteExpiredDocuments");
         }
 
         public void Execute(CancellationToken cancellationToken)
         {
             foreach (string document in documents)
             {
-                Logger.Debug($"Removing outdated records from the '{document}' document.");
+                logger.Debug($"Removing outdated records from the '{document}' document.");
                 DocumentTypes type = document.ToDocumentType();
 
-                using (new AzureDocumentDbDistributedLock(distributedLockKey, defaultLockTimeout, storage))
+                using (new DocumentDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage))
                 {
-                    Uri collectionUri = document.ToDocumentCollectionUri(storage);
-                    FeedOptions QueryOptions = new FeedOptions { MaxItemCount = 50, };
-                    IDocumentQuery<DocumentEntity> query = storage.Client.CreateDocumentQuery<DocumentEntity>(collectionUri, QueryOptions)
-                        .Where(d => d.DocumentType == type)
-                        .AsDocumentQuery();
-
-                    while (query.HasMoreResults)
-                    {
-                        FeedResponse<DocumentEntity> response = query.ExecuteNextAsync<DocumentEntity>(cancellationToken).GetAwaiter().GetResult();
-
-                        List<DocumentEntity> entities = response
-                            .Where(c => c.ExpireOn < DateTime.UtcNow)
-                            .Where(entity => document != "counters" || !(entity is Counter) || ((Counter)entity).Type != CounterTypes.Raw).ToList();
-
-                        foreach (DocumentEntity entity in entities)
-                        {
-                            cancellationToken.ThrowIfCancellationRequested();
-                            storage.Client.DeleteDocumentWithRetriesAsync(entity.SelfLink).GetAwaiter().GetResult();
-                        }
-                    }
+                    Task<StoredProcedureResponse<int>> procedureTask = storage.Client.ExecuteStoredProcedureAsync<int>(spDeleteExpiredDocumentsUri, type);
+                    Task task = procedureTask.ContinueWith(t => logger.Trace($"Outdated records removed {t.Result.Response} records from the '{document}' document."), TaskContinuationOptions.OnlyOnRanToCompletion);
+                    task.Wait(cancellationToken);
                 }
 
-                Logger.Trace($"Outdated records removed from the '{document}' document.");
                 cancellationToken.WaitHandle.WaitOne(checkInterval);
             }
         }
@@ -84,24 +61,7 @@ namespace Hangfire.AzureDocumentDB
                 case "counters": return DocumentTypes.Counter;
             }
 
-            throw new ArgumentException("invalid document type", nameof(document));
-        }
-
-        internal static Uri ToDocumentCollectionUri(this string document, AzureDocumentDbStorage storage)
-        {
-            switch (document)
-            {
-                case "locks": return storage.Collections.LockDocumentCollectionUri;
-                case "jobs": return storage.Collections.JobDocumentCollectionUri;
-                case "lists": return storage.Collections.ListDocumentCollectionUri;
-                case "sets": return storage.Collections.SetDocumentCollectionUri;
-                case "hashes": return storage.Collections.HashDocumentCollectionUri;
-                case "counters": return storage.Collections.CounterDocumentCollectionUri;
-                default: throw new ArgumentException($"{document} document not supported");
-            }
-
-            throw new ArgumentException("invalid document type", nameof(document));
-
+            throw new ArgumentException(@"invalid document type", nameof(document));
         }
     }
 }

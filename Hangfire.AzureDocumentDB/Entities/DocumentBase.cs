@@ -2,9 +2,9 @@
 using Microsoft.Azure.Documents;
 using Newtonsoft.Json;
 
-namespace Hangfire.AzureDocumentDB.Entities
+namespace Hangfire.Azure.Documents
 {
-    internal abstract class DocumentEntity
+    internal abstract class DocumentBase
     {
         [JsonProperty("id")]
         public string Id { get; set; } = Guid.NewGuid().ToString();
@@ -17,7 +17,7 @@ namespace Hangfire.AzureDocumentDB.Entities
         public DateTime? ExpireOn { get; set; }
 
         [JsonProperty("type")]
-        public abstract DocumentTypes DocumentType { get; set; }
+        public abstract DocumentTypes DocumentType { get; }
     }
 
     internal enum DocumentTypes

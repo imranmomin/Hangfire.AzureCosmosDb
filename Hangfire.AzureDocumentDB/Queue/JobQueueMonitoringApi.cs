@@ -1,17 +1,17 @@
 ﻿using System.Linq;
 using System.Collections.Generic;
 
-using Microsoft.Azure.Documents.Client;
+using Hangfire.Azure.Documents;
+using Microsoft.Azure.Documents;
 
-namespace Hangfire.AzureDocumentDB.Queue
+namespace Hangfire.Azure.Queue
 {
     internal class JobQueueMonitoringApi : IPersistentJobQueueMonitoringApi
     {
-        private readonly AzureDocumentDbStorage storage;
+        private readonly DocumentDbStorage storage;
         private readonly IEnumerable<string> queues;
-        private readonly FeedOptions QueryOptions = new FeedOptions { MaxItemCount = 100 };
 
-        public JobQueueMonitoringApi(AzureDocumentDbStorage storage)
+        public JobQueueMonitoringApi(DocumentDbStorage storage)
         {
             this.storage = storage;
             queues = storage.Options.Queues;
@@ -21,21 +21,29 @@ namespace Hangfire.AzureDocumentDB.Queue
 
         public int GetEnqueuedCount(string queue)
         {
-            return storage.Client.CreateDocumentQuery<Entities.Queue>(storage.Collections.QueueDocumentCollectionUri, QueryOptions)
-                .Where(q => q.Name == queue && q.DocumentType == Entities.DocumentTypes.Queue)
+            SqlQuerySpec sql = new SqlQuerySpec
+            {
+                QueryText = "SELECT VALUE COUNT(1) FROM c WHERE c.name = @name AND c.type = @type",
+                Parameters = new SqlParameterCollection
+                {
+                    new SqlParameter("@name", queue),
+                    new SqlParameter("@type", DocumentTypes.Queue)
+                }
+            };
+
+            return storage.Client.CreateDocumentQuery<int>(storage.CollectionUri, sql)
                 .AsEnumerable()
-                .Select(q => 1)
-                .Count();
+                .FirstOrDefault();
         }
 
         public IEnumerable<string> GetEnqueuedJobIds(string queue, int from, int perPage)
         {
-            return storage.Client.CreateDocumentQuery<Entities.Queue>(storage.Collections.QueueDocumentCollectionUri, QueryOptions)
-                 .Where(q => q.Name == queue && q.DocumentType == Entities.DocumentTypes.Queue)
-                 .AsEnumerable()
-                 .Skip(from).Take(perPage)
-                 .Select(c => c.JobId)
-                 .ToList();
+            return storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri)
+                .Where(q => q.Name == queue && q.DocumentType == DocumentTypes.Queue)
+                .Select(c => c.JobId)
+                .AsEnumerable()
+                .Skip(from).Take(perPage)
+                .ToList();
         }
 
         public IEnumerable<string> GetFetchedJobIds(string queue, int from, int perPage) => GetEnqueuedJobIds(queue, from, perPage);

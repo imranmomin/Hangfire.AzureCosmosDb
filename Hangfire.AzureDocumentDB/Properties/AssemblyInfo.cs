@@ -4,11 +4,11 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("Hangfire.AzureDocumentDB")]
+[assembly: AssemblyTitle("Hangfire.Azure.DocumentDB")]
 [assembly: AssemblyDescription("Azure DocumentDB provider for Hangfire")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("Hangfire.AzureDocumentDB")]
+[assembly: AssemblyProduct("Hangfire.Azure.DocumentDB")]
 [assembly: AssemblyCopyright("")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]

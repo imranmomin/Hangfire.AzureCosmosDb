@@ -1,7 +1,7 @@
 ﻿using Hangfire.Storage;
 using System.Threading;
 
-namespace Hangfire.AzureDocumentDB.Queue
+namespace Hangfire.Azure.Queue
 {
     internal interface IPersistentJobQueue
     {

@@ -2,7 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 
-namespace Hangfire.AzureDocumentDB.Queue
+namespace Hangfire.Azure.Queue
 {
     internal sealed class PersistentJobQueueProviderCollection : IEnumerable<IPersistentJobQueueProvider>
     {
@@ -12,8 +12,7 @@ namespace Hangfire.AzureDocumentDB.Queue
 
         public PersistentJobQueueProviderCollection(IPersistentJobQueueProvider provider)
         {
-            if (provider == null) throw new ArgumentNullException(nameof(provider));
-            this.provider = provider;
+            this.provider = provider ?? throw new ArgumentNullException(nameof(provider));
             providers.Add(this.provider);
         }
 

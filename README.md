@@ -6,6 +6,7 @@
 
 This repo will add a [Microsoft Azure DocumentDB](https://azure.microsoft.com/en-ca/services/documentdb) storage support to [Hangfire](http://hangfire.io) - fire-and-forget, delayed and recurring tasks runner for .NET. Scalable and reliable background job runner. Supports multiple servers, CPU and I/O intensive, long-running and short-running jobs.
 
+
 ## Installation
 
 [Hangfire.AzureDocumentDB](https://www.nuget.org/packages/Hangfire.AzureDocumentDB) is available as a NuGet package. Install it using the NuGet Package Console window:
@@ -14,20 +15,21 @@ This repo will add a [Microsoft Azure DocumentDB](https://azure.microsoft.com/en
 PM> Install-Package Hangfire.AzureDocumentDB
 ```
 
+
 ## Usage
 
 Use one the following ways to initialize `AzureDocumentDbStorage`
 
 ```csharp
-GlobalConfiguration.Configuration.UseAzureDocumentDbStorage("<url>", "<authSecret>", "<databaseName>");
+GlobalConfiguration.Configuration.UseAzureDocumentDbStorage("<url>", "<authSecret>", "<databaseName>", "<collectionName>");
 
-Hangfire.AzureDocumentDB.AzureDocumentDbStorage azureDocumentDBStorage = new Hangfire.AzureDocumentDB.AzureDocumentDbStorage("<url>", "<authSecret>", "<databaseName>");
-GlobalConfiguration.Configuration.UseStorage(azureDocumentDBStorage);
+Hangfire.Azure.DocumentDbStorage storage = new Hangfire.Azure.DocumentDbStorage("<url>", "<authSecret>", "<databaseName>", "<collectionName>");
+GlobalConfiguration.Configuration.UseStorage(storage);
 ```
 
 ```csharp
 // customize any options
-Hangfire.AzureDocumentDB.AzureDocumentDbStorageOptions azureDocumentDBStorageOptions = new Hangfire.AzureDocumentDB.AzureDocumentDbStorageOptions
+Hangfire.Azure.DocumentDbStorageOptions options = new Hangfire.Azure.DocumentDbStorageOptions
 {
     Queues = new[] { "default", "critical" },
     RequestTimeout = TimeSpan.FromSeconds(30),
@@ -36,30 +38,12 @@ Hangfire.AzureDocumentDB.AzureDocumentDbStorageOptions azureDocumentDBStorageOpt
     QueuePollInterval = TimeSpan.FromSeconds(2)
 };
 
-GlobalConfiguration.Configuration.UseAzureDocumentDbStorage("<url>", "<authSecret>", "<databaseName>", azureDocumentDBStorageOptions);
+GlobalConfiguration.Configuration.UseAzureDocumentDbStorage("<url>", "<authSecret>", "<databaseName>", "<collectionName>", options);
 
-Hangfire.AzureDocumentDB.AzureDocumentDbStorage azureDocumentDBStorage = new Hangfire.AzureDocumentDB.AzureDocumentDbStorage("<url>", "<authSecret>", "<databaseName>", azureDocumentDBStorageOptions);
-GlobalConfiguration.Configuration.UseStorage(azureDocumentDBStorage);
+Hangfire.AzureDocumentDB.AzureDocumentDbStorage storage = new Hangfire.AzureDocumentDB.AzureDocumentDbStorage("<url>", "<authSecret>", "<databaseName>", "<collectionName>", options);
+GlobalConfiguration.Configuration.UseStorage(storage);
 ```
 
-To set a default collection for all the documents. We will need to set the property
-```csharp
-Hangfire.AzureDocumentDB.AzureDocumentDbStorageOptions azureDocumentDBStorageOptions = new Hangfire.AzureDocumentDB.AzureDocumentDbStorageOptions
-{
-    DefaultCollectionName = "Hangfire_jobs"
-};
-```
-
-If the default collection is not defined, the library will create seperate collections for each document type.
-* Servers
-* Queues
-* Jobs
-* Hashes
-* Sets
-* Lists
-* Counters
-* States
-* Locks
 
 ## Questions? Problems?
 

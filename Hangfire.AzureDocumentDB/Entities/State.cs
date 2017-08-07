@@ -4,9 +4,9 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 using Microsoft.Azure.Documents;
 
-namespace Hangfire.AzureDocumentDB.Entities
+namespace Hangfire.Azure.Documents
 {
-    internal class State : DocumentEntity
+    internal class State : DocumentBase
     {
         [JsonProperty("job_id")]
         public string JobId { get; set; }
@@ -24,6 +24,6 @@ namespace Hangfire.AzureDocumentDB.Entities
         [JsonProperty("data")]
         public Dictionary<string, string> Data { get; set; }
 
-        public override DocumentTypes DocumentType { get; set; } = DocumentTypes.State;
+        public override DocumentTypes DocumentType => DocumentTypes.State;
     }
 }

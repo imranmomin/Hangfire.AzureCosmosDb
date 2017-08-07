@@ -1,4 +1,4 @@
-﻿namespace Hangfire.AzureDocumentDB.Queue
+﻿namespace Hangfire.Azure.Queue
 {
     internal interface IPersistentJobQueueProvider
     {
