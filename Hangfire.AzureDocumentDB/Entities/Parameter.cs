@@ -1,6 +1,6 @@
 ﻿using Newtonsoft.Json;
 
-namespace Hangfire.AzureDocumentDB.Entities
+namespace Hangfire.Azure.Documents
 {
     internal class Parameter
     {

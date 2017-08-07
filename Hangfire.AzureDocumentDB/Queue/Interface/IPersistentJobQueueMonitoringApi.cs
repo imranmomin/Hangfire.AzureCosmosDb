@@ -2,7 +2,7 @@
 
 // ReSharper disable UnusedMemberInSuper.Global
 // ReSharper disable UnusedMember.Global
-namespace Hangfire.AzureDocumentDB.Queue
+namespace Hangfire.Azure.Queue
 {
     internal interface IPersistentJobQueueMonitoringApi
     {

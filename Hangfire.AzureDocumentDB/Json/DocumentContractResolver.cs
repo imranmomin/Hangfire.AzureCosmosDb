@@ -4,9 +4,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 
-using Hangfire.AzureDocumentDB.Entities;
-
-namespace Hangfire.AzureDocumentDB.Json
+namespace Hangfire.Azure.Documents.Json
 {
     internal class DocumentContractResolver : DefaultContractResolver
     {
@@ -14,8 +12,8 @@ namespace Hangfire.AzureDocumentDB.Json
         {
             JsonContract contract = base.CreateContract(objectType);
 
-            // assign the document contract if type is of DocumentEntity
-            if (objectType == typeof(DocumentEntity))
+            // assign the document contract if type is of DocumentBase
+            if (objectType == typeof(DocumentBase))
             {
                 contract.Converter = new DocumentConverter();
             }
@@ -29,28 +27,25 @@ namespace Hangfire.AzureDocumentDB.Json
     {
         public override bool CanWrite => false;
         public override bool CanRead => true;
-        public override bool CanConvert(Type objectType) => objectType == typeof(DocumentEntity);
+        public override bool CanConvert(Type objectType) => objectType == typeof(DocumentBase);
 
-        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
-        {
-            throw new InvalidOperationException("Use default serialization.");
-        }
+        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer) => throw new InvalidOperationException("Use default serialization.");
 
         public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
         {
             JObject jsonObject = JObject.Load(reader);
-            DocumentEntity document;
+            DocumentBase document;
 
             switch (jsonObject["type"].Value<int>())
             {
                 case (int)DocumentTypes.Server:
-                    document = new Entities.Server();
+                    document = new Server();
                     break;
                 case (int)DocumentTypes.Job:
                     document = new Job();
                     break;
                 case (int)DocumentTypes.Queue:
-                    document = new Entities.Queue();
+                    document = new Queue();
                     break;
                 case (int)DocumentTypes.Counter:
                     document = new Counter();

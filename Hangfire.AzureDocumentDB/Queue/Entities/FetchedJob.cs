@@ -1,24 +1,24 @@
-﻿using System.Linq;
-using Hangfire.Storage;
+﻿using System.Threading.Tasks;
 
-namespace Hangfire.AzureDocumentDB.Queue
+using Hangfire.Storage;
+using Microsoft.Azure.Documents;
+using Microsoft.Azure.Documents.Client;
+
+namespace Hangfire.Azure.Queue
 {
     internal class FetchedJob : IFetchedJob
     {
-        private readonly AzureDocumentDbStorage storage;
+        private readonly DocumentDbStorage storage;
 
-        public FetchedJob(AzureDocumentDbStorage storage, Entities.Queue data)
+        public FetchedJob(DocumentDbStorage storage, Documents.Queue data)
         {
             this.storage = storage;
             Id = data.Id;
             JobId = data.JobId;
             Queue = data.Name;
-            SelfLink = data.SelfLink;
         }
 
         private string Id { get; }
-
-        private string SelfLink { get; }
 
         public string JobId { get; }
 
@@ -30,24 +30,21 @@ namespace Hangfire.AzureDocumentDB.Queue
 
         public void RemoveFromQueue()
         {
-            // TODO: move to stored procedure
-            bool exists = storage.Client.CreateDocumentQuery(storage.CollectionUri)
-                 .Where(d => d.Id == Id)
-                 .AsEnumerable()
-                 .Any();
-
-            if (exists) storage.Client.DeleteDocumentAsync(SelfLink).GetAwaiter().GetResult();
+            var spDeleteDocumentIfExistsUri = UriFactory.CreateStoredProcedureUri(storage.Options.DatabaseName, storage.Options.CollectionName, "deleteDocumentIfExists");
+            Task<StoredProcedureResponse<bool>> task = storage.Client.ExecuteStoredProcedureAsync<bool>(spDeleteDocumentIfExistsUri, Id);
+            task.Wait();
         }
 
         public void Requeue()
         {
-            Entities.Queue data = new Entities.Queue
+            Documents.Queue data = new Documents.Queue
             {
                 Id = Id,
                 Name = Queue,
                 JobId = JobId
             };
-            storage.Client.UpsertDocumentAsync(storage.CollectionUri, data).GetAwaiter().GetResult();
+            Task<ResourceResponse<Document>> task = storage.Client.UpsertDocumentAsync(storage.CollectionUri, data);
+            task.Wait();
         }
     }
 }

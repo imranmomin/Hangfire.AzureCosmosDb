@@ -2,12 +2,12 @@
 // ReSharper disable MemberCanBePrivate.Global
 // ReSharper disable AutoPropertyCanBeMadeGetOnly.Global
 
-namespace Hangfire.AzureDocumentDB
+namespace Hangfire.Azure
 {
     /// <summary>
-    /// Options for AzureDocumentDbStorage
+    /// Options for DocumentDbStorage
     /// </summary>
-    public class AzureDocumentDbStorageOptions
+    public class DocumentDbStorageOptions
     {
         internal Uri Endpoint { get; set; }
         internal string AuthSecret { get; set; }
@@ -43,7 +43,7 @@ namespace Hangfire.AzureDocumentDB
         /// <summary>
         /// Create an instance of AzureDocumentDB Storage option with default values
         /// </summary>
-        public AzureDocumentDbStorageOptions()
+        public DocumentDbStorageOptions()
         {
             RequestTimeout = TimeSpan.FromSeconds(30);
             Queues = new[] { "default", "critical" };

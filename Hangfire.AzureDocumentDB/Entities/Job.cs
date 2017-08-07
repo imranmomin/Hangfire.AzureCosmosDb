@@ -1,11 +1,12 @@
 ﻿using System;
+
+using Newtonsoft.Json;
 using Hangfire.Storage;
 using Microsoft.Azure.Documents;
-using Newtonsoft.Json;
 
-namespace Hangfire.AzureDocumentDB.Entities
+namespace Hangfire.Azure.Documents
 {
-    internal class Job : DocumentEntity
+    internal class Job : DocumentBase
     {
         [JsonProperty("data")]
         public InvocationData InvocationData { get; set; }
@@ -26,6 +27,6 @@ namespace Hangfire.AzureDocumentDB.Entities
         [JsonConverter(typeof(UnixDateTimeConverter))]
         public DateTime CreatedOn { get; set; }
 
-        public override DocumentTypes DocumentType { get; set; } = DocumentTypes.Job;
+        public override DocumentTypes DocumentType => DocumentTypes.Job;
     }
 }

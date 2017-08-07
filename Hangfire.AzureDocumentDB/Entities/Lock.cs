@@ -1,12 +1,12 @@
 ﻿using Newtonsoft.Json;
 
-namespace Hangfire.AzureDocumentDB.Entities
+namespace Hangfire.Azure.Documents
 {
-    internal class Lock : DocumentEntity
+    internal class Lock : DocumentBase
     {
         [JsonProperty("name")]
         public string Name { get; set; }
 
-        public override DocumentTypes DocumentType { get; set; } = DocumentTypes.Lock;
+        public override DocumentTypes DocumentType => DocumentTypes.Lock;
     }
 }

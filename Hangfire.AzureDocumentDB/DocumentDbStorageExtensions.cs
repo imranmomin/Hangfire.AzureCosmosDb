@@ -1,51 +1,51 @@
 ﻿using System;
-using Hangfire.AzureDocumentDB;
+using Hangfire.Azure;
 
 // ReSharper disable UnusedMember.Global
 namespace Hangfire
 {
     /// <summary>
-    /// Extension methods to user AzureDocumentDb Storage.
+    /// Extension methods to user DocumentDb Storage.
     /// </summary>
-    public static class AzureDocumentDbStorageExtensions
+    public static class DocumentDbStorageExtensions
     {
         /// <summary>
-        /// Enables to attache AzureDocumentDb to Hangfire
+        /// Enables to attach Azure DocumentDb to Hangfire
         /// </summary>
         /// <param name="configuration">The IGlobalConfiguration object</param>
-        /// <param name="url">The url string to AzureDocumentDb Database</param>
-        /// <param name="authSecret">The secret key for the AzureDocumentDb Database</param>
+        /// <param name="url">The url string to DocumentDb Database</param>
+        /// <param name="authSecret">The secret key for the DocumentDb Database</param>
         /// <param name="database">The name of the database to connect with</param>
         /// <param name="collection">The name of the collection on the database</param>
         /// <returns></returns>
-        public static IGlobalConfiguration<AzureDocumentDbStorage> UseAzureDocumentDbStorage(this IGlobalConfiguration configuration, string url, string authSecret, string database, string collection)
+        public static IGlobalConfiguration<DocumentDbStorage> UseAzureDocumentDbStorage(this IGlobalConfiguration configuration, string url, string authSecret, string database, string collection)
         {
             if (configuration == null) throw new ArgumentNullException(nameof(configuration));
             if (string.IsNullOrEmpty(url)) throw new ArgumentNullException(nameof(url));
             if (string.IsNullOrEmpty(authSecret)) throw new ArgumentNullException(nameof(authSecret));
 
-            AzureDocumentDbStorage storage = new AzureDocumentDbStorage(url, authSecret, database, collection);
+            DocumentDbStorage storage = new DocumentDbStorage(url, authSecret, database, collection);
             return configuration.UseStorage(storage);
         }
 
         /// <summary>
-        /// Enables to attache AzureDocumentDb to Hangfire
+        /// Enables to attach Azure DocumentDb to Hangfire
         /// </summary>
         /// <param name="configuration">The IGlobalConfiguration object</param>
-        /// <param name="url">The url string to AzureDocumentDb Database</param>
-        /// <param name="authSecret">The secret key for the AzureDocumentDb Database</param>
+        /// <param name="url">The url string to DocumentDb Database</param>
+        /// <param name="authSecret">The secret key for the DocumentDb Database</param>
         /// <param name="database">The name of the database to connect with</param>
         /// <param name="collection">The name of the collection on the database</param>
-        /// <param name="options">The AzureDocumentDbStorage object to override any of the options</param>
+        /// <param name="options">The DocumentDbStorage object to override any of the options</param>
         /// <returns></returns>
-        public static IGlobalConfiguration<AzureDocumentDbStorage> UseAzureDocumentDbStorage(this IGlobalConfiguration configuration, string url, string authSecret, string database, string collection, AzureDocumentDbStorageOptions options)
+        public static IGlobalConfiguration<DocumentDbStorage> UseAzureDocumentDbStorage(this IGlobalConfiguration configuration, string url, string authSecret, string database, string collection, DocumentDbStorageOptions options)
         {
             if (configuration == null) throw new ArgumentNullException(nameof(configuration));
             if (string.IsNullOrEmpty(url)) throw new ArgumentNullException(nameof(url));
             if (string.IsNullOrEmpty(authSecret)) throw new ArgumentNullException(nameof(authSecret));
             if (options == null) throw new ArgumentNullException(nameof(options));
 
-            AzureDocumentDbStorage storage = new AzureDocumentDbStorage(url, authSecret, database, collection, options);
+            DocumentDbStorage storage = new DocumentDbStorage(url, authSecret, database, collection, options);
             return configuration.UseStorage(storage);
         }
     }

@@ -1,17 +1,13 @@
 ﻿using System;
-using System.Linq;
 using System.Threading;
-using System.Collections.Generic;
-
-using Microsoft.Azure.Documents.Linq;
-using Microsoft.Azure.Documents.Client;
+using System.Threading.Tasks;
 
 using Hangfire.Server;
 using Hangfire.Logging;
-using Hangfire.AzureDocumentDB.Helper;
-using Hangfire.AzureDocumentDB.Entities;
+using Hangfire.Azure.Documents;
+using Microsoft.Azure.Documents.Client;
 
-namespace Hangfire.AzureDocumentDB
+namespace Hangfire.Azure
 {
 #pragma warning disable 618
     internal class ExpirationManager : IServerComponent
@@ -22,14 +18,14 @@ namespace Hangfire.AzureDocumentDB
         private static readonly TimeSpan defaultLockTimeout = TimeSpan.FromMinutes(5);
         private static readonly string[] documents = { "locks", "jobs", "lists", "sets", "hashes", "counters" };
         private readonly TimeSpan checkInterval;
-        private readonly AzureDocumentDbStorage storage;
+        private readonly DocumentDbStorage storage;
+        private readonly Uri spDeleteExpiredDocumentsUri;
 
-        public ExpirationManager(AzureDocumentDbStorage storage)
+        public ExpirationManager(DocumentDbStorage storage)
         {
-            if (storage == null) throw new ArgumentNullException(nameof(storage));
-
-            this.storage = storage;
+            this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
             checkInterval = storage.Options.ExpirationCheckInterval;
+            spDeleteExpiredDocumentsUri = UriFactory.CreateStoredProcedureUri(storage.Options.DatabaseName, storage.Options.CollectionName, "deleteExpiredDocuments");
         }
 
         public void Execute(CancellationToken cancellationToken)
@@ -39,31 +35,13 @@ namespace Hangfire.AzureDocumentDB
                 logger.Debug($"Removing outdated records from the '{document}' document.");
                 DocumentTypes type = document.ToDocumentType();
 
-                using (new AzureDocumentDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage))
+                using (new DocumentDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage))
                 {
-                    FeedOptions queryOptions = new FeedOptions { MaxItemCount = 50, };
-                    IDocumentQuery<DocumentEntity> query = storage.Client.CreateDocumentQuery<DocumentEntity>(storage.CollectionUri, queryOptions)
-                        .Where(d => d.DocumentType == type)
-                        .AsDocumentQuery();
-
-                    while (query.HasMoreResults)
-                    {
-                        FeedResponse<DocumentEntity> response = query.ExecuteNextAsync<DocumentEntity>(cancellationToken).GetAwaiter().GetResult();
-
-                        List<DocumentEntity> entities = response
-                            .Where(c => c.ExpireOn < DateTime.UtcNow)
-                            .Where(entity => document != "counters" || !(entity is Counter) || ((Counter)entity).Type != CounterTypes.Raw).ToList();
-
-                        // TODO: move to stored procedure. Bulk delete
-                        foreach (DocumentEntity entity in entities)
-                        {
-                            cancellationToken.ThrowIfCancellationRequested();
-                            storage.Client.DeleteDocumentWithRetriesAsync(entity.SelfLink).GetAwaiter().GetResult();
-                        }
-                    }
+                    Task<StoredProcedureResponse<int>> procedureTask = storage.Client.ExecuteStoredProcedureAsync<int>(spDeleteExpiredDocumentsUri, type);
+                    Task task = procedureTask.ContinueWith(t => logger.Trace($"Outdated records removed {t.Result.Response} records from the '{document}' document."), TaskContinuationOptions.OnlyOnRanToCompletion);
+                    task.Wait(cancellationToken);
                 }
 
-                logger.Trace($"Outdated records removed from the '{document}' document.");
                 cancellationToken.WaitHandle.WaitOne(checkInterval);
             }
         }

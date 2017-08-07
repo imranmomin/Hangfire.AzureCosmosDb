@@ -1,11 +1,11 @@
-﻿namespace Hangfire.AzureDocumentDB.Queue
+﻿namespace Hangfire.Azure.Queue
 {
     internal class JobQueueProvider : IPersistentJobQueueProvider
     {
         private readonly JobQueue queue;
         private readonly JobQueueMonitoringApi monitoringQueue;
 
-        public JobQueueProvider(AzureDocumentDbStorage storage)
+        public JobQueueProvider(DocumentDbStorage storage)
         {
             queue = new JobQueue(storage);
             monitoringQueue = new JobQueueMonitoringApi(storage);

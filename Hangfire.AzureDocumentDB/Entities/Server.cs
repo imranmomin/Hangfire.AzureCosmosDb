@@ -1,10 +1,11 @@
 ﻿using System;
-using Microsoft.Azure.Documents;
-using Newtonsoft.Json;
 
-namespace Hangfire.AzureDocumentDB.Entities
+using Newtonsoft.Json;
+using Microsoft.Azure.Documents;
+
+namespace Hangfire.Azure.Documents
 {
-    internal class Server : DocumentEntity
+    internal class Server : DocumentBase
     {
         [JsonProperty("server_id")]
         public string ServerId { get; set; }
@@ -23,6 +24,6 @@ namespace Hangfire.AzureDocumentDB.Entities
         [JsonConverter(typeof(UnixDateTimeConverter))]
         public DateTime LastHeartbeat { get; set; }
 
-        public override DocumentTypes DocumentType { get; set; } = DocumentTypes.Server;
+        public override DocumentTypes DocumentType => DocumentTypes.Server;
     }
 }
