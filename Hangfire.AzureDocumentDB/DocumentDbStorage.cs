@@ -71,7 +71,7 @@ namespace Hangfire.Azure
 
             ConnectionPolicy connectionPolicy = ConnectionPolicy.Default;
             connectionPolicy.RequestTimeout = options.RequestTimeout;
-            Client = new DocumentClient(options.Endpoint, options.AuthSecret, connectionPolicy, serializerSettings: settings);
+            Client = new DocumentClient(options.Endpoint, options.AuthSecret, settings, connectionPolicy);
             Task task = Client.OpenAsync();
             Task continueTask = task.ContinueWith(t => Initialize(), TaskContinuationOptions.OnlyOnRanToCompletion);
             continueTask.Wait();
@@ -136,9 +136,9 @@ namespace Hangfire.Azure
             // create document collection
             Task collectionTask = databaseTask.ContinueWith(t =>
             {
-                 logger.Info($"Creating document collection : {Options.CollectionName}");
-                 Uri databaseUri = UriFactory.CreateDatabaseUri(Options.DatabaseName);
-                 return Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = Options.CollectionName });
+                logger.Info($"Creating document collection : {Options.CollectionName}");
+                Uri databaseUri = UriFactory.CreateDatabaseUri(Options.DatabaseName);
+                return Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = Options.CollectionName });
             }, TaskContinuationOptions.OnlyOnRanToCompletion);
 
             // create stored procedures 
