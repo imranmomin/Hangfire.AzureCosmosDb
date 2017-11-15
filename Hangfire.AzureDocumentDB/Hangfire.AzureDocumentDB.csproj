@@ -16,11 +16,17 @@
     <FileVersion>1.0.1.0</FileVersion>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <DefineConstants>NETCORE;NETSTANDARD;NETSTANDARD2_0</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net452'">
+    <DefineConstants>NET452;NETFULL</DefineConstants>
+  </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Hangfire.Core" Version="1.6.17" />
     <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />
   </ItemGroup>
-  <ItemGroup Condition=" '$(TargetFramework)' != 'netstandard2.0' ">
+  <ItemGroup Condition="'$(TargetFramework)' == 'net452'">
     <Reference Include="System.Collections.Concurrent" />
     <Reference Include="System" />
     <Reference Include="Microsoft.CSharp" />
