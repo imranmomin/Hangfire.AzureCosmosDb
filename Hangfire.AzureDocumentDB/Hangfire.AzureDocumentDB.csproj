@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net452;netstandard2.0</TargetFrameworks>
+    <TargetFrameworks>net461;netstandard2.0</TargetFrameworks>
     <ProductName>Hangfire.AzureDocumentDB</ProductName>
     <Title>Hangfire.AzureDocumentDB</Title>
     <Company>Hangfire.AzureDocumentDB</Company>
@@ -19,14 +19,14 @@
   <PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
     <DefineConstants>NETCORE;NETSTANDARD;NETSTANDARD2_0</DefineConstants>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net452'">
-    <DefineConstants>NET452;NETFULL</DefineConstants>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net461'">
+    <DefineConstants>NET461;NETFULL</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Hangfire.Core" Version="1.6.17" />
     <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />
   </ItemGroup>
-  <ItemGroup Condition="'$(TargetFramework)' == 'net452'">
+  <ItemGroup Condition="'$(TargetFramework)' == 'net461'">
     <Reference Include="System.Collections.Concurrent" />
     <Reference Include="System" />
     <Reference Include="Microsoft.CSharp" />
@@ -54,10 +54,10 @@
     <EmbeddedResource Include="StoredProcedure\setJobParameter.js" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-    <PackageReference Include="Microsoft.Azure.DocumentDB.Core" Version="1.7.0" />
+    <PackageReference Include="Microsoft.Azure.DocumentDB.Core" Version="1.9.1" />
   </ItemGroup>
-  <ItemGroup Condition="'$(TargetFramework)' == 'net452'">
-    <PackageReference Include="Microsoft.Azure.DocumentDB" Version="1.19.0" />
+  <ItemGroup Condition="'$(TargetFramework)' == 'net461'">
+    <PackageReference Include="Microsoft.Azure.DocumentDB" Version="1.21.1" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Properties\" />
