@@ -149,7 +149,7 @@ namespace Hangfire.Azure
                 string[] storedProcedureFiles = assembly.GetManifestResourceNames().Where(n => n.EndsWith(".js")).ToArray();
                 foreach (string storedProcedureFile in storedProcedureFiles)
                 {
-                    logger.Info($"Creating database : {storedProcedureFile}");
+                    logger.Info($"Creating storedprocedure : {storedProcedureFile}");
                     Stream stream = assembly.GetManifestResourceStream(storedProcedureFile);
                     using (MemoryStream memoryStream = new MemoryStream())
                     {
@@ -167,8 +167,8 @@ namespace Hangfire.Azure
                 }
             }, TaskContinuationOptions.OnlyOnRanToCompletion);
 
-            // wait for 10 seconds, before timeout;
-            continueTask.Wait(10000);
+            // wait for 100 seconds, before timeout;
+            continueTask.Wait(100000);
         }
 
         private static DocumentDbStorageOptions Transform(string url, string authSecret, string database, string collection, DocumentDbStorageOptions options)
