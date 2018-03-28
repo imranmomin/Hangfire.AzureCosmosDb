@@ -85,7 +85,7 @@ namespace Hangfire.Azure
                                 Task<StoredProcedureResponse<bool>> procedureTask = storage.Client.ExecuteStoredProcedureAsync<bool>(spDeleteDocumentIfExistsUri, deleteCountersr);
                                 procedureTask.Wait(cancellationToken);
                             }
-                        }, cancellationToken);
+                        }, cancellationToken, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Current);
 
                         continueTask.Wait(cancellationToken);
                     }
