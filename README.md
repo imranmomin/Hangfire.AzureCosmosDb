@@ -18,7 +18,7 @@ PM> Install-Package Hangfire.AzureDocumentDB
 
 ## Usage
 
-Use one the following ways to initialize `AzureDocumentDbStorage`
+Use one the following ways to initialize `DocumentDbStorage`
 
 ```csharp
 GlobalConfiguration.Configuration.UseAzureDocumentDbStorage("<url>", "<authSecret>", "<databaseName>", "<collectionName>");
@@ -40,7 +40,9 @@ Hangfire.Azure.DocumentDbStorageOptions options = new Hangfire.Azure.DocumentDbS
 
 GlobalConfiguration.Configuration.UseAzureDocumentDbStorage("<url>", "<authSecret>", "<databaseName>", "<collectionName>", options);
 
-Hangfire.AzureDocumentDB.AzureDocumentDbStorage storage = new Hangfire.AzureDocumentDB.AzureDocumentDbStorage("<url>", "<authSecret>", "<databaseName>", "<collectionName>", options);
+// or 
+
+Hangfire.Azure.DocumentDbStorage storage = new Hangfire.Azure.DocumentDbStorage("<url>", "<authSecret>", "<databaseName>", "<collectionName>", options);
 GlobalConfiguration.Configuration.UseStorage(storage);
 ```
 
