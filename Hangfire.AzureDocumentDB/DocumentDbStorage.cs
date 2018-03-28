@@ -131,20 +131,20 @@ namespace Hangfire.Azure
 
             // create database
             logger.Info($"Creating database : {Options.DatabaseName}");
-            Task databaseTask = Client.CreateDatabaseIfNotExistsAsync(new Database { Id = Options.DatabaseName });
+            Task<ResourceResponse<Database>> databaseTask = Client.CreateDatabaseIfNotExistsAsync(new Database { Id = Options.DatabaseName });
 
             // create document collection
-            Task collectionTask = databaseTask.ContinueWith(t =>
+            Task<ResourceResponse<DocumentCollection>> collectionTask = databaseTask.ContinueWith(t =>
             {
-                logger.Info($"Creating document collection : {Options.CollectionName}");
-                Uri databaseUri = UriFactory.CreateDatabaseUri(Options.DatabaseName);
+                logger.Info($"Creating document collection : {t.Result.Resource.Id}");
+                Uri databaseUri = UriFactory.CreateDatabaseUri(t.Result.Resource.Id);
                 return Client.CreateDocumentCollectionIfNotExistsAsync(databaseUri, new DocumentCollection { Id = Options.CollectionName });
-            }, TaskContinuationOptions.OnlyOnRanToCompletion);
+            }, TaskContinuationOptions.OnlyOnRanToCompletion).Unwrap();
 
             // create stored procedures 
             Task continueTask = collectionTask.ContinueWith(t =>
             {
-                CollectionUri = UriFactory.CreateDocumentCollectionUri(Options.DatabaseName, Options.CollectionName);
+                CollectionUri = UriFactory.CreateDocumentCollectionUri(Options.DatabaseName, t.Result.Resource.Id);
                 System.Reflection.Assembly assembly = System.Reflection.Assembly.GetExecutingAssembly();
                 string[] storedProcedureFiles = assembly.GetManifestResourceNames().Where(n => n.EndsWith(".js")).ToArray();
                 foreach (string storedProcedureFile in storedProcedureFiles)
@@ -161,14 +161,17 @@ namespace Hangfire.Azure
                                 .Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries)
                                 .Last()
                         };
-                        Client.UpsertStoredProcedureAsync(CollectionUri, sp);
+                        Client.UpsertStoredProcedureAsync(CollectionUri, sp).Wait();
                     }
                     stream?.Close();
                 }
             }, TaskContinuationOptions.OnlyOnRanToCompletion);
 
-            // wait for 100 seconds, before timeout;
-            continueTask.Wait(100000);
+            continueTask.Wait();
+            if (continueTask.IsFaulted || continueTask.IsCanceled)
+            {
+                throw new ApplicationException("Unable to create the stored procedures", databaseTask.Exception);
+            }
         }
 
         private static DocumentDbStorageOptions Transform(string url, string authSecret, string database, string collection, DocumentDbStorageOptions options)
