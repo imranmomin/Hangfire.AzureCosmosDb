@@ -59,7 +59,7 @@ namespace Hangfire.Azure
             if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
 
             Documents.Job job = storage.Client.CreateDocumentQuery<Documents.Job>(storage.CollectionUri, queryOptions)
-                .Where(j => j.Id == jobId)
+                .Where(j => j.Id == jobId && j.DocumentType == DocumentTypes.Job)
                 .AsEnumerable()
                 .FirstOrDefault();
 
@@ -69,7 +69,7 @@ namespace Hangfire.Azure
                 invocationData.Arguments = job.Arguments;
 
                 List<StateHistoryDto> states = storage.Client.CreateDocumentQuery<State>(storage.CollectionUri, queryOptions)
-                    .Where(s => s.JobId == jobId)
+                    .Where(s => s.JobId == jobId && s.DocumentType == DocumentTypes.State)
                     .AsEnumerable()
                     .Select(s => new StateHistoryDto
                     {
