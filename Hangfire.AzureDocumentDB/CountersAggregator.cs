@@ -44,15 +44,14 @@ namespace Hangfire.Azure
                     .AsEnumerable()
                     .ToList();
 
-                Dictionary<string, Tuple<int, DateTime?>> counters = rawCounters.GroupBy(c => c.Key)
-                    .ToDictionary(k => k.Key, v => new Tuple<int, DateTime?>(v.Sum(c => c.Value), v.Max(c => c.ExpireOn)));
+                Dictionary<string, (int Sum, DateTime? ExpireOn)> counters = rawCounters.GroupBy(c => c.Key)
+                    .ToDictionary(k => k.Key, v=> (Sum: v.Sum(c => c.Value), ExpireOn: v.Max(c => c.ExpireOn)));
 
                 Array.ForEach(counters.Keys.ToArray(), key =>
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    Tuple<int, DateTime?> data;
-                    if (counters.TryGetValue(key, out data))
+                    if (counters.TryGetValue(key, out var data))
                     {
                         Counter aggregated = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri, queryOptions)
                              .Where(c => c.Key == key && c.Type == CounterTypes.Aggregrate && c.DocumentType == DocumentTypes.Counter)
@@ -65,14 +64,14 @@ namespace Hangfire.Azure
                             {
                                 Key = key,
                                 Type = CounterTypes.Aggregrate,
-                                Value = data.Item1,
-                                ExpireOn = data.Item2
+                                Value = data.Sum,
+                                ExpireOn = data.ExpireOn
                             };
                         }
                         else
                         {
-                            aggregated.Value += data.Item1;
-                            aggregated.ExpireOn = data.Item2;
+                            aggregated.Value += data.Sum;
+                            aggregated.ExpireOn = data.ExpireOn;
                         }
 
                         Task<ResourceResponse<Document>> task = storage.Client.UpsertDocumentWithRetriesAsync(storage.CollectionUri, aggregated);
@@ -95,7 +94,7 @@ namespace Hangfire.Azure
             logger.Trace("Records from the 'Counter' table aggregated.");
             cancellationToken.WaitHandle.WaitOne(checkInterval);
         }
-
+        
         public override string ToString() => GetType().ToString();
 
     }
