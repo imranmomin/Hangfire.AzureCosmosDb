@@ -98,7 +98,6 @@ namespace Hangfire.Azure
             logger.Info($"     Counter Agggerate Interval: {Options.CountersAggregateInterval.TotalSeconds} seconds");
             logger.Info($"     Queue Poll Interval: {Options.QueuePollInterval.TotalSeconds} seconds");
             logger.Info($"     Expiration Check Interval: {Options.ExpirationCheckInterval.TotalSeconds} seconds");
-            logger.Info($"     Queue: {string.Join(",", Options.Queues)}");
         }
 
         /// <summary>
