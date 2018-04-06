@@ -32,11 +32,6 @@
         <PackageReference Include="Hangfire.Core" Version="1.6.17" />
         <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />
     </ItemGroup>
-    <ItemGroup Condition="'$(TargetFramework)' == 'net461'">
-        <Reference Include="System.Collections.Concurrent" />
-        <Reference Include="System" />
-        <Reference Include="Microsoft.CSharp" />
-    </ItemGroup>
     <ItemGroup>
         <EmbeddedResource Include="StoredProcedure\deleteDocumentIfExists.js" />
         <EmbeddedResource Include="StoredProcedure\deleteExpiredDocuments.js" />
