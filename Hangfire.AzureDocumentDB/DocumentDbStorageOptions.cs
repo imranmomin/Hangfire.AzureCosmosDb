@@ -9,8 +9,6 @@ namespace Hangfire.Azure
     /// </summary>
     public class DocumentDbStorageOptions
     {
-        internal Uri Endpoint { get; set; }
-        internal string AuthSecret { get; set; }
         internal string DatabaseName { get; set; }
         internal string CollectionName { get; set; }
 
