@@ -15,7 +15,7 @@ function removedTimedOutServer(lastHeartbeat) {
         if (err) throw err;
 
         for (var index = 0; index < documents.length; index++) {
-            var self = documents[0]._self;
+            var self = documents[index]._self;
             collection.deleteDocument(self);
         }
         

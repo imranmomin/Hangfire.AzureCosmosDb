@@ -16,8 +16,8 @@ function deleteExpiredDocuments(type) {
         response.setBody(0);
         if (err) throw err;
 
-        for (var i = 0; i < documents.length; i++) {
-            var self = documents[i]._self;
+        for (var index = 0; index < documents.length; index++) {
+            var self = documents[index]._self;
             collection.deleteDocument(self);
         }
 

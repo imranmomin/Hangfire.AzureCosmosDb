@@ -14,7 +14,8 @@ function removeServer(id) {
         response.setBody(false);
         if (err) throw err;
 
-        if (documents.length > 1) throw new ("Found more than one server for :" + id);
+        if (documents.length === 0) throw new ("No server found for id :" + id);
+        if (documents.length > 1) throw new ("Found more than one server for id :" + id);
 
         var self = documents[0]._self;
         collection.deleteDocument(self);
