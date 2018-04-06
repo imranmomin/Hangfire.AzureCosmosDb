@@ -23,18 +23,24 @@ namespace Hangfire.Azure
         {
             List<QueueWithTopEnqueuedJobsDto> queueJobs = new List<QueueWithTopEnqueuedJobsDto>();
 
-            Array.ForEach(storage.Options.Queues, queue =>
+            var tuples = storage.QueueProviders
+                .Select(x => x.GetJobQueueMonitoringApi())
+                .SelectMany(x => x.GetQueues(), (monitoring, queue) => new { Monitoring = monitoring, Queue = queue })
+                .OrderBy(x => x.Queue)
+                .ToArray();
+
+            foreach (var tuple in tuples)
             {
-                long enqueueCount = EnqueuedCount(queue);
-                JobList<EnqueuedJobDto> jobs = EnqueuedJobs(queue, 0, 1);
+                long enqueueCount = EnqueuedCount(tuple.Queue);
+                JobList<EnqueuedJobDto> jobs = EnqueuedJobs(tuple.Queue, 0, 5);
                 queueJobs.Add(new QueueWithTopEnqueuedJobsDto
                 {
                     Length = enqueueCount,
                     Fetched = 0,
-                    Name = queue,
+                    Name = tuple.Queue,
                     FirstJobs = jobs
                 });
-            });
+            }
 
             return queueJobs;
         }
@@ -59,7 +65,7 @@ namespace Hangfire.Azure
             if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
 
             Documents.Job job = storage.Client.CreateDocumentQuery<Documents.Job>(storage.CollectionUri, queryOptions)
-                .Where(j => j.Id == jobId)
+                .Where(j => j.Id == jobId && j.DocumentType == DocumentTypes.Job)
                 .AsEnumerable()
                 .FirstOrDefault();
 
@@ -69,7 +75,7 @@ namespace Hangfire.Azure
                 invocationData.Arguments = job.Arguments;
 
                 List<StateHistoryDto> states = storage.Client.CreateDocumentQuery<State>(storage.CollectionUri, queryOptions)
-                    .Where(s => s.JobId == jobId)
+                    .Where(s => s.JobId == jobId && s.DocumentType == DocumentTypes.State)
                     .AsEnumerable()
                     .Select(s => new StateHistoryDto
                     {
@@ -149,7 +155,9 @@ namespace Hangfire.Azure
             results.Add("recurring-jobs", count);
 
             long GetValueOrDefault(string key) => results.Where(r => r.Key == key).Select(r => r.Value).SingleOrDefault();
-            return new StatisticsDto
+
+            // ReSharper disable once UseObjectOrCollectionInitializer
+            StatisticsDto statistics = new StatisticsDto
             {
                 Enqueued = GetValueOrDefault("Enqueued"),
                 Failed = GetValueOrDefault("Failed"),
@@ -159,8 +167,13 @@ namespace Hangfire.Azure
                 Deleted = GetValueOrDefault("stats:deleted"),
                 Recurring = GetValueOrDefault("recurring-jobs"),
                 Servers = GetValueOrDefault("Servers"),
-                Queues = storage.Options.Queues.LongLength
             };
+
+            statistics.Queues = storage.QueueProviders
+                .SelectMany(x => x.GetJobQueueMonitoringApi().GetQueues())
+                .Count();
+
+            return statistics;
         }
 
         #region Job List

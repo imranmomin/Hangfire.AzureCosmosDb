@@ -37,30 +37,12 @@ namespace Hangfire.Azure
         /// <param name="authSecret">The secret key for the DocumentDb Database</param>
         /// <param name="database">The name of the database to connect with</param>
         /// <param name="collection">The name of the collection on the database</param>
-        /// <exception cref="ArgumentNullException"><paramref name="url"/> argument is null.</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="authSecret"/> argument is null.</exception>
-        public DocumentDbStorage(string url, string authSecret, string database, string collection) : this(new DocumentDbStorageOptions { Endpoint = new Uri(url), AuthSecret = authSecret, DatabaseName = database, CollectionName = collection }) { }
-
-        /// <summary>
-        /// Initializes the DocumentDbStorage form the url auth secret provide.
-        /// </summary>
-        /// <param name="url">The url string to DocumentDb Database</param>
-        /// <param name="authSecret">The secret key for the DocumentDb Database</param>
-        /// <param name="database">The name of the database to connect with</param>
         /// <param name="options">The DocumentDbStorageOptions object to override any of the options</param>
-        /// <param name="collection">The name of the collection on the database</param>
-        /// <exception cref="ArgumentNullException"><paramref name="url"/> argument is null.</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="authSecret"/> argument is null.</exception>
-        public DocumentDbStorage(string url, string authSecret, string database, string collection, DocumentDbStorageOptions options) : this(Transform(url, authSecret, database, collection, options)) { }
-
-        /// <summary>
-        /// Initializes the DocumentDbStorage form the url auth secret provide.
-        /// </summary>
-        /// <param name="options">The DocumentDbStorageOptions object to override any of the options</param>
-        /// <exception cref="ArgumentNullException"><paramref name="options"/> argument is null.</exception>
-        private DocumentDbStorage(DocumentDbStorageOptions options)
+        public DocumentDbStorage(string url, string authSecret, string database, string collection, DocumentDbStorageOptions options = null)
         {
-            Options = options ?? throw new ArgumentNullException(nameof(options));
+            Options = options ?? new DocumentDbStorageOptions();
+            Options.DatabaseName = database;
+            Options.CollectionName = collection;
 
             JsonSerializerSettings settings = new JsonSerializerSettings
             {
@@ -70,8 +52,8 @@ namespace Hangfire.Azure
             };
 
             ConnectionPolicy connectionPolicy = ConnectionPolicy.Default;
-            connectionPolicy.RequestTimeout = options.RequestTimeout;
-            Client = new DocumentClient(options.Endpoint, options.AuthSecret, settings, connectionPolicy);
+            connectionPolicy.RequestTimeout = Options.RequestTimeout;
+            Client = new DocumentClient(new Uri(url), authSecret, settings, connectionPolicy);
             Task task = Client.OpenAsync();
             Task continueTask = task.ContinueWith(t => Initialize(), TaskContinuationOptions.OnlyOnRanToCompletion);
             continueTask.Wait();
@@ -111,12 +93,11 @@ namespace Hangfire.Azure
         public override void WriteOptionsToLog(ILog logger)
         {
             logger.Info("Using the following options for Azure DocumentDB job storage:");
-            logger.Info($"     DocumentDB Url: {Options.Endpoint.AbsoluteUri}");
+            logger.Info($"     DocumentDB Url: {Client.ServiceEndpoint.AbsoluteUri}");
             logger.Info($"     Request Timeout: {Options.RequestTimeout}");
             logger.Info($"     Counter Agggerate Interval: {Options.CountersAggregateInterval.TotalSeconds} seconds");
             logger.Info($"     Queue Poll Interval: {Options.QueuePollInterval.TotalSeconds} seconds");
             logger.Info($"     Expiration Check Interval: {Options.ExpirationCheckInterval.TotalSeconds} seconds");
-            logger.Info($"     Queue: {string.Join(",", Options.Queues)}");
         }
 
         /// <summary>
@@ -172,18 +153,6 @@ namespace Hangfire.Azure
             {
                 throw new ApplicationException("Unable to create the stored procedures", databaseTask.Exception);
             }
-        }
-
-        private static DocumentDbStorageOptions Transform(string url, string authSecret, string database, string collection, DocumentDbStorageOptions options)
-        {
-            if (options == null) options = new DocumentDbStorageOptions();
-
-            options.Endpoint = new Uri(url);
-            options.AuthSecret = authSecret;
-            options.DatabaseName = database;
-            options.CollectionName = collection;
-
-            return options;
         }
     }
 }

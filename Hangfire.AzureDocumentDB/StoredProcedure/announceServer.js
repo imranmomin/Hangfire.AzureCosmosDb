@@ -21,9 +21,9 @@ function announceServer(server) {
             data = server;
         } else {
             data = documents[0];
-            data.last_heartbeat = set.last_heartbeat;
-            data.workers = set.workers;
-            data.queues = set.queues;
+            data.last_heartbeat = server.last_heartbeat;
+            data.workers = server.workers;
+            data.queues = server.queues;
         }
 
         collection.upsertDocument(collection.getSelfLink(), data);

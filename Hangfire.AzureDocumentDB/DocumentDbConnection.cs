@@ -88,7 +88,7 @@ namespace Hangfire.Azure
             if (jobId == null) throw new ArgumentNullException(nameof(jobId));
 
             Documents.Job data = Storage.Client.CreateDocumentQuery<Documents.Job>(Storage.CollectionUri, queryOptions)
-                .Where(j => j.Id == jobId)
+                .Where(j => j.Id == jobId && j.DocumentType == DocumentTypes.Job)
                 .AsEnumerable()
                 .FirstOrDefault();
 
@@ -162,7 +162,7 @@ namespace Hangfire.Azure
             if (name == null) throw new ArgumentNullException(nameof(name));
 
             List<Parameter> parameters = Storage.Client.CreateDocumentQuery<Documents.Job>(Storage.CollectionUri, queryOptions)
-                 .Where(j => j.Id == id)
+                 .Where(j => j.Id == id && j.DocumentType == DocumentTypes.Job)
                  .SelectMany(j => j.Parameters)
                  .AsEnumerable()
                  .ToList();
@@ -274,12 +274,11 @@ namespace Hangfire.Azure
 
             SqlQuerySpec sql = new SqlQuerySpec
             {
-                QueryText = "SELECT TOP 1 VALUE c['value'] FROM c WHERE c.key = @key AND c.type = @type AND (c.score BETWEEN @from AND @to) " +
-                            "ORDER BY c.created_on DESC ",
+                QueryText = "SELECT TOP 1 VALUE c['value'] FROM c WHERE c.key = @key AND c.type = @type AND (c.score BETWEEN @from AND @to) ORDER BY c.score",
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
-                    new SqlParameter("@type", DocumentTypes.State),
+                    new SqlParameter("@type", DocumentTypes.Set),
                     new SqlParameter("@from", fromScore ),
                     new SqlParameter("@to", toScore)
                 }
@@ -410,7 +409,7 @@ namespace Hangfire.Azure
                 {
                     new SqlParameter("@key", key),
                     new SqlParameter("@field", name),
-                    new SqlParameter("@type", DocumentTypes.State)
+                    new SqlParameter("@type", DocumentTypes.Hash)
                 }
             };
 

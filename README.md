@@ -31,7 +31,6 @@ GlobalConfiguration.Configuration.UseStorage(storage);
 // customize any options
 Hangfire.Azure.DocumentDbStorageOptions options = new Hangfire.Azure.DocumentDbStorageOptions
 {
-    Queues = new[] { "default", "critical" },
     RequestTimeout = TimeSpan.FromSeconds(30),
     ExpirationCheckInterval = TimeSpan.FromMinutes(15),
     CountersAggregateInterval = TimeSpan.FromMinutes(1),

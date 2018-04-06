@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 using System.Collections.Generic;
 
 using Hangfire.Azure.Documents;
@@ -9,15 +10,33 @@ namespace Hangfire.Azure.Queue
     internal class JobQueueMonitoringApi : IPersistentJobQueueMonitoringApi
     {
         private readonly DocumentDbStorage storage;
-        private readonly IEnumerable<string> queues;
+        private readonly List<string> queuesCache = new List<string>();
+        private DateTime cacheUpdated;
+        private readonly object cacheLock = new object();
+        private static readonly TimeSpan queuesCacheTimeout = TimeSpan.FromSeconds(5);
 
-        public JobQueueMonitoringApi(DocumentDbStorage storage)
+        public JobQueueMonitoringApi(DocumentDbStorage storage) => this.storage = storage;
+
+        public IEnumerable<string> GetQueues()
         {
-            this.storage = storage;
-            queues = storage.Options.Queues;
-        }
+            lock (cacheLock)
+            {
+                if (queuesCache.Count == 0 || cacheUpdated.Add(queuesCacheTimeout) < DateTime.UtcNow)
+                {
+                    IEnumerable<string> result = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri)
+                        .Where(q => q.DocumentType == DocumentTypes.Queue)
+                        .Select(q => q.Name)
+                        .AsEnumerable()
+                        .Distinct();
 
-        public IEnumerable<string> GetQueues() => queues;
+                    queuesCache.Clear();
+                    queuesCache.AddRange(result);
+                    cacheUpdated = DateTime.UtcNow;
+                }
+
+                return queuesCache.ToList();
+            }
+        }
 
         public int GetEnqueuedCount(string queue)
         {

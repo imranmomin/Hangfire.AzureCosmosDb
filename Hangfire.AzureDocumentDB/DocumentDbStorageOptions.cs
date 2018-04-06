@@ -9,8 +9,6 @@ namespace Hangfire.Azure
     /// </summary>
     public class DocumentDbStorageOptions
     {
-        internal Uri Endpoint { get; set; }
-        internal string AuthSecret { get; set; }
         internal string DatabaseName { get; set; }
         internal string CollectionName { get; set; }
 
@@ -18,11 +16,6 @@ namespace Hangfire.Azure
         /// Get or sets the request timemout for DocumentDB client. Default value set to 30 seconds
         /// </summary>
         public TimeSpan RequestTimeout { get; set; }
-
-        /// <summary>
-        /// Get or set list of queues to process. Default values "default", "critical"
-        /// </summary>
-        public string[] Queues { get; set; }
 
         /// <summary>
         /// Get or set the interval timespan to process expired enteries. Default value 15 minutes
@@ -46,7 +39,6 @@ namespace Hangfire.Azure
         public DocumentDbStorageOptions()
         {
             RequestTimeout = TimeSpan.FromSeconds(30);
-            Queues = new[] { "default", "critical" };
             ExpirationCheckInterval = TimeSpan.FromMinutes(5);
             CountersAggregateInterval = TimeSpan.FromMinutes(1);
             QueuePollInterval = TimeSpan.FromSeconds(2);
