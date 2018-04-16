@@ -15,7 +15,6 @@ namespace Hangfire.Azure.Queue
         private readonly DocumentDbStorage storage;
         private const string DISTRIBUTED_LOCK_KEY = "locks:job:dequeue";
         private readonly TimeSpan defaultLockTimeout = TimeSpan.FromMinutes(1);
-        private readonly TimeSpan checkInterval;
         private readonly object syncLock = new object();
         private readonly FeedOptions queryOptions = new FeedOptions { MaxItemCount = 1 };
         private readonly Uri spDeleteDocumentIfExistsUri;
@@ -23,7 +22,6 @@ namespace Hangfire.Azure.Queue
         public JobQueue(DocumentDbStorage storage)
         {
             this.storage = storage;
-            checkInterval = storage.Options.QueuePollInterval;
             spDeleteDocumentIfExistsUri = UriFactory.CreateStoredProcedureUri(storage.Options.DatabaseName, storage.Options.CollectionName, "deleteDocumentIfExists");
         }
 
@@ -40,7 +38,8 @@ namespace Hangfire.Azure.Queue
                         string queue = queues.ElementAt(index);
 
                         Documents.Queue data = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, queryOptions)
-                            .Where(q => q.Name == queue && q.DocumentType == Documents.DocumentTypes.Queue)
+                            .Where(q => q.DocumentType == Documents.DocumentTypes.Queue && q.Name == queue)
+                            .OrderBy(q => q.CreatedOn)
                             .AsEnumerable()
                             .FirstOrDefault();
 
@@ -48,16 +47,12 @@ namespace Hangfire.Azure.Queue
                         {
                             Task<StoredProcedureResponse<bool>> task = storage.Client.ExecuteStoredProcedureAsync<bool>(spDeleteDocumentIfExistsUri, data.Id);
                             task.Wait(cancellationToken);
-
-                            if (task.Result.Response)
-                            {
-                                return new FetchedJob(storage, data);
-                            }
+                            if (task.Result.Response) return new FetchedJob(storage, data);
                         }
                     }
                 }
 
-                Thread.Sleep(checkInterval);
+                Thread.Sleep(storage.Options.QueuePollInterval);
                 index = (index + 1) % queues.Length;
             }
         }
@@ -67,7 +62,8 @@ namespace Hangfire.Azure.Queue
             Documents.Queue data = new Documents.Queue
             {
                 Name = queue,
-                JobId = jobId
+                JobId = jobId,
+                CreatedOn = DateTime.UtcNow
             };
 
             Task<ResourceResponse<Document>> task = storage.Client.CreateDocumentWithRetriesAsync(storage.CollectionUri, data);

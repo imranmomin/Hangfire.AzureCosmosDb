@@ -1,14 +1,16 @@
 ﻿using System;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Collections.Generic;
 
 using Hangfire.Common;
 using Hangfire.Storage;
-using Hangfire.Azure.Queue;
-using Hangfire.Azure.Documents;
 using Microsoft.Azure.Documents;
 using Hangfire.Storage.Monitoring;
 using Microsoft.Azure.Documents.Client;
+
+using Hangfire.Azure.Queue;
+using Hangfire.Azure.Documents;
 
 namespace Hangfire.Azure
 {
@@ -258,20 +260,16 @@ namespace Hangfire.Azure
 
             List<Documents.Job> filterJobs = storage.Client.CreateDocumentQuery<Documents.Job>(storage.CollectionUri, queryOptions)
                 .Where(j => j.DocumentType == DocumentTypes.Job && j.StateName == stateName)
-                .AsEnumerable()
                 .OrderByDescending(j => j.CreatedOn)
-                .Skip(from).Take(count)
-                .ToList();
-
-            List<State> states = storage.Client.CreateDocumentQuery<State>(storage.CollectionUri, queryOptions)
-                .Where(s => s.DocumentType == DocumentTypes.State)
                 .AsEnumerable()
-                .Where(s => filterJobs.Any(j => j.StateId == s.Id))
+                .Skip(from).Take(count)
                 .ToList();
 
             filterJobs.ForEach(job =>
             {
-                State state = states.SingleOrDefault(s => s.Id == job.StateId);
+                Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, job.StateId);
+                Task<DocumentResponse<State>> task = storage.Client.ReadDocumentAsync<State>(uri);
+                State state = task.Result;
 
                 InvocationData invocationData = job.InvocationData;
                 invocationData.Arguments = job.Arguments;
@@ -290,21 +288,18 @@ namespace Hangfire.Azure
             List<KeyValuePair<string, T>> jobs = new List<KeyValuePair<string, T>>();
 
             List<Documents.Queue> queues = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, queryOptions)
-                .Where(q => q.Name == queue && q.DocumentType == DocumentTypes.Queue)
+                .Where(q => q.DocumentType == DocumentTypes.Queue && q.Name == queue)
+                .OrderBy(q => q.CreatedOn)
                 .AsEnumerable()
                 .Skip(from).Take(count)
                 .ToList();
 
-            List<Documents.Job> filterJobs = storage.Client.CreateDocumentQuery<Documents.Job>(storage.CollectionUri, queryOptions)
-                .Where(j => j.DocumentType == DocumentTypes.Job)
-                .AsEnumerable()
-                .OrderByDescending(j => j.CreatedOn)
-                .Where(j => queues.Any(q => q.JobId == j.Id))
-                .ToList();
-
             queues.ForEach(queueItem =>
             {
-                Documents.Job job = filterJobs.Single(j => j.Id == queueItem.JobId);
+                Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, queueItem.JobId);
+                Task<DocumentResponse<Documents.Job>> task = storage.Client.ReadDocumentAsync<Documents.Job>(uri);
+                Documents.Job job = task.Result;
+
                 InvocationData invocationData = job.InvocationData;
                 invocationData.Arguments = job.Arguments;
 

@@ -59,10 +59,10 @@ namespace Hangfire.Azure.Queue
         {
             return storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri)
                 .Where(q => q.Name == queue && q.DocumentType == DocumentTypes.Queue)
-                .Select(c => c.JobId)
+                .OrderBy(q => q.CreatedOn)
+                .Select(q => q.JobId)
                 .AsEnumerable()
-                .Skip(from).Take(perPage)
-                .ToList();
+                .Skip(from).Take(perPage);
         }
 
         public IEnumerable<string> GetFetchedJobIds(string queue, int from, int perPage) => GetEnqueuedJobIds(queue, from, perPage);

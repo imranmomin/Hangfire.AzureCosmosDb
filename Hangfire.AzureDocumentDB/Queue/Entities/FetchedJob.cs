@@ -1,4 +1,5 @@
-﻿using System.Threading.Tasks;
+﻿using System;
+using System.Threading.Tasks;
 
 using Hangfire.Storage;
 using Microsoft.Azure.Documents;
@@ -25,9 +26,7 @@ namespace Hangfire.Azure.Queue
 
         private string Queue { get; }
 
-        public void Dispose()
-        {
-        }
+        public void Dispose() { }
 
         public void RemoveFromQueue()
         {
@@ -42,8 +41,10 @@ namespace Hangfire.Azure.Queue
             {
                 Id = Id,
                 Name = Queue,
-                JobId = JobId
+                JobId = JobId,
+                CreatedOn = DateTime.UtcNow
             };
+
             Task<ResourceResponse<Document>> task = storage.Client.UpsertDocumentAsync(storage.CollectionUri, data);
             task.Wait();
         }
