@@ -9,21 +9,20 @@ namespace Hangfire.Azure.Documents.Json
 {
     internal class DocumentContractResolver : DefaultContractResolver
     {
+        public DocumentContractResolver()
+        {
+            NamingStrategy = new CamelCaseNamingStrategy(false, false);
+        }
+
         protected override JsonContract CreateContract(Type objectType)
         {
             JsonContract contract = base.CreateContract(objectType);
-
-            // assign the document contract if type is of DocumentBase
-            if (objectType == typeof(DocumentBase))
-            {
-                contract.Converter = new DocumentConverter();
-            }
-
+            if (objectType != typeof(DocumentBase)) return contract;
+            contract.Converter = new DocumentConverter();
             return contract;
         }
     }
-
-
+    
     internal class DocumentConverter : JsonConverter
     {
         public override bool CanWrite => false;
