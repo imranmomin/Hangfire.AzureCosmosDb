@@ -258,7 +258,7 @@ namespace Hangfire.Azure
                 {
                     Key = key,
                     Field = k.Key,
-                    Value = k.Value.ToEpoch()
+                    Value = k.Value.TryParseToEpoch()
                 }).ToArray();
 
                 Uri spSetRangeHashUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "setRangeHash");
