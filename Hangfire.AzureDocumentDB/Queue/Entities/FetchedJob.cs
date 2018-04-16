@@ -4,6 +4,7 @@ using Hangfire.Storage;
 using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 
+// ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Queue
 {
     internal class FetchedJob : IFetchedJob

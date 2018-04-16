@@ -4,6 +4,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 
+// ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents.Json
 {
     internal class DocumentContractResolver : DefaultContractResolver

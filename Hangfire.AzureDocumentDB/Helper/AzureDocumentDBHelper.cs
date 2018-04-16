@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 
+// ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents.Helper
 {
     // ReSharper disable once InconsistentNaming

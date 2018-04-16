@@ -4,6 +4,7 @@ using Newtonsoft.Json;
 using Hangfire.Storage;
 using Microsoft.Azure.Documents;
 
+// ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents
 {
     internal class Job : DocumentBase

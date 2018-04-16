@@ -3,6 +3,7 @@
 using Newtonsoft.Json;
 using Microsoft.Azure.Documents;
 
+// ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents
 {
     internal class Server : DocumentBase

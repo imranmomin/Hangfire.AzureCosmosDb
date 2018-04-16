@@ -1,5 +1,6 @@
 ﻿using Newtonsoft.Json;
 
+// ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents
 {
     internal class Parameter

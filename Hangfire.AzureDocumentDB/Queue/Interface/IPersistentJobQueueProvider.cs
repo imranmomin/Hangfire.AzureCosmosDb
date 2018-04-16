@@ -1,4 +1,5 @@
-﻿namespace Hangfire.Azure.Queue
+﻿// ReSharper disable once CheckNamespace
+namespace Hangfire.Azure.Queue
 {
     internal interface IPersistentJobQueueProvider
     {

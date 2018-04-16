@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Globalization;
 
+// ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents.Helper
 {
     internal static class TimeHelper
