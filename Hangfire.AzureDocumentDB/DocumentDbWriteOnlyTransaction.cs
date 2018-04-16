@@ -5,11 +5,12 @@ using System.Collections.Generic;
 
 using Hangfire.States;
 using Hangfire.Storage;
+using Microsoft.Azure.Documents;
+using Microsoft.Azure.Documents.Client;
+
 using Hangfire.Azure.Queue;
 using Hangfire.Azure.Documents;
-using Microsoft.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
-using Microsoft.Azure.Documents.Client;
 
 namespace Hangfire.Azure
 {

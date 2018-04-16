@@ -51,6 +51,7 @@ namespace Hangfire.Azure
         {
             return storage.Client.CreateDocumentQuery<Documents.Server>(storage.CollectionUri, queryOptions)
                 .Where(s => s.DocumentType == DocumentTypes.Server)
+                .OrderByDescending(s => s.CreatedOn)
                 .AsEnumerable()
                 .Select(server => new ServerDto
                 {
@@ -66,10 +67,9 @@ namespace Hangfire.Azure
         {
             if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
 
-            Documents.Job job = storage.Client.CreateDocumentQuery<Documents.Job>(storage.CollectionUri, queryOptions)
-                .Where(j => j.Id == jobId && j.DocumentType == DocumentTypes.Job)
-                .AsEnumerable()
-                .FirstOrDefault();
+            Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, jobId);
+            Task<DocumentResponse<Documents.Job>> task = storage.Client.ReadDocumentAsync<Documents.Job>(uri);
+            Documents.Job job = task.Result;
 
             if (job != null)
             {
@@ -77,7 +77,8 @@ namespace Hangfire.Azure
                 invocationData.Arguments = job.Arguments;
 
                 List<StateHistoryDto> states = storage.Client.CreateDocumentQuery<State>(storage.CollectionUri, queryOptions)
-                    .Where(s => s.JobId == jobId && s.DocumentType == DocumentTypes.State)
+                    .Where(s => s.DocumentType == DocumentTypes.State && s.JobId == jobId)
+                    .OrderByDescending(s => s.CreatedOn)
                     .AsEnumerable()
                     .Select(s => new StateHistoryDto
                     {
@@ -118,7 +119,7 @@ namespace Hangfire.Azure
             // get counts of servers
             SqlQuerySpec sql = new SqlQuerySpec
             {
-                QueryText = "SELECT VALUE COUNT(1) FROM c WHERE c.type = @type",
+                QueryText = "SELECT VALUE COUNT(1) FROM doc WHERE doc.type = @type",
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@type", DocumentTypes.Server),
@@ -133,7 +134,7 @@ namespace Hangfire.Azure
 
             // get sum of stats:succeeded counters  raw / aggregate
             Dictionary<string, long> counters = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri, queryOptions)
-                .Where(c => (c.Key == "stats:succeeded" || c.Key == "stats:deleted") && c.DocumentType == DocumentTypes.Counter)
+                .Where(c => c.DocumentType == DocumentTypes.Counter && (c.Key == "stats:succeeded" || c.Key == "stats:deleted"))
                 .AsEnumerable()
                 .GroupBy(c => c.Key)
                 .ToDictionary(g => g.Key, g => (long)g.Sum(c => c.Value));
@@ -142,7 +143,7 @@ namespace Hangfire.Azure
 
             sql = new SqlQuerySpec
             {
-                QueryText = "SELECT VALUE COUNT(1) FROM c WHERE c.key = @key AND c.type = @type",
+                QueryText = "SELECT VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.key = @key",
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", "recurring-jobs"),
@@ -269,13 +270,16 @@ namespace Hangfire.Azure
             {
                 Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, job.StateId);
                 Task<DocumentResponse<State>> task = storage.Client.ReadDocumentAsync<State>(uri);
+
                 State state = task.Result;
+                if (state != null)
+                {
+                    InvocationData invocationData = job.InvocationData;
+                    invocationData.Arguments = job.Arguments;
 
-                InvocationData invocationData = job.InvocationData;
-                invocationData.Arguments = job.Arguments;
-
-                T data = selector(state, invocationData.Deserialize());
-                jobs.Add(new KeyValuePair<string, T>(job.Id, data));
+                    T data = selector(state, invocationData.Deserialize());
+                    jobs.Add(new KeyValuePair<string, T>(job.Id, data));
+                }
             });
 
             return new JobList<T>(jobs);
@@ -298,13 +302,16 @@ namespace Hangfire.Azure
             {
                 Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, queueItem.JobId);
                 Task<DocumentResponse<Documents.Job>> task = storage.Client.ReadDocumentAsync<Documents.Job>(uri);
+
                 Documents.Job job = task.Result;
+                if (job != null)
+                {
+                    InvocationData invocationData = job.InvocationData;
+                    invocationData.Arguments = job.Arguments;
 
-                InvocationData invocationData = job.InvocationData;
-                invocationData.Arguments = job.Arguments;
-
-                T data = selector(job.StateName, invocationData.Deserialize());
-                jobs.Add(new KeyValuePair<string, T>(job.Id, data));
+                    T data = selector(job.StateName, invocationData.Deserialize());
+                    jobs.Add(new KeyValuePair<string, T>(job.Id, data));
+                }
             });
 
             return new JobList<T>(jobs);
@@ -339,7 +346,7 @@ namespace Hangfire.Azure
         {
             SqlQuerySpec sql = new SqlQuerySpec
             {
-                QueryText = "SELECT VALUE COUNT(1) FROM c WHERE c.state_name = @state AND c.type = @type",
+                QueryText = "SELECT VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.state_name = @state",
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@state", state),

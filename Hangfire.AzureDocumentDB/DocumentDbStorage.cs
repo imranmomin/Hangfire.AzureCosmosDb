@@ -9,10 +9,11 @@ using Hangfire.Server;
 using Hangfire.Storage;
 using Hangfire.Logging;
 using Newtonsoft.Json;
-using Hangfire.Azure.Queue;
 using Microsoft.Azure.Documents;
-using Hangfire.Azure.Documents.Json;
 using Microsoft.Azure.Documents.Client;
+
+using Hangfire.Azure.Queue;
+using Hangfire.Azure.Documents.Json;
 
 namespace Hangfire.Azure
 {

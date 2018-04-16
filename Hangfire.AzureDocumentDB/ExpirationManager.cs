@@ -4,8 +4,9 @@ using System.Threading.Tasks;
 
 using Hangfire.Server;
 using Hangfire.Logging;
-using Hangfire.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
+
+using Hangfire.Azure.Documents;
 
 namespace Hangfire.Azure
 {
@@ -17,14 +18,12 @@ namespace Hangfire.Azure
         private const string DISTRIBUTED_LOCK_KEY = "expirationmanager";
         private static readonly TimeSpan defaultLockTimeout = TimeSpan.FromMinutes(5);
         private static readonly DocumentTypes[] documents = { DocumentTypes.Lock, DocumentTypes.Job, DocumentTypes.List, DocumentTypes.Set, DocumentTypes.Hash, DocumentTypes.Counter };
-        private readonly TimeSpan checkInterval;
         private readonly DocumentDbStorage storage;
         private readonly Uri spDeleteExpiredDocumentsUri;
 
         public ExpirationManager(DocumentDbStorage storage)
         {
             this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
-            checkInterval = storage.Options.ExpirationCheckInterval;
             spDeleteExpiredDocumentsUri = UriFactory.CreateStoredProcedureUri(storage.Options.DatabaseName, storage.Options.CollectionName, "deleteExpiredDocuments");
         }
 
@@ -41,7 +40,7 @@ namespace Hangfire.Azure
                     task.Wait(cancellationToken);
                 }
 
-                cancellationToken.WaitHandle.WaitOne(checkInterval);
+                cancellationToken.WaitHandle.WaitOne(storage.Options.ExpirationCheckInterval);
             }
         }
     }

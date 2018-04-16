@@ -3,10 +3,11 @@ using System.Net;
 using System.Linq;
 using System.Threading.Tasks;
 
-using Hangfire.Azure.Documents;
 using Microsoft.Azure.Documents;
-using Hangfire.Azure.Documents.Helper;
 using Microsoft.Azure.Documents.Client;
+
+using Hangfire.Azure.Documents;
+using Hangfire.Azure.Documents.Helper;
 
 namespace Hangfire.Azure
 {
@@ -33,7 +34,7 @@ namespace Hangfire.Azure
             {
                 SqlQuerySpec sql = new SqlQuerySpec
                 {
-                    QueryText = "SELECT TOP 1 1 FROM c WHERE c.name = @name AND c.type = @type",
+                    QueryText = "SELECT TOP 1 1 FROM doc WHERE doc.type = @type AND doc.name = @name",
                     Parameters = new SqlParameterCollection
                     {
                         new SqlParameter("@name", name),

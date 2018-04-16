@@ -1,7 +1,7 @@
 ﻿using System;
+
 // ReSharper disable MemberCanBePrivate.Global
 // ReSharper disable AutoPropertyCanBeMadeGetOnly.Global
-
 namespace Hangfire.Azure
 {
     /// <summary>
