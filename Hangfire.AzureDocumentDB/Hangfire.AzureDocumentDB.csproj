@@ -35,7 +35,6 @@
         <PackageReference Include="System.ValueTuple" Version="4.4.0" />
     </ItemGroup>
     <ItemGroup>
-        <EmbeddedResource Include="StoredProcedure\deleteDocumentIfExists.js" />
         <EmbeddedResource Include="StoredProcedure\deleteExpiredDocuments.js" />
     </ItemGroup>
     <ItemGroup>

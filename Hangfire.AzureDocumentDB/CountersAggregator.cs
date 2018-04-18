@@ -20,16 +20,11 @@ namespace Hangfire.Azure
     {
         private static readonly ILog logger = LogProvider.For<CountersAggregator>();
         private const string DISTRIBUTED_LOCK_KEY = "countersaggragator";
-        private static readonly TimeSpan defaultLockTimeout = TimeSpan.FromMinutes(5);
+        private static readonly TimeSpan defaultLockTimeout = TimeSpan.FromMinutes(2);
         private readonly DocumentDbStorage storage;
         private readonly FeedOptions queryOptions = new FeedOptions { MaxItemCount = 1000 };
-        private readonly Uri spDeleteDocumentIfExistsUri;
 
-        public CountersAggregator(DocumentDbStorage storage)
-        {
-            this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
-            spDeleteDocumentIfExistsUri = UriFactory.CreateStoredProcedureUri(storage.Options.DatabaseName, storage.Options.CollectionName, "deleteDocumentIfExists");
-        }
+        public CountersAggregator(DocumentDbStorage storage) => this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
 
         public void Execute(CancellationToken cancellationToken)
         {
@@ -78,9 +73,13 @@ namespace Hangfire.Azure
                         {
                             if (t.Result.StatusCode == HttpStatusCode.Created || t.Result.StatusCode == HttpStatusCode.OK)
                             {
-                                List<string> deleteCountersr = rawCounters.Where(c => c.Key == key).Select(c => c.Id).ToList();
-                                Task<StoredProcedureResponse<bool>> procedureTask = storage.Client.ExecuteStoredProcedureAsync<bool>(spDeleteDocumentIfExistsUri, deleteCountersr);
-                                procedureTask.Wait(cancellationToken);
+                                string[] deleteCounterIds = rawCounters.Where(c => c.Key == key).Select(c => c.Id).ToArray();
+                                Array.ForEach(deleteCounterIds, id =>
+                                {
+                                    Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, id);
+                                    storage.Client.DeleteDocumentAsync(uri).Wait(cancellationToken);
+                                });
+                                logger.Trace($"Total {deleteCounterIds.Length} records from the 'Counter:{aggregated.Key}' were aggregated.");
                             }
                         }, cancellationToken, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Current);
 
