@@ -13,7 +13,7 @@ using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 
 using Hangfire.Azure.Queue;
-using Hangfire.Azure.Documents.Json;
+using Newtonsoft.Json.Serialization;
 
 namespace Hangfire.Azure
 {
@@ -49,7 +49,10 @@ namespace Hangfire.Azure
             {
                 NullValueHandling = NullValueHandling.Ignore,
                 DateTimeZoneHandling = DateTimeZoneHandling.Utc,
-                ContractResolver = new DocumentContractResolver()
+                ContractResolver = new CamelCasePropertyNamesContractResolver
+                {
+                    NamingStrategy = new CamelCaseNamingStrategy(false, false)
+                }
             };
 
             ConnectionPolicy connectionPolicy = ConnectionPolicy.Default;
