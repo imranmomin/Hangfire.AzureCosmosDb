@@ -7,8 +7,6 @@ using Hangfire.Storage;
 using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 
-using Hangfire.Azure.Documents.Helper;
-
 namespace Hangfire.Azure.Queue
 {
     internal class JobQueue : IPersistentJobQueue
@@ -67,7 +65,7 @@ namespace Hangfire.Azure.Queue
                 CreatedOn = DateTime.UtcNow
             };
 
-            Task<ResourceResponse<Document>> task = storage.Client.CreateDocumentWithRetriesAsync(storage.CollectionUri, data);
+            Task<ResourceResponse<Document>> task = storage.Client.CreateDocumentAsync(storage.CollectionUri, data);
             task.Wait();
         }
     }

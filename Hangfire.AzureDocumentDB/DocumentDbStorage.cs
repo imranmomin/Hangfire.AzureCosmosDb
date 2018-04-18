@@ -53,7 +53,15 @@ namespace Hangfire.Azure
             };
 
             ConnectionPolicy connectionPolicy = ConnectionPolicy.Default;
+            connectionPolicy.ConnectionMode = ConnectionMode.Direct;
+            connectionPolicy.ConnectionProtocol = Protocol.Tcp;
             connectionPolicy.RequestTimeout = Options.RequestTimeout;
+            connectionPolicy.RetryOptions = new RetryOptions
+            {
+                MaxRetryWaitTimeInSeconds = 10,
+                MaxRetryAttemptsOnThrottledRequests = 5
+            };
+
             Client = new DocumentClient(new Uri(url), authSecret, settings, connectionPolicy);
             Task task = Client.OpenAsync();
             Task continueTask = task.ContinueWith(t => Initialize(), TaskContinuationOptions.OnlyOnRanToCompletion);

@@ -53,7 +53,7 @@ namespace Hangfire.Azure
                     Value = -1
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
@@ -73,7 +73,7 @@ namespace Hangfire.Azure
                     ExpireOn = DateTime.UtcNow.Add(expireIn)
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
@@ -91,7 +91,7 @@ namespace Hangfire.Azure
                     Value = 1
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
@@ -111,7 +111,7 @@ namespace Hangfire.Azure
                     ExpireOn = DateTime.UtcNow.Add(expireIn)
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
@@ -188,7 +188,7 @@ namespace Hangfire.Azure
                     Data = state.SerializeData()
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
@@ -285,7 +285,7 @@ namespace Hangfire.Azure
                     Value = value
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }

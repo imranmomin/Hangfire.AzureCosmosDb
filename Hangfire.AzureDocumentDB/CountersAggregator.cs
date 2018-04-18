@@ -11,7 +11,6 @@ using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 
 using Hangfire.Azure.Documents;
-using Hangfire.Azure.Documents.Helper;
 
 namespace Hangfire.Azure
 {
@@ -73,7 +72,7 @@ namespace Hangfire.Azure
                             aggregated.ExpireOn = data.ExpireOn;
                         }
 
-                        Task<ResourceResponse<Document>> task = storage.Client.UpsertDocumentWithRetriesAsync(storage.CollectionUri, aggregated);
+                        Task<ResourceResponse<Document>> task = storage.Client.UpsertDocumentAsync(storage.CollectionUri, aggregated);
 
                         Task continueTask = task.ContinueWith(t =>
                         {

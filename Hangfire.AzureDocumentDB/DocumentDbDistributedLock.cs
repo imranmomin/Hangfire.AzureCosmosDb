@@ -7,7 +7,6 @@ using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 
 using Hangfire.Azure.Documents;
-using Hangfire.Azure.Documents.Helper;
 
 namespace Hangfire.Azure
 {
@@ -47,7 +46,7 @@ namespace Hangfire.Azure
                 if (exists == false)
                 {
                     Lock @lock = new Lock { Name = name, ExpireOn = DateTime.UtcNow.Add(timeout) };
-                    Task<ResourceResponse<Document>> task = storage.Client.CreateDocumentWithRetriesAsync(storage.CollectionUri, @lock);
+                    Task<ResourceResponse<Document>> task = storage.Client.CreateDocumentAsync(storage.CollectionUri, @lock);
                     Task continueTask = task.ContinueWith(t =>
                     {
                         if (t.Result.StatusCode == HttpStatusCode.Created)

@@ -55,7 +55,7 @@ namespace Hangfire.Azure
                 }).ToArray()
             };
 
-            Task<ResourceResponse<Document>> task = Storage.Client.CreateDocumentWithRetriesAsync(Storage.CollectionUri, entityJob);
+            Task<ResourceResponse<Document>> task = Storage.Client.CreateDocumentAsync(Storage.CollectionUri, entityJob);
             task.Wait();
 
             if (task.Result.StatusCode == HttpStatusCode.Created || task.Result.StatusCode == HttpStatusCode.OK)
