@@ -39,7 +39,7 @@ namespace Hangfire.Azure
         public DocumentDbStorageOptions()
         {
             RequestTimeout = TimeSpan.FromSeconds(30);
-            ExpirationCheckInterval = TimeSpan.FromMinutes(5);
+            ExpirationCheckInterval = TimeSpan.FromMinutes(2);
             CountersAggregateInterval = TimeSpan.FromMinutes(1);
             QueuePollInterval = TimeSpan.FromSeconds(2);
         }
