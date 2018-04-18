@@ -9,7 +9,7 @@ function deleteExpiredDocuments(docType, expireOn) {
     var response = context.getResponse();
 
     var result = collection.filter(function (doc) {
-        return doc.type === type && doc.expire_on <= expireOn;
+        return doc.type === docType && doc.expire_on <= expireOn;
     }, function (err, documents) {
         response.setBody(0);
         if (err) throw err;
