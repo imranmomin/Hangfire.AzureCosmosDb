@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Net;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,16 +14,10 @@ namespace Hangfire.Azure.Queue
     {
         private readonly DocumentDbStorage storage;
         private const string DISTRIBUTED_LOCK_KEY = "locks:job:dequeue";
-        private readonly TimeSpan defaultLockTimeout = TimeSpan.FromMinutes(1);
+        private readonly TimeSpan defaultLockTimeout = TimeSpan.FromSeconds(10);
         private readonly object syncLock = new object();
-        private readonly FeedOptions queryOptions = new FeedOptions { MaxItemCount = 1 };
-        private readonly Uri spDeleteDocumentIfExistsUri;
 
-        public JobQueue(DocumentDbStorage storage)
-        {
-            this.storage = storage;
-            spDeleteDocumentIfExistsUri = UriFactory.CreateStoredProcedureUri(storage.Options.DatabaseName, storage.Options.CollectionName, "deleteDocumentIfExists");
-        }
+        public JobQueue(DocumentDbStorage storage) => this.storage = storage;
 
         public IFetchedJob Dequeue(string[] queues, CancellationToken cancellationToken)
         {
@@ -36,17 +31,30 @@ namespace Hangfire.Azure.Queue
                     {
                         string queue = queues.ElementAt(index);
 
-                        Documents.Queue data = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, queryOptions)
-                            .Where(q => q.DocumentType == Documents.DocumentTypes.Queue && q.Name == queue)
-                            .OrderBy(q => q.CreatedOn)
+                        SqlQuerySpec sql = new SqlQuerySpec
+                        {
+                            QueryText = "SELECT TOP 1 * FROM doc WHERE doc.type = @type AND doc.name = @name AND NOT is_defined(doc.fetched_at)",
+                            Parameters = new SqlParameterCollection
+                            {
+                                new SqlParameter("@type", Documents.DocumentTypes.Queue),
+                                new SqlParameter("@name", queue)
+                            }
+                        };
+
+                        Documents.Queue data = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, sql, new FeedOptions { MaxItemCount = 1 })
                             .AsEnumerable()
                             .FirstOrDefault();
 
                         if (data != null)
                         {
-                            Task<StoredProcedureResponse<bool>> task = storage.Client.ExecuteStoredProcedureAsync<bool>(spDeleteDocumentIfExistsUri, data.Id);
+                            // mark the document
+                            data.FetchedAt = DateTime.UtcNow;
+
+                            Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, data.Id);
+                            Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentAsync(uri, data);
                             task.Wait(cancellationToken);
-                            if (task.Result.Response) return new FetchedJob(storage, data);
+
+                            return new FetchedJob(storage, data);
                         }
                     }
                 }

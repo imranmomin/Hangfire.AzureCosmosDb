@@ -30,8 +30,8 @@ namespace Hangfire.Azure.Queue
 
         public void RemoveFromQueue()
         {
-            var spDeleteDocumentIfExistsUri = UriFactory.CreateStoredProcedureUri(storage.Options.DatabaseName, storage.Options.CollectionName, "deleteDocumentIfExists");
-            Task<StoredProcedureResponse<bool>> task = storage.Client.ExecuteStoredProcedureAsync<bool>(spDeleteDocumentIfExistsUri, Id);
+            Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, Id);
+            Task<ResourceResponse<Document>> task = storage.Client.DeleteDocumentAsync(uri);
             task.Wait();
         }
 
@@ -39,13 +39,12 @@ namespace Hangfire.Azure.Queue
         {
             Documents.Queue data = new Documents.Queue
             {
-                Id = Id,
                 Name = Queue,
                 JobId = JobId,
                 CreatedOn = DateTime.UtcNow
             };
 
-            Task<ResourceResponse<Document>> task = storage.Client.UpsertDocumentAsync(storage.CollectionUri, data);
+            Task<ResourceResponse<Document>> task = storage.Client.CreateDocumentAsync(storage.CollectionUri, data);
             task.Wait();
         }
     }

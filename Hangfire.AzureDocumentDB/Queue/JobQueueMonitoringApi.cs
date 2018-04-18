@@ -42,7 +42,7 @@ namespace Hangfire.Azure.Queue
         {
             SqlQuerySpec sql = new SqlQuerySpec
             {
-                QueryText = "SELECT VALUE COUNT(1) FROM c WHERE c.name = @name AND c.type = @type",
+                QueryText = "SELECT VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.name = @name",
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@name", queue),
