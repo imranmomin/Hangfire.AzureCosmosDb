@@ -7,6 +7,7 @@ using Hangfire.Logging;
 using Microsoft.Azure.Documents.Client;
 
 using Hangfire.Azure.Documents;
+using Hangfire.Azure.Documents.Helper;
 
 namespace Hangfire.Azure
 {
@@ -35,8 +36,9 @@ namespace Hangfire.Azure
 
                 using (new DocumentDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage))
                 {
-                    Task<StoredProcedureResponse<int>> procedureTask = storage.Client.ExecuteStoredProcedureAsync<int>(spDeleteExpiredDocumentsUri, type);
-                    Task task = procedureTask.ContinueWith(t => logger.Trace($"Outdated records removed {t.Result.Response} records from the '{type}' document."), TaskContinuationOptions.OnlyOnRanToCompletion);
+                    int expireOn = DateTime.UtcNow.ToEpoch();
+                    Task<StoredProcedureResponse<int>> procedureTask = storage.Client.ExecuteStoredProcedureAsync<int>(spDeleteExpiredDocumentsUri, (int)type, expireOn);
+                    Task task = procedureTask.ContinueWith(t => logger.Trace($"Outdated {t.Result.Response} records removed from the '{type}' document."), TaskContinuationOptions.OnlyOnRanToCompletion);
                     task.Wait(cancellationToken);
                 }
 
