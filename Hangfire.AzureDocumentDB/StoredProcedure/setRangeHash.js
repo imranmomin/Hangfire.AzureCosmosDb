@@ -35,10 +35,10 @@ function setRangeHash(key, sources) {
     /**
      * Matched the source with the current hash document
      */
-    function match(documents, source) {
-        for (var index = 0; index < documents.length; index++) {
-            var doc = documents[index];
-            if (doc.field === source.field) {
+    function match(docs, source) {
+        for (var index = 0; index < docs.length; index++) {
+            var doc = docs[index];
+            if (doc.field === source.field && doc.key === source.key) {
                 source.id = doc.id;
                 break;
             }

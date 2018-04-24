@@ -209,6 +209,7 @@ namespace Hangfire.Azure
 
             return Storage.Client.CreateDocumentQuery<Set>(Storage.CollectionUri, queryOptions)
                 .Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
+                .OrderBy(s => s.CreatedOn)
                 .Select(c => c.Value)
                 .AsEnumerable()
                 .Skip(startingFrom).Take(endingAt)
@@ -447,6 +448,7 @@ namespace Hangfire.Azure
 
             return Storage.Client.CreateDocumentQuery<List>(Storage.CollectionUri, queryOptions)
                 .Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
+                .OrderByDescending(l => l.CreatedOn)
                 .Select(l => l.Value)
                 .AsEnumerable()
                 .ToList();
@@ -458,7 +460,7 @@ namespace Hangfire.Azure
 
             return Storage.Client.CreateDocumentQuery<List>(Storage.CollectionUri, queryOptions)
                 .Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
-                .OrderByDescending(l => l.ExpireOn)
+                .OrderByDescending(l => l.CreatedOn)
                 .Select(l => l.Value)
                 .AsEnumerable()
                 .Skip(startingFrom).Take(endingAt)

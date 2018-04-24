@@ -33,12 +33,13 @@ namespace Hangfire.Azure
 
             foreach (var tuple in tuples)
             {
-                long enqueueCount = EnqueuedCount(tuple.Queue);
+                (int? EnqueuedCount, int? FetchedCount) counters = tuple.Monitoring.GetEnqueuedAndFetchedCount(tuple.Queue);
                 JobList<EnqueuedJobDto> jobs = EnqueuedJobs(tuple.Queue, 0, 5);
+
                 queueJobs.Add(new QueueWithTopEnqueuedJobsDto
                 {
-                    Length = enqueueCount,
-                    Fetched = 0,
+                    Length = counters.EnqueuedCount ?? 0,
+                    Fetched = counters.FetchedCount ?? 0,
                     Name = tuple.Queue,
                     FirstJobs = jobs
                 });
@@ -183,7 +184,8 @@ namespace Hangfire.Azure
 
         public JobList<EnqueuedJobDto> EnqueuedJobs(string queue, int from, int perPage)
         {
-            return GetJobsOnQueue(queue, from, perPage, (state, job) => new EnqueuedJobDto
+            string queryText = "SELECT * FROM doc WHERE doc.type = @type AND doc.name = @name AND NOT is_defined(doc.fetched_at) ORDER BY doc.created_on";
+            return GetJobsOnQueue(queryText, queue, from, perPage, (state, job) => new EnqueuedJobDto
             {
                 Job = job,
                 State = state
@@ -192,7 +194,8 @@ namespace Hangfire.Azure
 
         public JobList<FetchedJobDto> FetchedJobs(string queue, int from, int perPage)
         {
-            return GetJobsOnQueue(queue, from, perPage, (state, job) => new FetchedJobDto
+            string queryText = "SELECT * FROM doc WHERE doc.type = @type AND doc.name = @name AND is_defined(doc.fetched_at) ORDER BY doc.created_on";
+            return GetJobsOnQueue(queryText, queue, from, perPage, (state, job) => new FetchedJobDto
             {
                 Job = job,
                 State = state
@@ -285,16 +288,24 @@ namespace Hangfire.Azure
             return new JobList<T>(jobs);
         }
 
-        private JobList<T> GetJobsOnQueue<T>(string queue, int from, int count, Func<string, Common.Job, T> selector)
+        private JobList<T> GetJobsOnQueue<T>(string queryText, string queue, int from, int count, Func<string, Common.Job, T> selector)
         {
             if (string.IsNullOrEmpty(queue)) throw new ArgumentNullException(nameof(queue));
-
             List<KeyValuePair<string, T>> jobs = new List<KeyValuePair<string, T>>();
 
-            List<Documents.Queue> queues = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, queryOptions)
-                .Where(q => q.DocumentType == DocumentTypes.Queue && q.Name == queue)
-                .OrderBy(q => q.CreatedOn)
+            SqlQuerySpec sql = new SqlQuerySpec
+            {
+                QueryText = queryText,
+                Parameters = new SqlParameterCollection
+                {
+                    new SqlParameter("@type", DocumentTypes.Queue),
+                    new SqlParameter("@name", queue)
+                }
+            };
+
+            List<Documents.Queue> queues = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, sql)
                 .AsEnumerable()
+                .OrderBy(q => q.CreatedOn)
                 .Skip(from).Take(count)
                 .ToList();
 
@@ -327,10 +338,19 @@ namespace Hangfire.Azure
 
             IPersistentJobQueueProvider provider = storage.QueueProviders.GetProvider(queue);
             IPersistentJobQueueMonitoringApi monitoringApi = provider.GetJobQueueMonitoringApi();
-            return monitoringApi.GetEnqueuedCount(queue);
+            (int? EnqueuedCount, int? FetchedCount) counters = monitoringApi.GetEnqueuedAndFetchedCount(queue);
+            return counters.EnqueuedCount ?? 0;
         }
 
-        public long FetchedCount(string queue) => EnqueuedCount(queue);
+        public long FetchedCount(string queue)
+        {
+            if (string.IsNullOrEmpty(queue)) throw new ArgumentNullException(nameof(queue));
+
+            IPersistentJobQueueProvider provider = storage.QueueProviders.GetProvider(queue);
+            IPersistentJobQueueMonitoringApi monitoringApi = provider.GetJobQueueMonitoringApi();
+            (int? EnqueuedCount, int? FetchedCount) counters = monitoringApi.GetEnqueuedAndFetchedCount(queue);
+            return counters.FetchedCount ?? 0;
+        }
 
         public long ScheduledCount() => GetNumberOfJobsByStateName(States.ScheduledState.StateName);
 
@@ -369,14 +389,28 @@ namespace Hangfire.Azure
 
         private Dictionary<DateTime, long> GetHourlyTimelineStats(string type)
         {
-            List<DateTime> dates = Enumerable.Range(0, 24).Select(x => DateTime.UtcNow.AddHours(-x)).ToList();
+            DateTime endDate = DateTime.UtcNow;
+            List<DateTime> dates = new List<DateTime>();
+            for (int i = 0; i < 24; i++)
+            {
+                dates.Add(endDate);
+                endDate = endDate.AddHours(-1);
+            }
+
             Dictionary<string, DateTime> keys = dates.ToDictionary(x => $"stats:{type}:{x:yyyy-MM-dd-HH}", x => x);
             return GetTimelineStats(keys);
         }
 
         private Dictionary<DateTime, long> GetDatesTimelineStats(string type)
         {
-            List<DateTime> dates = Enumerable.Range(0, 7).Select(x => DateTime.UtcNow.AddDays(-x)).ToList();
+            DateTime endDate = DateTime.UtcNow.Date;
+            List<DateTime> dates = new List<DateTime>();
+            for (int i = 0; i < 7; i++)
+            {
+                dates.Add(endDate);
+                endDate = endDate.AddDays(-1);
+            }
+
             Dictionary<string, DateTime> keys = dates.ToDictionary(x => $"stats:{type}:{x:yyyy-MM-dd}", x => x);
             return GetTimelineStats(keys);
         }

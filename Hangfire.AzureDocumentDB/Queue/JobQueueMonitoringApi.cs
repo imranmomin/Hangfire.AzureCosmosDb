@@ -57,15 +57,58 @@ namespace Hangfire.Azure.Queue
 
         public IEnumerable<string> GetEnqueuedJobIds(string queue, int from, int perPage)
         {
-            return storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri)
-                .Where(q => q.Name == queue && q.DocumentType == DocumentTypes.Queue)
-                .OrderBy(q => q.CreatedOn)
-                .Select(q => q.JobId)
+            SqlQuerySpec sql = new SqlQuerySpec
+            {
+                QueryText = "SELECT VALUE doc.job_id FROM doc WHERE doc.type = @type AND doc.name = @name AND NOT is_defined(doc.fetched_at) ORDER BY doc.created_on",
+                Parameters = new SqlParameterCollection
+                {
+                    new SqlParameter("@type", DocumentTypes.Queue),
+                    new SqlParameter("@name", queue)
+                }
+            };
+
+            return storage.Client.CreateDocumentQuery<string>(storage.CollectionUri, sql)
                 .AsEnumerable()
-                .Skip(from).Take(perPage);
+                .Skip(from + 1).Take(perPage + 1);
         }
 
-        public IEnumerable<string> GetFetchedJobIds(string queue, int from, int perPage) => GetEnqueuedJobIds(queue, from, perPage);
+        public IEnumerable<string> GetFetchedJobIds(string queue, int from, int perPage)
+        {
+            SqlQuerySpec sql = new SqlQuerySpec
+            {
+                QueryText = "SELECT VALUE doc.job_id FROM doc WHERE doc.type = @type AND doc.name = @name AND is_defined(doc.fetched_at) ORDER BY doc.created_on",
+                Parameters = new SqlParameterCollection
+                {
+                    new SqlParameter("@type", DocumentTypes.Queue),
+                    new SqlParameter("@name", queue)
+                }
+            };
+
+            return storage.Client.CreateDocumentQuery<string>(storage.CollectionUri, sql)
+                .AsEnumerable()
+                .Skip(from + 1).Take(perPage + 1);
+        }
+
+        public (int? EnqueuedCount, int? FetchedCount) GetEnqueuedAndFetchedCount(string queue)
+        {
+            SqlQuerySpec sql = new SqlQuerySpec
+            {
+                QueryText = "SELECT * FROM doc WHERE doc.type = @type AND doc.name = @name",
+                Parameters = new SqlParameterCollection
+                {
+                    new SqlParameter("@type", DocumentTypes.Queue),
+                    new SqlParameter("@name", queue)
+                }
+            };
+
+            (int Fetched, int Enqueued) result = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, sql)
+                  .AsEnumerable()
+                  .GroupBy(q => q.Name)
+                  .Select(v => (Fetched: v.Sum(q => q.FetchedAt.HasValue ? 1 : 0), Enqueued: v.Sum(q => q.FetchedAt.HasValue ? 0 : 1)))
+                  .FirstOrDefault();
+
+            return result;
+        }
 
     }
 }
