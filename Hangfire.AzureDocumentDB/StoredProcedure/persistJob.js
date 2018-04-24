@@ -1,28 +1,28 @@
-﻿/**
+﻿// ReSharper disable UseOfImplicitGlobalInFunctionScope
+
+/**
  * Expires a job
  * @param {string} id - the job id
- * @returns {boolean} true if persisted; else false 
  */
 function persistJob(id) {
-    var context = getContext();
-    var collection = context.getCollection();
-    var response = context.getResponse();
-
-    var result = collection.filter(function (doc) { return doc.id === id; }, function (err, documents) {
-        response.setBody(false);
+    var result = __.filter(function (doc) { return doc.id === id; }, function (err, docs) {
         if (err) throw err;
+        if (docs.length === 0) throw new Error("No job found for id :" + id);
+        if (docs.length > 1) throw new Error("Found more than one job for id :" + id);
 
-        if (documents.length === 0) throw new ("No job found for id :" + id);
-        if (documents.length > 1) throw new ("Found more than one job for id :" + id);
-       
-        var job = documents[0];
-        if (job.expire_on) {
-            delete job.expire_on;
-            collection.replaceDocument(job._self, job);
+        var doc = docs[0];
+        if (doc.expire_on) {
+            delete doc.expire_on;
+
+            var isAccepted = __.replaceDocument(doc._self, doc, function (error) {
+                if (error) throw error;
+            });
+
+            if (!isAccepted) throw new Error("Failed to presist the job");
         }
 
-        response.setBody(true);
+        getContext().getResponse().setBody(true);
     });
 
-    if (!result.isAccepted) throw new ("The call was not accepted");
+    if (!result.isAccepted) throw new Error("The call was not accepted");
 }
