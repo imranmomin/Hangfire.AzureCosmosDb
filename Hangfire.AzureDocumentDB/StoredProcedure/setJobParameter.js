@@ -1,31 +1,26 @@
-﻿/**
+﻿// ReSharper disable UseOfImplicitGlobalInFunctionScope
+
+/**
  * Set the parameter for the job
  * @param {string} id - the job id
  * @param {string} name - the name of the parameter
  * @param {string} value - the value of the parameter
- * @returns {boolean} true if success; else false 
  */
 function setJobParameter(id, name, value) {
-    var context = getContext();
-    var collection = context.getCollection();
-    var response = context.getResponse();
-
-    var result = collection.filter(function (doc) {
+    var result = __.filter(function (doc) {
         return doc.type === 2 && doc.id === id;
-    }, function (err, documents) {
-        response.setBody(false);
+    }, function (err, docs) {
         if (err) throw err;
+        if (docs.length === 0) throw new Error("No job found for id :" + id);
+        if (docs.length > 1) throw new Error("Found more than one job for id :" + id);
 
-        if (documents.length === 0) throw new ("No job found for id :" + id);
-        if (documents.length > 1) throw new ("Found more than one job for id :" + id);
-
-        var job = documents[0];
-        if (!job.parameters) {
-            job.parameters = [{ name: name, value: value }];
+        var doc = docs[0];
+        if (!doc.parameters) {
+            doc.parameters = [{ name: name, value: value }];
         } else {
             var parameter = null;
-            for (var index = 0; index < job.parameters - 1; index++) {
-                parameter = job.parameters[index];
+            for (var index = 0; index < doc.parameters - 1; index++) {
+                parameter = doc.parameters[index];
                 if (parameter.name === name) {
                     parameter.value = value;
                     break;
@@ -34,14 +29,17 @@ function setJobParameter(id, name, value) {
             }
 
             if (!parameter) {
-                job.parameters.push({ name: name, value: value });
+                doc.parameters.push({ name: name, value: value });
             }
         }
 
-        collection.replaceDocument(job._self, job);
+        var isAccepted = __.replaceDocument(doc._self, doc, function(error) {
+            if (error) throw error;
+        });
 
-        response.setBody(true);
+        if (!isAccepted) throw new Error("Failed to set the parameter");
+        else getContext().getResponse().setBody(true);
     });
 
-    if (!result.isAccepted) throw new ("The call was not accepted");
+    if (!result.isAccepted) throw new Error("The call was not accepted");
 }

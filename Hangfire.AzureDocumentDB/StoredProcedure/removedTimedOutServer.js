@@ -1,26 +1,29 @@
-﻿/**
+﻿// ReSharper disable UseOfImplicitGlobalInFunctionScope
+
+/**
  * Remove TimedOut Server
  * @param {string} id - the server id
- * @returns {number} number of servers removed 
  */
 function removedTimedOutServer(lastHeartbeat) {
-    var context = getContext();
-    var collection = context.getCollection();
-    var response = context.getResponse();
-
-    var result = collection.filter(function (doc) {
+    var result = __.filter(function (doc) {
         return doc.type === 1 && doc.last_heartbeat < lastHeartbeat;
-    }, function (err, documents) {
-        response.setBody(0);
+    }, function (err, docs) {
         if (err) throw err;
 
-        for (var index = 0; index < documents.length; index++) {
-            var self = documents[index]._self;
-            collection.deleteDocument(self);
+        var removed = 0;
+        for (var index = 0; index < docs.length; index++) {
+            var doc = docs[index];
+
+            var isAccepted = __.deleteDocument(doc._self, function (error) {
+                if (error) throw error;
+            });
+
+            if (!isAccepted) throw new Error("Failed to remove timeout server");
+            else removed += 1;
         }
-        
-        response.setBody(documents.length);
+
+        getContext().getResponse().setBody(removed);
     });
 
-    if (!result.isAccepted) throw new ("The call was not accepted");
+    if (!result.isAccepted) throw new Error("The call was not accepted");
 }

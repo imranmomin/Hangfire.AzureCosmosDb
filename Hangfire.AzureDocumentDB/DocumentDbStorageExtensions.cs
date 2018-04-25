@@ -2,6 +2,7 @@
 using Hangfire.Azure;
 
 // ReSharper disable UnusedMember.Global
+// ReSharper disable once CheckNamespace
 namespace Hangfire
 {
     /// <summary>

@@ -1,9 +1,11 @@
-﻿using System.Threading.Tasks;
+﻿using System;
+using System.Threading.Tasks;
 
 using Hangfire.Storage;
 using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 
+// ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Queue
 {
     internal class FetchedJob : IFetchedJob
@@ -24,14 +26,12 @@ namespace Hangfire.Azure.Queue
 
         private string Queue { get; }
 
-        public void Dispose()
-        {
-        }
+        public void Dispose() { }
 
         public void RemoveFromQueue()
         {
-            var spDeleteDocumentIfExistsUri = UriFactory.CreateStoredProcedureUri(storage.Options.DatabaseName, storage.Options.CollectionName, "deleteDocumentIfExists");
-            Task<StoredProcedureResponse<bool>> task = storage.Client.ExecuteStoredProcedureAsync<bool>(spDeleteDocumentIfExistsUri, Id);
+            Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, Id);
+            Task<ResourceResponse<Document>> task = storage.Client.DeleteDocumentAsync(uri);
             task.Wait();
         }
 
@@ -41,8 +41,11 @@ namespace Hangfire.Azure.Queue
             {
                 Id = Id,
                 Name = Queue,
-                JobId = JobId
+                JobId = JobId,
+                CreatedOn = DateTime.UtcNow,
+                FetchedAt = null
             };
+
             Task<ResourceResponse<Document>> task = storage.Client.UpsertDocumentAsync(storage.CollectionUri, data);
             task.Wait();
         }

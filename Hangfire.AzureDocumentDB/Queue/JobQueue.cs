@@ -1,12 +1,12 @@
 ﻿using System;
+using System.Net;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Azure.Documents.Client;
-
+using Hangfire.Azure.Documents.Helper;
 using Hangfire.Storage;
 using Microsoft.Azure.Documents;
-using Hangfire.Azure.Documents.Helper;
+using Microsoft.Azure.Documents.Client;
 
 namespace Hangfire.Azure.Queue
 {
@@ -14,18 +14,11 @@ namespace Hangfire.Azure.Queue
     {
         private readonly DocumentDbStorage storage;
         private const string DISTRIBUTED_LOCK_KEY = "locks:job:dequeue";
-        private readonly TimeSpan defaultLockTimeout = TimeSpan.FromMinutes(1);
-        private readonly TimeSpan checkInterval;
+        private readonly TimeSpan defaultLockTimeout = TimeSpan.FromSeconds(10);
+        private readonly TimeSpan invisibilityTimeout = TimeSpan.FromMinutes(30);
         private readonly object syncLock = new object();
-        private readonly FeedOptions queryOptions = new FeedOptions { MaxItemCount = 1 };
-        private readonly Uri spDeleteDocumentIfExistsUri;
 
-        public JobQueue(DocumentDbStorage storage)
-        {
-            this.storage = storage;
-            checkInterval = storage.Options.QueuePollInterval;
-            spDeleteDocumentIfExistsUri = UriFactory.CreateStoredProcedureUri(storage.Options.DatabaseName, storage.Options.CollectionName, "deleteDocumentIfExists");
-        }
+        public JobQueue(DocumentDbStorage storage) => this.storage = storage;
 
         public IFetchedJob Dequeue(string[] queues, CancellationToken cancellationToken)
         {
@@ -38,26 +31,39 @@ namespace Hangfire.Azure.Queue
                     using (new DocumentDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage))
                     {
                         string queue = queues.ElementAt(index);
+                        int invisibilityTimeoutEpoch = DateTime.UtcNow.Add(invisibilityTimeout.Negate()).ToEpoch();
 
-                        Documents.Queue data = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, queryOptions)
-                            .Where(q => q.Name == queue && q.DocumentType == Documents.DocumentTypes.Queue)
+                        SqlQuerySpec sql = new SqlQuerySpec
+                        {
+                            QueryText = "SELECT TOP 1 * FROM doc WHERE doc.type = @type AND doc.name = @name AND " +
+                                        "((NOT is_defined(doc.fetched_at)) OR (is_defined(doc.fetched_at) AND doc.fetched_at < @timeout))",
+                            Parameters = new SqlParameterCollection
+                            {
+                                new SqlParameter("@type", Documents.DocumentTypes.Queue),
+                                new SqlParameter("@name", queue),
+                                new SqlParameter("@timeout", invisibilityTimeoutEpoch)
+                            }
+                        };
+
+                        Documents.Queue data = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, sql, new FeedOptions { MaxItemCount = 1 })
                             .AsEnumerable()
                             .FirstOrDefault();
 
-                        if (data != null)
+                        if (data != null && !string.IsNullOrEmpty(data.JobId))
                         {
-                            Task<StoredProcedureResponse<bool>> task = storage.Client.ExecuteStoredProcedureAsync<bool>(spDeleteDocumentIfExistsUri, data.Id);
+                            // mark the document
+                            data.FetchedAt = DateTime.UtcNow;
+
+                            Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, data.Id);
+                            Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentAsync(uri, data);
                             task.Wait(cancellationToken);
 
-                            if (task.Result.Response)
-                            {
-                                return new FetchedJob(storage, data);
-                            }
+                            return new FetchedJob(storage, data);
                         }
                     }
                 }
 
-                Thread.Sleep(checkInterval);
+                Thread.Sleep(storage.Options.QueuePollInterval);
                 index = (index + 1) % queues.Length;
             }
         }
@@ -67,10 +73,11 @@ namespace Hangfire.Azure.Queue
             Documents.Queue data = new Documents.Queue
             {
                 Name = queue,
-                JobId = jobId
+                JobId = jobId,
+                CreatedOn = DateTime.UtcNow
             };
 
-            Task<ResourceResponse<Document>> task = storage.Client.CreateDocumentWithRetriesAsync(storage.CollectionUri, data);
+            Task<ResourceResponse<Document>> task = storage.Client.CreateDocumentAsync(storage.CollectionUri, data);
             task.Wait();
         }
     }

@@ -1,28 +1,28 @@
-﻿/**
+﻿// ReSharper disable UseOfImplicitGlobalInFunctionScope
+
+/**
  * Heartbest Server
  * @param {string} id - the server id
  * @param {number} heartbeat = the epoc time
- * @returns {boolean} true if success; else false 
  */
 function heartbeatServer(id, heartbeat) {
-    var context = getContext();
-    var collection = context.getCollection();
-    var response = context.getResponse();
-
-    var result = collection.filter(function (doc) {
+    var result = __.filter(function (doc) {
         return doc.type === 1 && doc.server_id === id;
-    }, function (err, documents) {
-        response.setBody(false);
+    }, function (err, docs) {
         if (err) throw err;
+        if (docs.length === 0) throw new Error("No server found for id :" + id);
+        if (docs.length > 1) throw new Error("Found more than one server for :" + id);
 
-        if (documents.length === 0) throw new ("No server found for id :" + id);
-        if (documents.length > 1) throw new ("Found more than one server for :" + id);
+        var doc = docs[0];
+        doc.last_heartbeat = heartbeat;
 
-        var server = documents[0];
-        server.last_heartbeat = heartbeat;
-        collection.replaceDocument(server._self, server);
-        response.setBody(true);
+        var isAccepted = __.replaceDocument(doc._self, doc, function(error) {
+            if (error) throw error;
+        });
+
+        if (!isAccepted) throw new Error("Failed to update the sever heartbeat");
+        else getContext().getResponse().setBody(true);
     });
 
-    if (!result.isAccepted) throw new ("The call was not accepted");
+    if (!result.isAccepted) throw new Error("The call was not accepted");
 }

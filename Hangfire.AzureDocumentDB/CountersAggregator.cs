@@ -7,10 +7,10 @@ using System.Collections.Generic;
 
 using Hangfire.Server;
 using Hangfire.Logging;
-using Hangfire.Azure.Documents;
 using Microsoft.Azure.Documents;
-using Hangfire.Azure.Documents.Helper;
 using Microsoft.Azure.Documents.Client;
+
+using Hangfire.Azure.Documents;
 
 namespace Hangfire.Azure
 {
@@ -20,18 +20,11 @@ namespace Hangfire.Azure
     {
         private static readonly ILog logger = LogProvider.For<CountersAggregator>();
         private const string DISTRIBUTED_LOCK_KEY = "countersaggragator";
-        private static readonly TimeSpan defaultLockTimeout = TimeSpan.FromMinutes(5);
-        private readonly TimeSpan checkInterval;
+        private static readonly TimeSpan defaultLockTimeout = TimeSpan.FromMinutes(2);
         private readonly DocumentDbStorage storage;
         private readonly FeedOptions queryOptions = new FeedOptions { MaxItemCount = 1000 };
-        private readonly Uri spDeleteDocumentIfExistsUri;
 
-        public CountersAggregator(DocumentDbStorage storage)
-        {
-            this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
-            checkInterval = storage.Options.CountersAggregateInterval;
-            spDeleteDocumentIfExistsUri = UriFactory.CreateStoredProcedureUri(storage.Options.DatabaseName, storage.Options.CollectionName, "deleteDocumentIfExists");
-        }
+        public CountersAggregator(DocumentDbStorage storage) => this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
 
         public void Execute(CancellationToken cancellationToken)
         {
@@ -45,7 +38,7 @@ namespace Hangfire.Azure
                     .ToList();
 
                 Dictionary<string, (int Sum, DateTime? ExpireOn)> counters = rawCounters.GroupBy(c => c.Key)
-                    .ToDictionary(k => k.Key, v=> (Sum: v.Sum(c => c.Value), ExpireOn: v.Max(c => c.ExpireOn)));
+                    .ToDictionary(k => k.Key, v => (Sum: v.Sum(c => c.Value), ExpireOn: v.Max(c => c.ExpireOn)));
 
                 Array.ForEach(counters.Keys.ToArray(), key =>
                 {
@@ -54,7 +47,7 @@ namespace Hangfire.Azure
                     if (counters.TryGetValue(key, out var data))
                     {
                         Counter aggregated = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri, queryOptions)
-                             .Where(c => c.Key == key && c.Type == CounterTypes.Aggregrate && c.DocumentType == DocumentTypes.Counter)
+                             .Where(c => c.Type == CounterTypes.Aggregrate && c.DocumentType == DocumentTypes.Counter && c.Key == key)
                              .AsEnumerable()
                              .FirstOrDefault();
 
@@ -74,15 +67,19 @@ namespace Hangfire.Azure
                             aggregated.ExpireOn = data.ExpireOn;
                         }
 
-                        Task<ResourceResponse<Document>> task = storage.Client.UpsertDocumentWithRetriesAsync(storage.CollectionUri, aggregated);
+                        Task<ResourceResponse<Document>> task = storage.Client.UpsertDocumentAsync(storage.CollectionUri, aggregated);
 
                         Task continueTask = task.ContinueWith(t =>
                         {
                             if (t.Result.StatusCode == HttpStatusCode.Created || t.Result.StatusCode == HttpStatusCode.OK)
                             {
-                                List<string> deleteCountersr = rawCounters.Where(c => c.Key == key).Select(c => c.Id).ToList();
-                                Task<StoredProcedureResponse<bool>> procedureTask = storage.Client.ExecuteStoredProcedureAsync<bool>(spDeleteDocumentIfExistsUri, deleteCountersr);
-                                procedureTask.Wait(cancellationToken);
+                                string[] deleteCounterIds = rawCounters.Where(c => c.Key == key).Select(c => c.Id).ToArray();
+                                Array.ForEach(deleteCounterIds, id =>
+                                {
+                                    Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, id);
+                                    storage.Client.DeleteDocumentAsync(uri).Wait(cancellationToken);
+                                });
+                                logger.Trace($"Total {deleteCounterIds.Length} records from the 'Counter:{aggregated.Key}' were aggregated.");
                             }
                         }, cancellationToken, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Current);
 
@@ -92,9 +89,9 @@ namespace Hangfire.Azure
             }
 
             logger.Trace("Records from the 'Counter' table aggregated.");
-            cancellationToken.WaitHandle.WaitOne(checkInterval);
+            cancellationToken.WaitHandle.WaitOne(storage.Options.CountersAggregateInterval);
         }
-        
+
         public override string ToString() => GetType().ToString();
 
     }

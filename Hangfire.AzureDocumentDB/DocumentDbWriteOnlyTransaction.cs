@@ -5,11 +5,12 @@ using System.Collections.Generic;
 
 using Hangfire.States;
 using Hangfire.Storage;
+using Microsoft.Azure.Documents;
+using Microsoft.Azure.Documents.Client;
+
 using Hangfire.Azure.Queue;
 using Hangfire.Azure.Documents;
-using Microsoft.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
-using Microsoft.Azure.Documents.Client;
 
 namespace Hangfire.Azure
 {
@@ -52,7 +53,7 @@ namespace Hangfire.Azure
                     Value = -1
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
@@ -72,7 +73,7 @@ namespace Hangfire.Azure
                     ExpireOn = DateTime.UtcNow.Add(expireIn)
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
@@ -90,7 +91,7 @@ namespace Hangfire.Azure
                     Value = 1
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
@@ -110,7 +111,7 @@ namespace Hangfire.Azure
                     ExpireOn = DateTime.UtcNow.Add(expireIn)
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
@@ -187,7 +188,7 @@ namespace Hangfire.Azure
                     Data = state.SerializeData()
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
@@ -258,7 +259,7 @@ namespace Hangfire.Azure
                 {
                     Key = key,
                     Field = k.Key,
-                    Value = k.Value.ToEpoch()
+                    Value = k.Value.TryParseToEpoch()
                 }).ToArray();
 
                 Uri spSetRangeHashUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "setRangeHash");
@@ -284,7 +285,7 @@ namespace Hangfire.Azure
                     Value = value
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }

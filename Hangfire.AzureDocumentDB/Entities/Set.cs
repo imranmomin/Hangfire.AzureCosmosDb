@@ -1,5 +1,8 @@
-﻿using Newtonsoft.Json;
+﻿using System;
+using Newtonsoft.Json;
+using Microsoft.Azure.Documents;
 
+// ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents
 {
     internal class Set : DocumentBase
@@ -12,7 +15,11 @@ namespace Hangfire.Azure.Documents
 
         [JsonProperty("score")]
         public double? Score { get; set; }
-
+        
+        [JsonProperty("created_on")]
+        [JsonConverter(typeof(UnixDateTimeConverter))]
+        public DateTime CreatedOn { get; set; }
+        
         public override DocumentTypes DocumentType => DocumentTypes.Set;
     }
 }

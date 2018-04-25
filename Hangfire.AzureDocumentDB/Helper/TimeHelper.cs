@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Globalization;
 
+// ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents.Helper
 {
     internal static class TimeHelper
@@ -16,7 +17,7 @@ namespace Hangfire.Azure.Documents.Helper
 
         public static DateTime ToDateTime(this int totalSeconds) => epochDateTime.AddSeconds(totalSeconds);
 
-        public static string ToEpoch(this string s)
+        public static string TryParseToEpoch(this string s)
         {
             return DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime date)
                 ? date.ToEpoch().ToString(CultureInfo.InvariantCulture)

@@ -3,10 +3,11 @@ using System.Net;
 using System.Linq;
 using System.Threading.Tasks;
 
-using Hangfire.Azure.Documents;
 using Microsoft.Azure.Documents;
-using Hangfire.Azure.Documents.Helper;
 using Microsoft.Azure.Documents.Client;
+
+using Hangfire.Azure.Documents;
+using Hangfire.Azure.Documents.Helper;
 
 namespace Hangfire.Azure
 {
@@ -33,20 +34,20 @@ namespace Hangfire.Azure
             {
                 SqlQuerySpec sql = new SqlQuerySpec
                 {
-                    QueryText = "SELECT TOP 1 1 FROM c WHERE c.name = @name AND c.type = @type",
+                    QueryText = "SELECT TOP 1 1 FROM doc WHERE doc.type = @type AND doc.name = @name AND doc.expire_on > @expireOn",
                     Parameters = new SqlParameterCollection
                     {
                         new SqlParameter("@name", name),
                         new SqlParameter("@type", DocumentTypes.Lock),
+                        new SqlParameter("@expireOn", DateTime.UtcNow.ToEpoch())
                     }
                 };
 
                 bool exists = storage.Client.CreateDocumentQuery(storage.CollectionUri, sql).AsEnumerable().Any();
-
                 if (exists == false)
                 {
                     Lock @lock = new Lock { Name = name, ExpireOn = DateTime.UtcNow.Add(timeout) };
-                    Task<ResourceResponse<Document>> task = storage.Client.CreateDocumentWithRetriesAsync(storage.CollectionUri, @lock);
+                    Task<ResourceResponse<Document>> task = storage.Client.CreateDocumentAsync(storage.CollectionUri, @lock);
                     Task continueTask = task.ContinueWith(t =>
                     {
                         if (t.Result.StatusCode == HttpStatusCode.Created)
@@ -74,8 +75,8 @@ namespace Hangfire.Azure
             {
                 lock (syncLock)
                 {
-                    Uri spDeleteDocumentIfExists = UriFactory.CreateStoredProcedureUri(storage.Options.DatabaseName, storage.Options.CollectionName, "deleteDocumentIfExists");
-                    Task<string> task = storage.Client.ExecuteStoredProcedureAsync<bool>(spDeleteDocumentIfExists, resourceId).ContinueWith(t => resourceId = string.Empty);
+                    Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, resourceId);
+                    Task<string> task = storage.Client.DeleteDocumentAsync(uri).ContinueWith(t => resourceId = string.Empty);
                     task.Wait();
                 }
             }

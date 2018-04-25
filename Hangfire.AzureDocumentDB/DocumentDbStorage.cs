@@ -9,10 +9,11 @@ using Hangfire.Server;
 using Hangfire.Storage;
 using Hangfire.Logging;
 using Newtonsoft.Json;
-using Hangfire.Azure.Queue;
 using Microsoft.Azure.Documents;
-using Hangfire.Azure.Documents.Json;
 using Microsoft.Azure.Documents.Client;
+
+using Hangfire.Azure.Queue;
+using Newtonsoft.Json.Serialization;
 
 namespace Hangfire.Azure
 {
@@ -48,11 +49,22 @@ namespace Hangfire.Azure
             {
                 NullValueHandling = NullValueHandling.Ignore,
                 DateTimeZoneHandling = DateTimeZoneHandling.Utc,
-                ContractResolver = new DocumentContractResolver()
+                ContractResolver = new CamelCasePropertyNamesContractResolver
+                {
+                    NamingStrategy = new CamelCaseNamingStrategy(false, false)
+                }
             };
 
             ConnectionPolicy connectionPolicy = ConnectionPolicy.Default;
+            connectionPolicy.ConnectionMode = ConnectionMode.Direct;
+            connectionPolicy.ConnectionProtocol = Protocol.Tcp;
             connectionPolicy.RequestTimeout = Options.RequestTimeout;
+            connectionPolicy.RetryOptions = new RetryOptions
+            {
+                MaxRetryWaitTimeInSeconds = 10,
+                MaxRetryAttemptsOnThrottledRequests = 5
+            };
+
             Client = new DocumentClient(new Uri(url), authSecret, settings, connectionPolicy);
             Task task = Client.OpenAsync();
             Task continueTask = task.ContinueWith(t => Initialize(), TaskContinuationOptions.OnlyOnRanToCompletion);

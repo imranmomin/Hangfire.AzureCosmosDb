@@ -1,28 +1,26 @@
-﻿/**
+﻿// ReSharper disable UseOfImplicitGlobalInFunctionScope
+
+/**
  * Removes item from list releated to key/value
  * @param {string} key - the key for the set
- * @param {Object} value - the value for the key
- * @returns {boolean} true if success; else false 
+ * @param {string} value - the value for the key
  */
 function removeFromList(key, value) {
-    var context = getContext();
-    var collection = context.getCollection();
-    var response = context.getResponse();
-
-    var result = collection.filter(function (doc) {
+    var result = __.filter(function (doc) {
         return doc.type === 5 && doc.key === key && doc.value === value;
-    }, function (err, documents) {
-        response.setBody(false);
+    }, function (err, docs) {
         if (err) throw err;
 
-        if (documents.length === 0) throw new ("No item found for key :" + key);
-        if (documents.length > 1) throw new ("Found more than item found for key :" + key);
+        for (var index = 0; index < docs.length; index++) {
+            var isAccepted = __.deleteDocument(docs[index]._self, function (error) {
+                if (error) throw error;
+            });
 
-        var self = documents[0]._self;
-        collection.deleteDocument(self);
+            if (!isAccepted) throw new Error("Failed to remove item from list");
+        }
 
-        response.setBody(true);
+        getContext().getResponse().setBody(true);
     });
 
-    if (!result.isAccepted) throw new ("The call was not accepted");
+    if (!result.isAccepted) throw new Error("The call was not accepted");
 }

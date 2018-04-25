@@ -1,32 +1,29 @@
-﻿/**
+﻿// ReSharper disable UseOfImplicitGlobalInFunctionScope
+
+/**
  * Removes item from list not within the range
  * @param {string} key - the key for the set
  * @param {number} startIndex - the start index
- * * @param {number} endIndex - the end index
- * @returns {boolean} true if success; else false 
+ * @param {number} endIndex - the end index
  */
-function removeFromList(key, startIndex, endIndex) {
-    var context = getContext();
-    var collection = context.getCollection();
-    var response = context.getResponse();
-
-    var result = collection.filter(function (doc) {
-        return doc.type === 5 && doc.key === key;
-    }, function (err, documents) {
-        response.setBody(false);
+function trimList(key, startIndex, endIndex) {
+    var sql = "SELECT * FROM doc WHERE doc.type === 5 and doc.key === '" + key + "' ORDER BY doc.created_on DESC";
+    var result = __.queryDocuments(__.getSelfLink(), sql, undefined, function (err, docs) {
         if (err) throw err;
+        if (docs.length > 0 && docs.length < endIndex) throw new Error("End index is more then the length of the document.");
 
-        if (documents.length > 0 && documents.length < endIndex) throw new ("End index is more then the length of the document.");
-
-        for (var index = 0; index < documents.length; index++) {
+        for (var index = 0; index < docs.length; index++) {
             if (index < startIndex || index > endIndex) {
-                var self = documents[index]._self;
-                collection.deleteDocument(self);
+                var isAccepted = __.deleteDocument(docs[index]._self, function (error) {
+                    if (error) throw error;
+                });
+
+                if (!isAccepted) throw new Error("Failed to remove keys");
             }
         }
 
-        response.setBody(true);
+        getContext().getResponse().setBody(true);
     });
 
-    if (!result.isAccepted) throw new ("The call was not accepted");
+    if (!result.isAccepted) throw new Error("The call was not accepted");
 }

@@ -1,29 +1,28 @@
-﻿/**
+﻿// ReSharper disable UseOfImplicitGlobalInFunctionScope
+
+/**
  * Expires a job
  * @param {string} id - the job id
  * @param {int} expireOn - the unix time when the job expires
- * @returns {boolean} true if expired; else false 
  */
 function expireJob(id, expireOn) {
-    var context = getContext();
-    var collection = context.getCollection();
-    var response = context.getResponse();
-
-    var result = collection.filter(function (doc) {
+    var result = __.filter(function (doc) {
         return doc.type === 2 && doc.id === id;
-    }, function (err, documents) {
-        response.setBody(false);
+    }, function (err, docs) {
         if (err) throw err;
+        if (docs.length === 0) throw new Error("No job found for id :" + id);
+        if (docs.length > 1) throw new Error("Found more than one job for id :" + id);
 
-        if (documents.length === 0) throw new ("No job found for id :" + id);
-        if (documents.length > 1) throw new ("Found more than one job for id :" + id);
+        var doc = docs[0];
+        doc.expire_on = expireOn;
 
-        var job = documents[0];
-        job.expire_on = expireOn;
-        collection.replaceDocument(job._self, job);
+        var isAccepted = __.replaceDocument(doc._self, doc, function (error) {
+            if (error) throw error;
+        });
 
-        response.setBody(true);
+        if (!isAccepted) throw new Error("Failed to expire the job");
+        else getContext().getResponse().setBody(true);
     });
 
-    if (!result.isAccepted) throw new ("The call was not accepted");
+    if (!result.isAccepted) throw new Error("The call was not accepted");
 }

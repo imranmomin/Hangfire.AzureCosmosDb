@@ -1,6 +1,7 @@
 ﻿using Hangfire.Storage;
 using System.Threading;
 
+// ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Queue
 {
     internal interface IPersistentJobQueue
