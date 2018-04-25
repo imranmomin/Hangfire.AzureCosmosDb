@@ -39,12 +39,14 @@ namespace Hangfire.Azure.Queue
         {
             Documents.Queue data = new Documents.Queue
             {
+                Id = Id,
                 Name = Queue,
                 JobId = JobId,
-                CreatedOn = DateTime.UtcNow
+                CreatedOn = DateTime.UtcNow,
+                FetchedAt = null
             };
 
-            Task<ResourceResponse<Document>> task = storage.Client.CreateDocumentAsync(storage.CollectionUri, data);
+            Task<ResourceResponse<Document>> task = storage.Client.UpsertDocumentAsync(storage.CollectionUri, data);
             task.Wait();
         }
     }
