@@ -36,7 +36,8 @@ namespace Hangfire.Azure.Queue
                         SqlQuerySpec sql = new SqlQuerySpec
                         {
                             QueryText = "SELECT TOP 1 * FROM doc WHERE doc.type = @type AND doc.name = @name AND " +
-                                        "((NOT is_defined(doc.fetched_at)) OR (is_defined(doc.fetched_at) AND doc.fetched_at < @timeout))",
+                                        "((NOT is_defined(doc.fetched_at)) OR (is_defined(doc.fetched_at) AND doc.fetched_at < @timeout)) " +
+                                        "ORDER BY doc.created_on",
                             Parameters = new SqlParameterCollection
                             {
                                 new SqlParameter("@type", Documents.DocumentTypes.Queue),
@@ -49,7 +50,7 @@ namespace Hangfire.Azure.Queue
                             .AsEnumerable()
                             .FirstOrDefault();
 
-                        if (data != null && !string.IsNullOrEmpty(data.JobId))
+                        if (data != null)
                         {
                             // mark the document
                             data.FetchedAt = DateTime.UtcNow;

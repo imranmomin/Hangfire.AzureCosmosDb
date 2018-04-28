@@ -223,7 +223,8 @@ namespace Hangfire.Azure
                 {
                     Key = key,
                     Value = value,
-                    Score = score
+                    Score = score,
+                    CreatedOn = DateTime.UtcNow
                 };
 
                 Uri spAddToSetUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "addToSet");
@@ -282,7 +283,8 @@ namespace Hangfire.Azure
                 List data = new List
                 {
                     Key = key,
-                    Value = value
+                    Value = value,
+                    CreatedOn = DateTime.UtcNow
                 };
 
                 Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
