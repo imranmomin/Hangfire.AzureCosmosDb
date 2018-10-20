@@ -56,8 +56,8 @@ namespace Hangfire.Azure
             };
 
             ConnectionPolicy connectionPolicy = ConnectionPolicy.Default;
-            connectionPolicy.ConnectionMode = ConnectionMode.Direct;
-            connectionPolicy.ConnectionProtocol = Protocol.Tcp;
+            connectionPolicy.ConnectionMode = Options.ConnectionMode;
+            connectionPolicy.ConnectionProtocol = Options.ConnectionProtocol;
             connectionPolicy.RequestTimeout = Options.RequestTimeout;
             connectionPolicy.RetryOptions = new RetryOptions
             {
