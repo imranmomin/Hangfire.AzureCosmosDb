@@ -1,0 +1,9 @@
+{
+  "version": "1.0.0",
+  "name": "hangfire.azuredocumentdb",
+  "private": true,
+  "devDependencies": {
+    "@types/documentdb-server": "0.0.32",
+    "typescript": "3.1.1"
+  }
+}
