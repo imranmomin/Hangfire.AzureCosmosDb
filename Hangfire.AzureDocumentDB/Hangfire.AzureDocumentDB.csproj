@@ -5,10 +5,10 @@
         <Title>Hangfire.AzureDocumentDB</Title>
         <Company>Hangfire.AzureDocumentDB</Company>
         <Authors>Imran Momin</Authors>
-        <PackageLicenseUrl>https://github.com/imranmomin/Hangfire.AzureDocumentDB/blob/master/LICENSE</PackageLicenseUrl>
-        <PackageProjectUrl>https://github.com/imranmomin/Hangfire.AzureDocumentDB</PackageProjectUrl>
+        <PackageLicenseUrl>https://github.com/imranmomin/hangfire.azuredocumentdb/blob/master/LICENSE</PackageLicenseUrl>
+        <PackageProjectUrl>https://github.com/imranmomin/hangfire.azuredocumentdb</PackageProjectUrl>
         <Copyright>Copyright 2018</Copyright>
-        <PackageTags>Hangfire Azure DocumentDB</PackageTags>
+        <PackageTags>Hangfire Azure DocumentDB Cosmos</PackageTags>
         <Description>This package adds support to Microsoft Azure DocumentDB for Hangfire</Description>
         <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
         <PackageVersion>1.0.1</PackageVersion>
@@ -30,14 +30,16 @@
         <DocumentationFile>bin\Release\netstandard2.0\Hangfire.AzureDocumentDB.xml</DocumentationFile>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="Hangfire.Core" Version="1.6.17" />
-        <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />
-        <PackageReference Include="System.ValueTuple" Version="4.4.0" />
+      <None Remove="node_modules\**" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Hangfire.Core" Version="1.6.20" />
+        <PackageReference Include="Microsoft.Azure.DocumentDB.Core" Version="2.1.3" />
+        <PackageReference Include="Newtonsoft.Json" Version="11.0.2" />
+        <PackageReference Include="System.ValueTuple" Version="4.5.0" />
     </ItemGroup>
     <ItemGroup>
         <EmbeddedResource Include="StoredProcedure\deleteExpiredDocuments.js" />
-    </ItemGroup>
-    <ItemGroup>
         <EmbeddedResource Include="StoredProcedure\addToSet.js" />
         <EmbeddedResource Include="StoredProcedure\expireJob.js" />
         <EmbeddedResource Include="StoredProcedure\persistJob.js" />
@@ -47,8 +49,6 @@
         <EmbeddedResource Include="StoredProcedure\removeHash.js" />
         <EmbeddedResource Include="StoredProcedure\setJobState.js" />
         <EmbeddedResource Include="StoredProcedure\setRangeHash.js" />
-    </ItemGroup>
-    <ItemGroup>
         <EmbeddedResource Include="StoredProcedure\announceServer.js" />
         <EmbeddedResource Include="StoredProcedure\heartbeatServer.js" />
         <EmbeddedResource Include="StoredProcedure\removedTimedOutServer.js" />
@@ -56,10 +56,10 @@
         <EmbeddedResource Include="StoredProcedure\setJobParameter.js" />
     </ItemGroup>
     <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-        <PackageReference Include="Microsoft.Azure.DocumentDB.Core" Version="1.9.1" />
+        <PackageReference Include="Microsoft.Azure.DocumentDB.Core" Version="2.1.3" />
     </ItemGroup>
     <ItemGroup Condition="'$(TargetFramework)' == 'net461'">
-        <PackageReference Include="Microsoft.Azure.DocumentDB" Version="1.21.1" />
+        <PackageReference Include="Microsoft.Azure.DocumentDB" Version="2.1.3" />
     </ItemGroup>
     <ItemGroup>
         <Folder Include="Properties\" />
