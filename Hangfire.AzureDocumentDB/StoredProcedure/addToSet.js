@@ -1,31 +1,41 @@
-﻿// ReSharper disable UseOfImplicitGlobalInFunctionScope
-
-/**
- * Add To Set
- * @param {Object} set - the set information
- */
 function addToSet(set) {
-    var result = __.filter(function (doc) {
-        return doc.type === 7 && doc.key === set.key && doc.value === set.value;
-    }, function (err, docs) {
-        if (err) throw err;
-        if (docs.length > 1) throw new Error("Found more than one set for :" + set.key);
-
-        var doc;
-        if (docs.length === 0) {
-            doc = set;
-        } else {
-            doc = docs[0];
-            doc.score = set.score;
+    let context = getContext();
+    let collection = context.getCollection();
+    let collectionLink = collection.getSelfLink();
+    let response = getContext().getResponse();
+    let filter = (doc) => doc.type === set.type && doc.key === set.key;
+    let result = collection.filter(filter, (error, docs) => {
+        if (error)
+            throw error;
+        docs = docs.filter((doc) => doc.value === set.value);
+        if (docs.length > 0) {
+            docs.forEach((doc) => doc.score = set.score);
         }
-
-        var isAccepted = __.upsertDocument(__.getSelfLink(), doc, function (error) {
-            if (error) throw error;
-        });
-        
-        if (!isAccepted) throw new Error("Failed to create a set document");
-        else getContext().getResponse().setBody(true);
+        else {
+            docs = new Array();
+            docs.push(set);
+        }
+        let count = 0;
+        let docsLength = docs.length;
+        tryUpsert(docs[count]);
+        function tryUpsert(doc) {
+            let isAccepted = collection.upsertDocument(collectionLink, doc, callback);
+            if (!isAccepted)
+                response.setBody(count);
+        }
+        function callback(err) {
+            if (err)
+                throw err;
+            count++;
+            if (count >= docsLength) {
+                response.setBody(count);
+            }
+            else {
+                tryUpsert(docs[count]);
+            }
+        }
     });
-
-    if (!result.isAccepted) throw new Error("The call was not accepted");
+    if (!result.isAccepted) {
+        throw new Error("The call was not accepted");
+    }
 }

@@ -227,9 +227,22 @@ namespace Hangfire.Azure
                     CreatedOn = DateTime.UtcNow
                 };
 
-                Uri spAddToSetUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "addToSet");
-                Task<StoredProcedureResponse<bool>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<bool>(spAddToSetUri, set);
-                task.Wait();
+                // loop until the affected records is not zero and attempts are less then equal to 3
+                int affected;
+                int attempts = 0;
+                do
+                {
+                    attempts++;
+
+                    Uri spAddToSetUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "addToSet");
+                    Task<StoredProcedureResponse<int>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<int>(spAddToSetUri, set);
+                    task.Wait();
+
+                    affected = task.Result;
+
+                    // loop back if the result and attempts satisfy
+                } while (affected == 0 && attempts < 3);
+
             });
         }
 

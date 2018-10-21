@@ -35,26 +35,20 @@
     <None Remove="node_modules\**" />
   </ItemGroup>
   <ItemGroup>
+    <None Remove="StoredProcedure\addToSet.js" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="StoredProcedure\addToSet.js">
+      <DependentUpon>addToSet.ts</DependentUpon>
+    </EmbeddedResource>
+    <None Include="StoredProcedure\document.js">
+      <DependentUpon>document.ts</DependentUpon>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Hangfire.Core" Version="1.6.20" />
     <PackageReference Include="Newtonsoft.Json" Version="11.0.2" />
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="StoredProcedure\deleteExpiredDocuments.js" />
-    <EmbeddedResource Include="StoredProcedure\addToSet.js" />
-    <EmbeddedResource Include="StoredProcedure\expireJob.js" />
-    <EmbeddedResource Include="StoredProcedure\persistJob.js" />
-    <EmbeddedResource Include="StoredProcedure\trimList.js" />
-    <EmbeddedResource Include="StoredProcedure\removeFromList.js" />
-    <EmbeddedResource Include="StoredProcedure\removeFromSet.js" />
-    <EmbeddedResource Include="StoredProcedure\removeHash.js" />
-    <EmbeddedResource Include="StoredProcedure\setJobState.js" />
-    <EmbeddedResource Include="StoredProcedure\setRangeHash.js" />
-    <EmbeddedResource Include="StoredProcedure\announceServer.js" />
-    <EmbeddedResource Include="StoredProcedure\heartbeatServer.js" />
-    <EmbeddedResource Include="StoredProcedure\removedTimedOutServer.js" />
-    <EmbeddedResource Include="StoredProcedure\removeServer.js" />
-    <EmbeddedResource Include="StoredProcedure\setJobParameter.js" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
     <PackageReference Include="Microsoft.Azure.DocumentDB.Core" Version="2.1.3" />
