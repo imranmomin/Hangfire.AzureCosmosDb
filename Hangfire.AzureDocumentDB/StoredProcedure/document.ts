@@ -2,17 +2,31 @@
     items: Array<T>
 }
 
-interface IServer {
+interface IDocumentBase extends IDocumentMeta {
+    type: number;
+    expire_on: number;
+}
+
+interface IProcedureResponse {
+    affected: number;
+    continuation: boolean;
+}
+
+interface IServer extends IDocumentBase {
     server_id: string;
     workers: number;
     queues: Array<string>;
     last_heartbeat: number;
-    type: number;
 }
 
-interface ISet extends IDocumentMeta {
+interface ISet extends IDocumentBase {
     key: string;
     value: string;
     score?: number;
-    type: number;
+}
+
+interface ICounter extends IDocumentBase {
+    key: string;
+    value: number;
+    counter_type: number;
 }

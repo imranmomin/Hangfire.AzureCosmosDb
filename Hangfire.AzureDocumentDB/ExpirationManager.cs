@@ -33,13 +33,24 @@ namespace Hangfire.Azure
             foreach (DocumentTypes type in documents)
             {
                 logger.Debug($"Removing outdated records from the '{type}' document.");
+                int expireOn = DateTime.UtcNow.ToEpoch();
 
                 using (new DocumentDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage))
                 {
-                    int expireOn = DateTime.UtcNow.ToEpoch();
-                    Task<StoredProcedureResponse<int>> procedureTask = storage.Client.ExecuteStoredProcedureAsync<int>(spDeleteExpiredDocumentsUri, (int)type, expireOn);
-                    Task task = procedureTask.ContinueWith(t => logger.Trace($"Outdated {t.Result.Response} records removed from the '{type}' document."), TaskContinuationOptions.OnlyOnRanToCompletion);
-                    task.Wait(cancellationToken);
+                    int deleted = 0;
+                    ProcedureResponse response;
+                    do
+                    {
+                        Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spDeleteExpiredDocumentsUri, (int)type, expireOn);
+                        procedureTask.Wait(cancellationToken);
+
+                        response = procedureTask.Result;
+                        deleted += response.Affected;
+
+                        // if the continuation is true; run the procedure again
+                    } while (response.Continuation);
+
+                    logger.Trace($"Outdated {deleted} records removed from the '{type}' document.");
                 }
 
                 cancellationToken.WaitHandle.WaitOne(storage.Options.ExpirationCheckInterval);

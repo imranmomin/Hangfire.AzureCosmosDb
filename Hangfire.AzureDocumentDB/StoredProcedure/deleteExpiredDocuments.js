@@ -1,30 +1,61 @@
-﻿// ReSharper disable UseOfImplicitGlobalInFunctionScope
-
-/**
- * Expiration manager to delete old expired documents
- * @param {number} docType - The type of the document to delete
- * @param {number} expireOn - The unix timestamp to expire documents
- */
 function deleteExpiredDocuments(docType, expireOn) {
-    var result = __.filter(function (doc) {
-        return doc.type === docType && doc.expire_on <= expireOn;
-    }, function (err, docs) {
-        if (err) throw err;
-
-        var deleted = 0;
-        for (var index = 0; index < docs.length; index++) {
-            var doc = docs[index];
-            if (docType === 4 && doc.type === docType && doc.counter_type === 2) continue;
-            var isAccepted = __.deleteDocument(doc._self, function (error) {
-                if (error) throw error;
-            });
-
-            if (!isAccepted) throw new Error("Failed to delete expired documents");
-            else deleted += 1;
+    let context = getContext();
+    let collection = context.getCollection();
+    let response = getContext().getResponse();
+    let responseBody = {
+        affected: 0,
+        continuation: true
+    };
+    let filter = (doc) => {
+        if (doc.type === docType && doc.expire_on <= expireOn) {
+            if (docType === 4) {
+                let counter = doc;
+                if (counter.counter_type === 1) {
+                    return false;
+                }
+            }
+            return true;
         }
-
-        getContext().getResponse().setBody(deleted);
-    });
-
-    if (!result.isAccepted) throw new Error("The call was not accepted");
+        return false;
+    };
+    tryQueryAndDelete();
+    function tryQueryAndDelete(continuation) {
+        let feedOptions = {
+            continuation: continuation
+        };
+        let result = collection.filter(filter, feedOptions, (error, docs, feedCallbackOptions) => {
+            if (error)
+                throw error;
+            if (docs.length > 0) {
+                tryDelete(docs);
+            }
+            else if (feedCallbackOptions.continuation) {
+                tryQueryAndDelete(feedCallbackOptions.continuation);
+            }
+            else {
+                responseBody.continuation = false;
+                response.setBody(responseBody);
+            }
+        });
+        if (!result.isAccepted) {
+            response.setBody(responseBody);
+        }
+    }
+    function tryDelete(documents) {
+        if (documents.length > 0) {
+            let isAccepted = collection.deleteDocument(documents[0]._self, {}, (err) => {
+                if (err)
+                    throw err;
+                responseBody.affected++;
+                documents.shift();
+                tryDelete(documents);
+            });
+            if (!isAccepted) {
+                response.setBody(responseBody);
+            }
+        }
+        else {
+            tryQueryAndDelete();
+        }
+    }
 }

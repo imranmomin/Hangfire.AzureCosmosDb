@@ -33,4 +33,13 @@ namespace Hangfire.Azure.Documents
         State = 8,
         Lock = 9
     }
+
+    internal class ProcedureResponse
+    {
+        [JsonProperty("affected")]
+        public int Affected { get; set; }
+
+        [JsonProperty("continuation")]
+        public bool Continuation { get; set; }
+    }
 }
