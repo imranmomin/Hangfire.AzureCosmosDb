@@ -44,7 +44,9 @@ function addToSet(set: ISet) {
             // This condition will happen when this stored procedure has been running too long
             // and is about to get cancelled by the server. This will allow the calling client
             // to resume this batch from the point we got to before isAccepted was set to false
-            if (!isAccepted) response.setBody(count);
+            if (!isAccepted) {
+                response.setBody(count);
+            }
         }
 
         // This is called when collection.upsertDocument is done and the document has been persisted.

@@ -20,8 +20,9 @@ function addToSet(set) {
         tryUpsert(docs[count]);
         function tryUpsert(doc) {
             let isAccepted = collection.upsertDocument(collectionLink, doc, callback);
-            if (!isAccepted)
+            if (!isAccepted) {
                 response.setBody(count);
+            }
         }
         function callback(err) {
             if (err)
