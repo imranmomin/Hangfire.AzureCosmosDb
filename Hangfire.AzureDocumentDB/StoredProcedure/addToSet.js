@@ -5,8 +5,9 @@ function addToSet(set) {
     let response = getContext().getResponse();
     let filter = (doc) => doc.type === set.type && doc.key === set.key;
     let result = collection.filter(filter, (error, docs) => {
-        if (error)
+        if (error) {
             throw error;
+        }
         docs = docs.filter((doc) => doc.value === set.value);
         if (docs.length > 0) {
             docs.forEach((doc) => doc.score = set.score);
@@ -25,8 +26,9 @@ function addToSet(set) {
             }
         }
         function callback(err) {
-            if (err)
+            if (err) {
                 throw err;
+            }
             count++;
             if (count >= docsLength) {
                 response.setBody(count);

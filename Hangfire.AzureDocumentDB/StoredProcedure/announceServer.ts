@@ -12,8 +12,12 @@ function announceServer(server: IServer) {
     let filter = (doc: IServer) => doc.type === server.type && doc.server_id === server.server_id;
 
     let result: IQueryResponse = collection.filter(filter, (error: IFeedCallbackError, docs: Array<IServer>) => {
-        if (error) throw error;
-        if (docs.length > 1) throw new Error(`Found more than one server for: ${server.server_id}`);
+        if (error) {
+             throw error;
+        }
+        if (docs.length > 1) {
+            throw new Error(`Found more than one server for: ${server.server_id}`);
+        }
 
         let doc: IServer;
         if (docs.length === 0) {
@@ -26,7 +30,9 @@ function announceServer(server: IServer) {
         }
 
         let isAccepted: boolean = collection.upsertDocument(collectionLink, doc, (err: IRequestCallbackError) => {
-            if (err) throw err;
+            if (err) {
+                throw err;
+            }
             response.setBody(true);
         });
 

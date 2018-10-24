@@ -5,10 +5,12 @@ function announceServer(server) {
     let response = getContext().getResponse();
     let filter = (doc) => doc.type === server.type && doc.server_id === server.server_id;
     let result = collection.filter(filter, (error, docs) => {
-        if (error)
+        if (error) {
             throw error;
-        if (docs.length > 1)
+        }
+        if (docs.length > 1) {
             throw new Error(`Found more than one server for: ${server.server_id}`);
+        }
         let doc;
         if (docs.length === 0) {
             doc = server;
@@ -20,8 +22,9 @@ function announceServer(server) {
             doc.queues = server.queues;
         }
         let isAccepted = collection.upsertDocument(collectionLink, doc, (err) => {
-            if (err)
+            if (err) {
                 throw err;
+            }
             response.setBody(true);
         });
         if (!isAccepted) {

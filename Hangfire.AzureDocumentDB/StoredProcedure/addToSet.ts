@@ -12,7 +12,9 @@ function addToSet(set: ISet) {
     let filter = (doc: ISet) => doc.type === set.type && doc.key === set.key;
 
     let result: IQueryResponse = collection.filter(filter, (error: IFeedCallbackError, docs: Array<ISet>) => {
-        if (error) throw error;
+        if (error) {
+            throw error;
+        }
 
         // filter only those docs where the value matches
         docs = docs.filter((doc: ISet) => doc.value === set.value);
@@ -51,7 +53,9 @@ function addToSet(set: ISet) {
 
         // This is called when collection.upsertDocument is done and the document has been persisted.
         function callback(err: IRequestCallbackError) {
-            if (err) throw err;
+            if (err) {
+                throw err;
+            }
 
             // One more document has been inserted/updated, increment the count.
             count++;

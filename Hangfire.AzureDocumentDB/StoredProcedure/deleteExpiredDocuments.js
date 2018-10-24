@@ -24,8 +24,9 @@ function deleteExpiredDocuments(docType, expireOn) {
             continuation: continuation
         };
         let result = collection.filter(filter, feedOptions, (error, docs, feedCallbackOptions) => {
-            if (error)
+            if (error) {
                 throw error;
+            }
             if (docs.length > 0) {
                 tryDelete(docs);
             }
@@ -43,9 +44,10 @@ function deleteExpiredDocuments(docType, expireOn) {
     }
     function tryDelete(documents) {
         if (documents.length > 0) {
-            let isAccepted = collection.deleteDocument(documents[0]._self, {}, (err) => {
-                if (err)
-                    throw err;
+            let isAccepted = collection.deleteDocument(documents[0]._self, {}, (error) => {
+                if (error) {
+                    throw error;
+                }
                 responseBody.affected++;
                 documents.shift();
                 tryDelete(documents);

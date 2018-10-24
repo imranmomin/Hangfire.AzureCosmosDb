@@ -39,7 +39,9 @@ function deleteExpiredDocuments(docType: number, expireOn: number) {
         };
         
         let result: IQueryResponse = collection.filter(filter, feedOptions, (error: IFeedCallbackError, docs: Array<IDocumentBase>, feedCallbackOptions: IFeedCallbackOptions) => {
-            if (error) throw error;
+            if (error) {
+                 throw error;
+            }
 
             if (docs.length > 0) {
                 // Begin deleting documents as soon as documents are returned form the query results.
@@ -68,7 +70,9 @@ function deleteExpiredDocuments(docType: number, expireOn: number) {
         if (documents.length > 0) {
             // Delete the first document in the array.
             let isAccepted: boolean = collection.deleteDocument(documents[0]._self, {}, (error: IRequestCallbackError) => {
-                if (error) throw error;
+                if (error) {
+                    throw error;
+                }
 
                 responseBody.affected++;
                 documents.shift();
