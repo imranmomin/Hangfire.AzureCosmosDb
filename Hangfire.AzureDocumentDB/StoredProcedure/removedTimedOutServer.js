@@ -1,29 +1,53 @@
-﻿// ReSharper disable UseOfImplicitGlobalInFunctionScope
-
-/**
- * Remove TimedOut Server
- * @param {string} id - the server id
- */
 function removedTimedOutServer(lastHeartbeat) {
-    var result = __.filter(function (doc) {
-        return doc.type === 1 && doc.last_heartbeat < lastHeartbeat;
-    }, function (err, docs) {
-        if (err) throw err;
-
-        var removed = 0;
-        for (var index = 0; index < docs.length; index++) {
-            var doc = docs[index];
-
-            var isAccepted = __.deleteDocument(doc._self, function (error) {
-                if (error) throw error;
-            });
-
-            if (!isAccepted) throw new Error("Failed to remove timeout server");
-            else removed += 1;
+    let context = getContext();
+    let collection = context.getCollection();
+    let response = getContext().getResponse();
+    let responseBody = {
+        affected: 0,
+        continuation: true
+    };
+    response.setBody(responseBody);
+    let filter = (doc) => doc.type === 1 && doc.last_heartbeat <= lastHeartbeat;
+    tryQueryAndDelete();
+    function tryQueryAndDelete(continuation) {
+        let feedOptions = {
+            continuation: continuation
+        };
+        let result = collection.filter(filter, feedOptions, (error, docs, feedCallbackOptions) => {
+            if (error) {
+                throw error;
+            }
+            if (docs.length > 0) {
+                tryDelete(docs);
+            }
+            else if (feedCallbackOptions.continuation) {
+                tryQueryAndDelete(feedCallbackOptions.continuation);
+            }
+            else {
+                responseBody.continuation = false;
+                response.setBody(responseBody);
+            }
+        });
+        if (!result.isAccepted) {
+            response.setBody(responseBody);
         }
-
-        getContext().getResponse().setBody(removed);
-    });
-
-    if (!result.isAccepted) throw new Error("The call was not accepted");
+    }
+    function tryDelete(documents) {
+        if (documents.length > 0) {
+            let isAccepted = collection.deleteDocument(documents[0]._self, {}, (error) => {
+                if (error) {
+                    throw error;
+                }
+                responseBody.affected++;
+                documents.shift();
+                tryDelete(documents);
+            });
+            if (!isAccepted) {
+                response.setBody(responseBody);
+            }
+        }
+        else {
+            tryQueryAndDelete();
+        }
+    }
 }

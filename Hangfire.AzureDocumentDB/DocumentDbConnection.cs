@@ -337,12 +337,22 @@ namespace Hangfire.Azure
             }
 
             int lastHeartbeat = DateTime.UtcNow.Add(timeOut.Negate()).ToEpoch();
+            int removed = 0;
+            ProcedureResponse response;
 
-            Uri spRemovedTimeoutServerUri = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "removedTimedOutServer");
-            Task<StoredProcedureResponse<int>> task = Storage.Client.ExecuteStoredProcedureAsync<int>(spRemovedTimeoutServerUri, lastHeartbeat);
-            task.Wait();
+            do
+            {
+                Uri spRemovedTimeoutServerUri = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "removedTimedOutServer");
+                Task<StoredProcedureResponse<ProcedureResponse>> task = Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spRemovedTimeoutServerUri, lastHeartbeat);
+                task.Wait();
 
-            return task.Result.Response;
+                response = task.Result;
+                removed += response.Affected;
+
+                // if the continuation is true; run the procedure again
+            } while (response.Continuation);
+
+            return removed;
         }
 
         #endregion
