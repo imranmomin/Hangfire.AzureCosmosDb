@@ -45,7 +45,7 @@ function deleteExpiredDocuments(docType, expireOn) {
     }
     function tryDelete(documents) {
         if (documents.length > 0) {
-            let isAccepted = collection.deleteDocument(documents[0]._self, {}, (error) => {
+            let isAccepted = collection.deleteDocument(documents[0]._self, (error) => {
                 if (error) {
                     throw error;
                 }

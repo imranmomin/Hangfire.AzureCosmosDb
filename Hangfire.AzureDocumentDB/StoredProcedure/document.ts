@@ -30,3 +30,8 @@ interface ICounter extends IDocumentBase {
     value: number;
     counter_type: number;
 }
+
+interface IList extends IDocumentBase {
+    key: string;
+    value: string;
+}

@@ -31,7 +31,7 @@ function deleteExpiredDocuments(docType: number, expireOn: number) {
         }
         return false;
     };
-    
+
     tryQueryAndDelete();
 
     // Recursively runs the query w/ support for continuation tokens.
@@ -40,10 +40,10 @@ function deleteExpiredDocuments(docType: number, expireOn: number) {
         let feedOptions: IFeedOptions = {
             continuation: continuation
         };
-        
+
         let result: IQueryResponse = collection.filter(filter, feedOptions, (error: IFeedCallbackError, docs: Array<IDocumentBase>, feedCallbackOptions: IFeedCallbackOptions) => {
             if (error) {
-                 throw error;
+                throw error;
             }
 
             if (docs.length > 0) {
@@ -72,7 +72,7 @@ function deleteExpiredDocuments(docType: number, expireOn: number) {
     function tryDelete(documents: Array<IDocumentBase>) {
         if (documents.length > 0) {
             // Delete the first document in the array.
-            let isAccepted: boolean = collection.deleteDocument(documents[0]._self, {}, (error: IRequestCallbackError) => {
+            let isAccepted: boolean = collection.deleteDocument(documents[0]._self, (error: IRequestCallbackError) => {
                 if (error) {
                     throw error;
                 }

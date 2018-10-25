@@ -1,8 +1,8 @@
 ﻿/**
- * Remove TimedOut Server
- * @param {number} lastHeartbeat - the last heartbeat
+ * Removes item from list related to key/value
+ * @param {IList} doc - the list doc
  */
-function removedTimedOutServer(lastHeartbeat: number) {
+function removeFromList(doc: IList) {
     let context: IContext = getContext();
     let collection: ICollection = context.getCollection();
     let response: IResponse = getContext().getResponse();
@@ -10,12 +10,12 @@ function removedTimedOutServer(lastHeartbeat: number) {
         affected: 0,
         continuation: true
     };
-
+    
     // default response
     response.setBody(responseBody);
 
-    // filter function
-    let filter = (doc: IServer) => doc.type === 1 && doc.last_heartbeat <= lastHeartbeat;
+    // filter out only list documents with the same key/value
+    let filter = (d: IList) => d.type === 5 && d.key === doc.key && d.value === doc.value;
 
     tryQueryAndDelete();
 

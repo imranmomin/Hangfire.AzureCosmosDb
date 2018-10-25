@@ -312,9 +312,24 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                Uri spRemoveFromListUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "removeFromList");
-                Task<StoredProcedureResponse<bool>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<bool>(spRemoveFromListUri, key, value);
-                task.Wait();
+                List data = new List
+                {
+                    Key = key,
+                    Value = value
+                };
+
+                ProcedureResponse response;
+
+                do
+                {
+                    Uri spRemoveFromListUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "removeFromList");
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spRemoveFromListUri, data);
+                    task.Wait();
+
+                    response = task.Result;
+
+                } while (response.Continuation);
+
             });
         }
 
