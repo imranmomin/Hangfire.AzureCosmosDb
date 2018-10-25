@@ -12,6 +12,9 @@ function deleteExpiredDocuments(docType: number, expireOn: number) {
         continuation: true
     };
 
+    // default response
+    response.setBody(responseBody);
+
     // filter function
     let filter = (doc: IDocumentBase) => {
         if (doc.type === docType && doc.expire_on <= expireOn) {

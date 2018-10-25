@@ -3,6 +3,7 @@ function addToSet(set) {
     let collection = context.getCollection();
     let collectionLink = collection.getSelfLink();
     let response = getContext().getResponse();
+    response.setBody(0);
     let filter = (doc) => doc.type === set.type && doc.key === set.key;
     let result = collection.filter(filter, (error, docs) => {
         if (error) {

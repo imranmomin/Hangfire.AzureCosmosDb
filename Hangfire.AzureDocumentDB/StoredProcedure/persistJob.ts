@@ -1,9 +1,8 @@
 ﻿/**
- * Sets the expire_on for a job
+ * Expires a job
  * @param {string} id - the job id
- * @param {int} expireOn - the unix time when the job expires
  */
-function expireJob(id: string, expireOn: number) {
+function persistJob(id: string) {
     let context: IContext = getContext();
     let collection: ICollection = context.getCollection();
     let response: IResponse = getContext().getResponse();
@@ -22,8 +21,13 @@ function expireJob(id: string, expireOn: number) {
             throw new Error("The document is not of type `Job`");
         }
 
-        // set the expire_on 
-        doc.expire_on = expireOn;
+        if (doc.expire_on === undefined || doc.expire_on === null) {
+            response.setBody(true);
+            return;
+        }
+
+        // remove the expire_on property
+        delete doc.expire_on;
 
         let result: boolean = collection.replaceDocument(doc._self, doc, (err: IRequestCallbackError) => {
             if (err) {
@@ -33,12 +37,12 @@ function expireJob(id: string, expireOn: number) {
         });
 
         if (!result) {
-            throw new Error("The call was not accepted");
+             throw new Error("The call was not accepted");
         }
 
     });
 
     if (!isAccepted) {
-        throw new Error("The call was not accepted");
+         throw new Error("The call was not accepted");
     }
 }

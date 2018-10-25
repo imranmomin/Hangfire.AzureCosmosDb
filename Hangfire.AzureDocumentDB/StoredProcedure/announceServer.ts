@@ -8,6 +8,9 @@ function announceServer(server: IServer) {
     let collectionLink: string = collection.getSelfLink();
     let response: IResponse = getContext().getResponse();
 
+    // default response
+    response.setBody(false);
+
     // filter function to find the duplicate servers
     let filter = (doc: IServer) => doc.type === server.type && doc.server_id === server.server_id;
 
@@ -42,7 +45,6 @@ function announceServer(server: IServer) {
     });
 
     if (!result.isAccepted) {
-        response.setBody(false);
         throw new Error("The call was not accepted");
     }
 }

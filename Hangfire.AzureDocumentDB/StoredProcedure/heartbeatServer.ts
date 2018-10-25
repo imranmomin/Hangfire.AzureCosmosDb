@@ -10,6 +10,9 @@ function heartbeatServer(id: string, heartbeat: number) {
     let collection: ICollection = context.getCollection();
     let response: IResponse = getContext().getResponse();
 
+    // default response
+    response.setBody(false);
+
     let filter = (doc: IServer) => doc.type === 1 && doc.server_id === id;
 
     let result: IQueryResponse = collection.filter(filter, (error: IRequestCallbackError, docs: Array<IServer>) => {

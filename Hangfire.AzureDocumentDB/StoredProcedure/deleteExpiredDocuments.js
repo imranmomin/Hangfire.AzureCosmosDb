@@ -6,6 +6,7 @@ function deleteExpiredDocuments(docType, expireOn) {
         affected: 0,
         continuation: true
     };
+    response.setBody(responseBody);
     let filter = (doc) => {
         if (doc.type === docType && doc.expire_on <= expireOn) {
             if (docType === 4) {

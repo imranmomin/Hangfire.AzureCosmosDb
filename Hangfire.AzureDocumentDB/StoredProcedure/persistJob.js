@@ -1,28 +1,33 @@
-﻿// ReSharper disable UseOfImplicitGlobalInFunctionScope
-
-/**
- * Expires a job
- * @param {string} id - the job id
- */
 function persistJob(id) {
-    var result = __.filter(function (doc) { return doc.id === id; }, function (err, docs) {
-        if (err) throw err;
-        if (docs.length === 0) throw new Error("No job found for id :" + id);
-        if (docs.length > 1) throw new Error("Found more than one job for id :" + id);
-
-        var doc = docs[0];
-        if (doc.expire_on) {
-            delete doc.expire_on;
-
-            var isAccepted = __.replaceDocument(doc._self, doc, function (error) {
-                if (error) throw error;
-            });
-
-            if (!isAccepted) throw new Error("Failed to presist the job");
+    let context = getContext();
+    let collection = context.getCollection();
+    let response = getContext().getResponse();
+    let collectionLink = collection.getSelfLink();
+    let documentLink = `${collectionLink}/docs/${id}`;
+    response.setBody(false);
+    let isAccepted = collection.readDocument(documentLink, (error, doc) => {
+        if (error) {
+            throw error;
         }
-
-        getContext().getResponse().setBody(true);
+        if (doc.type !== 2) {
+            throw new Error("The document is not of type `Job`");
+        }
+        if (doc.expire_on === undefined || doc.expire_on === null) {
+            response.setBody(true);
+            return;
+        }
+        delete doc.expire_on;
+        let result = collection.replaceDocument(doc._self, doc, (err) => {
+            if (err) {
+                throw err;
+            }
+            response.setBody(true);
+        });
+        if (!result) {
+            throw new Error("The call was not accepted");
+        }
     });
-
-    if (!result.isAccepted) throw new Error("The call was not accepted");
+    if (!isAccepted) {
+        throw new Error("The call was not accepted");
+    }
 }

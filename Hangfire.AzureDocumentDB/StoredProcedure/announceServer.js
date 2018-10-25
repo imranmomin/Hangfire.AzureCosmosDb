@@ -3,6 +3,7 @@ function announceServer(server) {
     let collection = context.getCollection();
     let collectionLink = collection.getSelfLink();
     let response = getContext().getResponse();
+    response.setBody(false);
     let filter = (doc) => doc.type === server.type && doc.server_id === server.server_id;
     let result = collection.filter(filter, (error, docs) => {
         if (error) {
@@ -32,7 +33,6 @@ function announceServer(server) {
         }
     });
     if (!result.isAccepted) {
-        response.setBody(false);
         throw new Error("The call was not accepted");
     }
 }

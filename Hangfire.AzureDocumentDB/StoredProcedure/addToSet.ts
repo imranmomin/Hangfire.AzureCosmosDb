@@ -8,6 +8,9 @@ function addToSet(set: ISet) {
     let collectionLink: string = collection.getSelfLink();
     let response: IResponse = getContext().getResponse();
 
+    // default response
+    response.setBody(0);
+
     // filter function to find the duplicate sets
     let filter = (doc: ISet) => doc.type === set.type && doc.key === set.key;
 

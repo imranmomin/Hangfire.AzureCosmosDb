@@ -4,6 +4,7 @@ function expireJob(id, expireOn) {
     let response = getContext().getResponse();
     let collectionLink = collection.getSelfLink();
     let documentLink = `${collectionLink}/docs/${id}`;
+    response.setBody(false);
     let isAccepted = collection.readDocument(documentLink, (error, doc) => {
         if (error) {
             throw error;
@@ -18,9 +19,11 @@ function expireJob(id, expireOn) {
             }
             response.setBody(true);
         });
-        if (!result)
+        if (!result) {
             throw new Error("The call was not accepted");
+        }
     });
-    if (!isAccepted)
+    if (!isAccepted) {
         throw new Error("The call was not accepted");
+    }
 }
