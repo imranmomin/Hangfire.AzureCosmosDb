@@ -1,25 +1,53 @@
-﻿// ReSharper disable UseOfImplicitGlobalInFunctionScope
-
-/**
- * Remove key from Hash
- * @param {string} key - the key for the set
- */
 function removeHash(key) {
-    var result = __.filter(function (doc) {
-        return doc.type === 6 && doc.key === key;
-    }, function (err, docs) {
-        if (err) throw err;
-
-        for (var index = 0; index < docs.length; index++) {
-            var isAccepted = __.deleteDocument(docs[index]._self, function(error) {
-                if (error) throw error;
-            });
-
-            if (!isAccepted) throw new Error("Failed to remove key from hash");
+    let context = getContext();
+    let collection = context.getCollection();
+    let response = getContext().getResponse();
+    let responseBody = {
+        affected: 0,
+        continuation: true
+    };
+    response.setBody(responseBody);
+    let filter = (doc) => doc.type === 6 && doc.key === key;
+    tryQueryAndDelete();
+    function tryQueryAndDelete(continuation) {
+        let feedOptions = {
+            continuation: continuation
+        };
+        let result = collection.filter(filter, feedOptions, (error, docs, feedCallbackOptions) => {
+            if (error) {
+                throw error;
+            }
+            if (docs.length > 0) {
+                tryDelete(docs);
+            }
+            else if (feedCallbackOptions.continuation) {
+                tryQueryAndDelete(feedCallbackOptions.continuation);
+            }
+            else {
+                responseBody.continuation = false;
+                response.setBody(responseBody);
+            }
+        });
+        if (!result.isAccepted) {
+            response.setBody(responseBody);
         }
-
-        getContext().getResponse().setBody(true);
-    });
-
-    if (!result.isAccepted) throw new Error("The call was not accepted");
+    }
+    function tryDelete(documents) {
+        if (documents.length > 0) {
+            let isAccepted = collection.deleteDocument(documents[0]._self, (error) => {
+                if (error) {
+                    throw error;
+                }
+                responseBody.affected++;
+                documents.shift();
+                tryDelete(documents);
+            });
+            if (!isAccepted) {
+                response.setBody(responseBody);
+            }
+        }
+        else {
+            tryQueryAndDelete();
+        }
+    }
 }

@@ -35,3 +35,9 @@ interface IList extends IDocumentBase {
     key: string;
     value: string;
 }
+
+interface IHash extends IDocumentBase {
+    key: string;
+    field: string;
+    value: string;
+}
