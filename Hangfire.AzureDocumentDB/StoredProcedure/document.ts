@@ -53,3 +53,10 @@ interface IParameter {
     name: string;
     value: string;
 }
+
+interface IState extends IDocumentBase {
+    job_id: string;
+    name: string;
+    reason: string;
+    data: { [key: string]: string };
+}
