@@ -69,6 +69,9 @@
     <EmbeddedResource Include="StoredProcedure\removeServer.js">
       <DependentUpon>removeServer.ts</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="StoredProcedure\setJobParameter.js">
+      <DependentUpon>setJobParameter.ts</DependentUpon>
+    </EmbeddedResource>
     <None Include="StoredProcedure\document.js">
       <DependentUpon>document.ts</DependentUpon>
     </None>

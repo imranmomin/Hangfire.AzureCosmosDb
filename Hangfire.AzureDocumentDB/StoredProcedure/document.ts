@@ -41,3 +41,15 @@ interface IHash extends IDocumentBase {
     field: string;
     value: string;
 }
+
+interface IJob extends IDocumentBase {
+    arguments: string;
+    state_id: string;
+    state_name: string;
+    parameters: Array<IParameter>;
+}
+
+interface IParameter {
+    name: string;
+    value: string;
+}
