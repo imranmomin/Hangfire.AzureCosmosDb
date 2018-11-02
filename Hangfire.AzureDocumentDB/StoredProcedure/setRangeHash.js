@@ -1,48 +1,52 @@
-﻿// ReSharper disable UseOfImplicitGlobalInFunctionScope
-
-/**
- * Remove key from Hash
- * @param {string} key - the key for the set
- * @param {Array<Object>} sources - the array of hash
- */
-function setRangeHash(key, sources) {
-    var result = __.filter(function (doc) {
-        return doc.type === 6 && doc.key === key;
-    }, function (err, docs) {
-        if (err) throw err;
-
-        var hashes = [];
-        for (var index = 0; index < sources.length; index++) {
-            var hash = match(docs, sources[index]);
+function setRangeHash(key, data) {
+    let context = getContext();
+    let collection = context.getCollection();
+    let response = getContext().getResponse();
+    let collectionLink = collection.getSelfLink();
+    if (data.items.length === 0) {
+        response.setBody(0);
+        return;
+    }
+    let fitler = (doc) => doc.type === 6 && doc.key === key;
+    let result = collection.filter(fitler, (error, docs) => {
+        if (error) {
+            throw error;
+        }
+        let hashes = new Array();
+        for (let index = 0; index < data.items.length; index++) {
+            let soruce = data.items[index];
+            let hash = docs.find((h) => h.field === soruce.field);
+            if (hash) {
+                hash.value == soruce.value;
+            }
+            else {
+                hash = soruce;
+            }
             hashes.push(hash);
         }
-
-        // upsert all the hash documents
-        for (var j = 0; j < hashes.length; j++) {
-            var doc = hashes[j];
-            var isAccepted = __.upsertDocument(__.getSelfLink(), doc, function(error) {
-                if (error) throw error;
-            });
-
-            if (!isAccepted) throw new Error("Failed to save hashes");
-        }
-
-        getContext().getResponse().setBody(hashes.length);
-    });
-
-    if (!result.isAccepted) throw new Error("The call was not accepted");
-
-    /**
-     * Matched the source with the current hash document
-     */
-    function match(docs, source) {
-        for (var index = 0; index < docs.length; index++) {
-            var doc = docs[index];
-            if (doc.field === source.field && doc.key === source.key) {
-                source.id = doc.id;
-                break;
+        let count = 0;
+        let docsLength = hashes.length;
+        tryUpsert(hashes[count]);
+        function tryUpsert(doc) {
+            let isAccepted = collection.upsertDocument(collectionLink, doc, callback);
+            if (!isAccepted) {
+                response.setBody(count);
             }
         }
-        return source;
+        function callback(err) {
+            if (err) {
+                throw err;
+            }
+            count++;
+            if (count >= docsLength) {
+                response.setBody(count);
+            }
+            else {
+                tryUpsert(hashes[count]);
+            }
+        }
+    });
+    if (!result.isAccepted) {
+        throw new Error("The call was not accepted");
     }
 }

@@ -381,16 +381,31 @@ namespace Hangfire.Azure
             if (key == null) throw new ArgumentNullException(nameof(key));
             if (keyValuePairs == null) throw new ArgumentNullException(nameof(keyValuePairs));
 
-            Hash[] sources = keyValuePairs.Select(k => new Hash
+            Data<Hash> data = new Data<Hash>
             {
-                Key = key,
-                Field = k.Key,
-                Value = k.Value.TryParseToEpoch()
-            }).ToArray();
+                Items = keyValuePairs.Select(k => new Hash
+                {
+                    Key = key,
+                    Field = k.Key,
+                    Value = k.Value.TryParseToEpoch()
+                }).ToArray()
+            };
 
-            Uri spSetRangeHashUri = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "setRangeHash");
-            Task<StoredProcedureResponse<bool>> task = Storage.Client.ExecuteStoredProcedureAsync<bool>(spSetRangeHashUri, key, sources);
-            task.Wait();
+            int affected = 0;
+
+            do
+            {
+                // process only remaining items
+                data.Items = data.Items.Skip(data.Items.Length - affected).ToArray();
+
+                Uri spSetRangeHashUri = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "setRangeHash");
+                Task<StoredProcedureResponse<int>> task = Storage.Client.ExecuteStoredProcedureAsync<int>(spSetRangeHashUri, key, data);
+                task.Wait();
+
+                // know how much was processed
+                affected = task.Result;
+
+            } while (affected < data.Items.Length);
         }
 
         public override long GetHashCount(string key)

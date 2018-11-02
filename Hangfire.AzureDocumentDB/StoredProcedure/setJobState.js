@@ -9,6 +9,9 @@ function setJobState(id, state) {
         if (error) {
             throw error;
         }
+        if (job.type !== 2) {
+            throw new Error("The document is not of type `Job`");
+        }
         createState(state, (doc) => {
             job.state_id = doc.id;
             job.state_name = doc.name;
@@ -24,7 +27,7 @@ function setJobState(id, state) {
         });
     });
     function createState(doc, callback) {
-        let success = collection.createDocument(__.getSelfLink(), doc, (error, document) => {
+        let success = collection.createDocument(collectionLink, doc, (error, document) => {
             if (error) {
                 throw error;
             }

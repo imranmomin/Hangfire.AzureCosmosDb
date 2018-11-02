@@ -42,4 +42,10 @@ namespace Hangfire.Azure.Documents
         [JsonProperty("continuation")]
         public bool Continuation { get; set; }
     }
+
+    internal class Data<T>
+    {
+        [JsonProperty("items")]
+        public T[] Items { get; set; }
+    }
 }
