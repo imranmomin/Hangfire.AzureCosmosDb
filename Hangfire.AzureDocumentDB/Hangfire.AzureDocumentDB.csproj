@@ -75,6 +75,12 @@
     <EmbeddedResource Include="StoredProcedure\setJobState.js">
       <DependentUpon>setJobState.ts</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="StoredProcedure\setRangeHash.js">
+      <DependentUpon>setRangeHash.ts</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="StoredProcedure\trimList.js">
+      <DependentUpon>trimList.ts</DependentUpon>
+    </EmbeddedResource>
     <None Include="StoredProcedure\document.js">
       <DependentUpon>document.ts</DependentUpon>
     </None>

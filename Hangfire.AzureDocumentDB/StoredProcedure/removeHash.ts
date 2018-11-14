@@ -2,7 +2,7 @@
  * Remove key from Hash
  * @param {string} key - the key for the set
  */
-function removeHash(key:string) {
+function removeHash(key: string) {
     let context: IContext = getContext();
     let collection: ICollection = context.getCollection();
     let response: IResponse = getContext().getResponse();

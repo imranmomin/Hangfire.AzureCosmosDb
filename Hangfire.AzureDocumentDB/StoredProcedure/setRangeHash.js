@@ -7,20 +7,20 @@ function setRangeHash(key, data) {
         response.setBody(0);
         return;
     }
-    let fitler = (doc) => doc.type === 6 && doc.key === key;
-    let result = collection.filter(fitler, (error, docs) => {
+    let filter = (doc) => doc.type === 6 && doc.key === key;
+    let result = collection.filter(filter, (error, docs) => {
         if (error) {
             throw error;
         }
         let hashes = new Array();
         for (let index = 0; index < data.items.length; index++) {
-            let soruce = data.items[index];
-            let hash = docs.find((h) => h.field === soruce.field);
+            let source = data.items[index];
+            let hash = docs.find((h) => h.field === source.field);
             if (hash) {
-                hash.value == soruce.value;
+                hash.value = source.value;
             }
             else {
-                hash = soruce;
+                hash = source;
             }
             hashes.push(hash);
         }

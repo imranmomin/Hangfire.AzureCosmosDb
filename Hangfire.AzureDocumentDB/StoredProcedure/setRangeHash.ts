@@ -14,9 +14,9 @@ function setRangeHash(key: string, data: IData<IHash>) {
         return;
     }
 
-    let fitler = (doc: IHash) => doc.type === 6 && doc.key === key;
+    let filter = (doc: IHash) => doc.type === 6 && doc.key === key;
 
-    let result: IQueryResponse = collection.filter(fitler, (error: IRequestCallbackError, docs: Array<IHash>) => {
+    let result: IQueryResponse = collection.filter(filter, (error: IRequestCallbackError, docs: Array<IHash>) => {
         if (error) {
             throw error;
         }
@@ -24,13 +24,13 @@ function setRangeHash(key: string, data: IData<IHash>) {
         let hashes: Array<IHash> = new Array<IHash>();
 
         for (let index: number = 0; index < data.items.length; index++) {
-            let soruce: IHash = data.items[index];
-            let hash: IHash = docs.find((h: IHash) => h.field === soruce.field);
+            let source: IHash = data.items[index];
+            let hash: IHash = docs.find((h: IHash) => h.field === source.field);
 
             if (hash) {
-                hash.value == soruce.value;
+                hash.value = source.value;
             } else {
-                hash = soruce;
+                hash = source;
             }
 
             hashes.push(hash);
