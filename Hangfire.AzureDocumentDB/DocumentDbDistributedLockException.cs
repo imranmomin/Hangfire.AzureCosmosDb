@@ -12,8 +12,6 @@ namespace Hangfire.Azure
         /// Initializes a new instance of the DocumentDbDistributedLockException class with serialized data.
         /// </summary>
         /// <param name="message">The message that describes the error.</param>
-        public DocumentDbDistributedLockException(string message) : base(message)
-        {
-        }
+        public DocumentDbDistributedLockException(string message) : base(message) { }
     }
 }
