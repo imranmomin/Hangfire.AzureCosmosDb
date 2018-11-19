@@ -90,10 +90,11 @@ namespace Hangfire.Azure
 
             Uri uri = UriFactory.CreateDocumentUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, jobId);
             Task<DocumentResponse<Documents.Job>> task = Storage.Client.ReadDocumentAsync<Documents.Job>(uri);
-            Documents.Job data = task.Result;
+            task.Wait();
 
-            if (data != null)
+            if (task.Result.Document != null)
             {
+                Documents.Job data = task.Result;
                 InvocationData invocationData = data.InvocationData;
                 invocationData.Arguments = data.Arguments;
 
@@ -125,28 +126,29 @@ namespace Hangfire.Azure
         {
             if (jobId == null) throw new ArgumentNullException(nameof(jobId));
 
-            SqlQuerySpec sql = new SqlQuerySpec
-            {
-                QueryText = "SELECT TOP 1 * FROM doc WHERE doc.type = @type AND doc.job_id = @jobId ORDER BY doc.created_on DESC",
-                Parameters = new SqlParameterCollection
-                 {
-                     new SqlParameter("@jobId", jobId),
-                     new SqlParameter("@type", DocumentTypes.State)
-                 }
-            };
+            Uri uri = UriFactory.CreateDocumentUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, jobId);
+            Task<DocumentResponse<Documents.Job>> task = Storage.Client.ReadDocumentAsync<Documents.Job>(uri);
+            task.Wait();
 
-            State state = Storage.Client.CreateDocumentQuery<State>(Storage.CollectionUri, sql)
-                .AsEnumerable()
-                .FirstOrDefault();
-
-            if (state != null)
+            if (task.Result.Document != null)
             {
-                return new StateData
+                Documents.Job job = task.Result;
+
+                // get the state document
+                uri = UriFactory.CreateDocumentUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, job.StateId);
+                Task<DocumentResponse<State>> stateTask = Storage.Client.ReadDocumentAsync<State>(uri);
+                stateTask.Wait();
+
+                if (stateTask.Result.Document != null)
                 {
-                    Name = state.Name,
-                    Reason = state.Reason,
-                    Data = state.Data
-                };
+                    State state = stateTask.Result;
+                    return new StateData
+                    {
+                        Name = state.Name,
+                        Reason = state.Reason,
+                        Data = state.Data
+                    };
+                }
             }
 
             return null;
@@ -215,10 +217,12 @@ namespace Hangfire.Azure
 
             return Storage.Client.CreateDocumentQuery<Set>(Storage.CollectionUri, queryOptions)
                 .Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
-                .OrderBy(s => s.CreatedOn)
-                .Select(c => c.Value)
+                .OrderBy(s => s.Score)
+                .ThenBy(s => s.CreatedOn)
                 .AsEnumerable()
-                .Skip(startingFrom).Take(endingAt)
+                .Select((s, i) => new { s.Value, Index = i })
+                .Where(s => s.Index >= startingFrom && s.Index <= endingAt)
+                .Select(s => s.Value)
                 .ToList();
         }
 
@@ -232,7 +236,7 @@ namespace Hangfire.Azure
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
-                    new SqlParameter("@type", DocumentTypes.Counter),
+                    new SqlParameter("@type", DocumentTypes.Counter)
                 }
             };
 
@@ -251,7 +255,7 @@ namespace Hangfire.Azure
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
-                    new SqlParameter("@type", DocumentTypes.Set),
+                    new SqlParameter("@type", DocumentTypes.Set)
                 }
             };
 
@@ -284,7 +288,7 @@ namespace Hangfire.Azure
                 {
                     new SqlParameter("@key", key),
                     new SqlParameter("@type", DocumentTypes.Set),
-                    new SqlParameter("@from", (int)fromScore ),
+                    new SqlParameter("@from", (int)fromScore),
                     new SqlParameter("@to", (int)toScore)
                 }
             };
@@ -418,7 +422,7 @@ namespace Hangfire.Azure
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
-                    new SqlParameter("@type", DocumentTypes.Hash),
+                    new SqlParameter("@type", DocumentTypes.Hash)
                 }
             };
 
@@ -458,7 +462,7 @@ namespace Hangfire.Azure
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
-                    new SqlParameter("@type", DocumentTypes.Hash),
+                    new SqlParameter("@type", DocumentTypes.Hash)
                 }
             };
 
@@ -492,9 +496,10 @@ namespace Hangfire.Azure
             return Storage.Client.CreateDocumentQuery<List>(Storage.CollectionUri, queryOptions)
                 .Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
                 .OrderByDescending(l => l.CreatedOn)
-                .Select(l => l.Value)
                 .AsEnumerable()
-                .Skip(startingFrom).Take(endingAt)
+                .Select((l, i) => new { l.Value, Index = i })
+                .Where(l => l.Index >= startingFrom && l.Index <= endingAt)
+                .Select(l => l.Value)
                 .ToList();
         }
 
@@ -509,7 +514,7 @@ namespace Hangfire.Azure
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
-                    new SqlParameter("@type", DocumentTypes.List),
+                    new SqlParameter("@type", DocumentTypes.List)
                 }
             };
 
@@ -530,7 +535,7 @@ namespace Hangfire.Azure
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
-                    new SqlParameter("@type", DocumentTypes.List),
+                    new SqlParameter("@type", DocumentTypes.List)
                 }
             };
 
