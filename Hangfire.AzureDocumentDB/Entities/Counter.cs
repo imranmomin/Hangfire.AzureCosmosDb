@@ -20,6 +20,6 @@ namespace Hangfire.Azure.Documents
     internal enum CounterTypes
     {
         Raw = 1,
-        Aggregrate = 2
+        Aggregate = 2
     }
 }

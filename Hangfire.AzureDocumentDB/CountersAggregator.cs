@@ -20,15 +20,17 @@ namespace Hangfire.Azure
 #pragma warning restore 618
     {
         private readonly ILog logger = LogProvider.For<CountersAggregator>();
-        private const string DISTRIBUTED_LOCK_KEY = "locks:countersaggragator";
+        private const string DISTRIBUTED_LOCK_KEY = "locks:counters:aggragator";
         private readonly TimeSpan defaultLockTimeout;
         private readonly DocumentDbStorage storage;
         private readonly FeedOptions queryOptions = new FeedOptions { MaxItemCount = 1000 };
+        private readonly Uri spDeleteRawCounterUri;
 
         public CountersAggregator(DocumentDbStorage storage)
         {
             this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
             defaultLockTimeout = TimeSpan.FromSeconds(30) + storage.Options.CountersAggregateInterval;
+            spDeleteRawCounterUri = UriFactory.CreateStoredProcedureUri(storage.Options.DatabaseName, storage.Options.CollectionName, "deleteRawCounters");
         }
 
         public void Execute(CancellationToken cancellationToken)
@@ -38,12 +40,12 @@ namespace Hangfire.Azure
                 logger.Trace("Aggregating records in 'Counter' table.");
 
                 List<Counter> rawCounters = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri, queryOptions)
-                    .Where(c => c.Type == CounterTypes.Raw && c.DocumentType == DocumentTypes.Counter)
+                    .Where(c => c.DocumentType == DocumentTypes.Counter && c.Type == CounterTypes.Raw)
                     .AsEnumerable()
                     .ToList();
 
-                Dictionary<string, (int Sum, DateTime? ExpireOn)> counters = rawCounters.GroupBy(c => c.Key)
-                    .ToDictionary(k => k.Key, v => (Sum: v.Sum(c => c.Value), ExpireOn: v.Max(c => c.ExpireOn)));
+                Dictionary<string, (int Value, DateTime? ExpireOn)> counters = rawCounters.GroupBy(c => c.Key)
+                    .ToDictionary(k => k.Key, v => (Value: v.Sum(c => c.Value), ExpireOn: v.Max(c => c.ExpireOn)));
 
                 foreach (string key in counters.Keys)
                 {
@@ -51,7 +53,7 @@ namespace Hangfire.Azure
 
                     if (counters.TryGetValue(key, out var data))
                     {
-                        string id = key.GenerateHash();
+                        string id = $"{key}:{CounterTypes.Aggregate}".GenerateHash();
                         Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, id);
                         Task<DocumentResponse<Counter>> readTask = storage.Client.ReadDocumentAsync<Counter>(uri, cancellationToken: cancellationToken);
                         readTask.Wait(cancellationToken);
@@ -63,16 +65,16 @@ namespace Hangfire.Azure
                             {
                                 Id = id,
                                 Key = key,
-                                Type = CounterTypes.Aggregrate,
-                                Value = data.Sum,
+                                Type = CounterTypes.Aggregate,
+                                Value = data.Value,
                                 ExpireOn = data.ExpireOn
                             };
                         }
-                        else if (readTask.Result.StatusCode == HttpStatusCode.OK && readTask.Result.Document.Type == CounterTypes.Aggregrate)
+                        else if (readTask.Result.StatusCode == HttpStatusCode.OK && readTask.Result.Document.Type == CounterTypes.Aggregate)
                         {
                             aggregated = readTask.Result;
-                            aggregated.Value += data.Sum;
-                            aggregated.ExpireOn = data.ExpireOn;
+                            aggregated.Value += data.Value;
+                            aggregated.ExpireOn = new[] { aggregated.ExpireOn, data.ExpireOn }.Max();
                         }
                         else
                         {
@@ -86,23 +88,36 @@ namespace Hangfire.Azure
                         {
                             if (t.Result.StatusCode == HttpStatusCode.Created || t.Result.StatusCode == HttpStatusCode.OK)
                             {
-                                string[] deleteCounterIds = rawCounters.Where(c => c.Key == key).Select(c => c.Id).ToArray();
-                                Array.ForEach(deleteCounterIds, documentId =>
+                                Data<string> deleteCounterIds = new Data<string>
                                 {
-                                    uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, documentId);
-                                    storage.Client.DeleteDocumentAsync(uri, cancellationToken: cancellationToken).Wait(cancellationToken);
-                                });
+                                    Items = rawCounters.Where(c => c.Key == key).Select(c => c.Id).ToArray()
+                                };
 
-                                logger.Trace($"Total {deleteCounterIds.Length} records from the 'Counter:{aggregated.Key}' were aggregated.");
+                                int deleted = 0;
+                                ProcedureResponse response;
+                                do
+                                {
+                                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spDeleteRawCounterUri, deleteCounterIds);
+                                    procedureTask.Wait(cancellationToken);
+
+                                    response = procedureTask.Result;
+                                    deleted += response.Affected;
+
+                                    // if the continuation is true; run the procedure again
+                                } while (response.Continuation);
+
+
+                                logger.Trace($"Total {deleted} records from the 'Counter:{aggregated.Key}' were aggregated.");
                             }
                         }, cancellationToken, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Current);
 
                         continueTask.Wait(cancellationToken);
                     }
                 }
+
+                logger.Trace("Records from the 'Counter' table aggregated.");
             }
 
-            logger.Trace("Records from the 'Counter' table aggregated.");
             cancellationToken.WaitHandle.WaitOne(storage.Options.CountersAggregateInterval);
         }
 
