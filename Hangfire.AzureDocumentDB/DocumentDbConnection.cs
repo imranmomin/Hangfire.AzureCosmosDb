@@ -12,6 +12,7 @@ using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 
 using Hangfire.Azure.Queue;
+using Hangfire.Azure.Helper;
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
 
@@ -309,6 +310,7 @@ namespace Hangfire.Azure
 
             Documents.Server server = new Documents.Server
             {
+                Id = $"{serverId}:{DocumentTypes.Server}".GenerateHash(),
                 ServerId = serverId,
                 Workers = context.WorkerCount,
                 Queues = context.Queues,
@@ -324,18 +326,20 @@ namespace Hangfire.Azure
         public override void Heartbeat(string serverId)
         {
             if (serverId == null) throw new ArgumentNullException(nameof(serverId));
+            string id = $"{serverId}:{DocumentTypes.Server}".GenerateHash();
 
             Uri spHeartbeatServerUri = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "heartbeatServer");
-            Task<StoredProcedureResponse<bool>> task = Storage.Client.ExecuteStoredProcedureAsync<bool>(spHeartbeatServerUri, serverId, DateTime.UtcNow.ToEpoch());
+            Task<StoredProcedureResponse<bool>> task = Storage.Client.ExecuteStoredProcedureAsync<bool>(spHeartbeatServerUri, id, DateTime.UtcNow.ToEpoch());
             task.Wait();
         }
 
         public override void RemoveServer(string serverId)
         {
             if (serverId == null) throw new ArgumentNullException(nameof(serverId));
+            string id = $"{serverId}:{DocumentTypes.Server}".GenerateHash();
 
             Uri spRemoveServerUri = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "removeServer");
-            Task<StoredProcedureResponse<bool>> task = Storage.Client.ExecuteStoredProcedureAsync<bool>(spRemoveServerUri, serverId);
+            Task<StoredProcedureResponse<bool>> task = Storage.Client.ExecuteStoredProcedureAsync<bool>(spRemoveServerUri, id);
             task.Wait();
         }
 
@@ -352,7 +356,7 @@ namespace Hangfire.Azure
 
             do
             {
-                Uri spRemovedTimeoutServerUri = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "removedTimedOutServer");
+                Uri spRemovedTimeoutServerUri = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "removeTimedOutServer");
                 Task<StoredProcedureResponse<ProcedureResponse>> task = Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spRemovedTimeoutServerUri, lastHeartbeat);
                 task.Wait();
 

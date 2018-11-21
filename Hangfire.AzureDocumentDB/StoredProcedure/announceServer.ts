@@ -7,26 +7,19 @@ function announceServer(server: IServer) {
     let collection: ICollection = context.getCollection();
     let collectionLink: string = collection.getSelfLink();
     let response: IResponse = getContext().getResponse();
+    let documentLink: string = `${collectionLink}/docs/${server.id}`;
 
     // default response
     response.setBody(false);
 
-    // filter function to find the duplicate servers
-    let filter = (doc: IServer) => doc.type === server.type && doc.server_id === server.server_id;
-
-    let result: IQueryResponse = collection.filter(filter, (error: IFeedCallbackError, docs: Array<IServer>) => {
+    let result: boolean = collection.readDocument(documentLink, (error: IFeedCallbackError, doc: IServer) => {
         if (error) {
-             throw error;
-        }
-        if (docs.length > 1) {
-            throw new Error(`Found more than one server for: ${server.server_id}`);
+            throw error;
         }
 
-        let doc: IServer;
-        if (docs.length === 0) {
+        if (doc === undefined) {
             doc = server;
         } else {
-            doc = docs.shift();
             doc.last_heartbeat = server.last_heartbeat;
             doc.workers = server.workers;
             doc.queues = server.queues;
@@ -44,7 +37,7 @@ function announceServer(server: IServer) {
         }
     });
 
-    if (!result.isAccepted) {
+    if (!result) {
         throw new Error("The call was not accepted");
     }
 }

@@ -3,21 +3,16 @@ function announceServer(server) {
     let collection = context.getCollection();
     let collectionLink = collection.getSelfLink();
     let response = getContext().getResponse();
+    let documentLink = `${collectionLink}/docs/${server.id}`;
     response.setBody(false);
-    let filter = (doc) => doc.type === server.type && doc.server_id === server.server_id;
-    let result = collection.filter(filter, (error, docs) => {
+    let result = collection.readDocument(documentLink, (error, doc) => {
         if (error) {
             throw error;
         }
-        if (docs.length > 1) {
-            throw new Error(`Found more than one server for: ${server.server_id}`);
-        }
-        let doc;
-        if (docs.length === 0) {
+        if (doc === undefined) {
             doc = server;
         }
         else {
-            doc = docs.shift();
             doc.last_heartbeat = server.last_heartbeat;
             doc.workers = server.workers;
             doc.queues = server.queues;
@@ -32,7 +27,7 @@ function announceServer(server) {
             throw new Error("Failed to create a server document");
         }
     });
-    if (!result.isAccepted) {
+    if (!result) {
         throw new Error("The call was not accepted");
     }
 }

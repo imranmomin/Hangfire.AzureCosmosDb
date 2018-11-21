@@ -1,20 +1,18 @@
 function heartbeatServer(id, heartbeat) {
     let context = getContext();
     let collection = context.getCollection();
+    let collectionLink = collection.getSelfLink();
     let response = getContext().getResponse();
+    let documentLink = `${collectionLink}/docs/${id}`;
     response.setBody(false);
-    let filter = (doc) => doc.type === 1 && doc.server_id === id;
-    let result = collection.filter(filter, (error, docs) => {
+    let result = collection.readDocument(documentLink, (error, doc) => {
         if (error) {
             throw error;
         }
-        if (docs.length === 0) {
-            throw new Error(`No server found for id :${id}`);
+        if (doc === undefined) {
+            response.setBody(false);
+            return;
         }
-        if (docs.length > 1) {
-            throw new Error(`Found more than one server for :${id}`);
-        }
-        let doc = docs.shift();
         doc.last_heartbeat = heartbeat;
         let isAccepted = collection.replaceDocument(doc._self, doc, (error) => {
             if (error) {
@@ -26,7 +24,7 @@ function heartbeatServer(id, heartbeat) {
             throw new Error("The call was not accepted");
         }
     });
-    if (!result.isAccepted) {
+    if (!result) {
         throw new Error("The call was not accepted");
     }
 }

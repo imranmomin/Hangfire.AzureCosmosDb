@@ -54,8 +54,8 @@
     <EmbeddedResource Include="StoredProcedure\persistJob.js">
       <DependentUpon>persistJob.ts</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="StoredProcedure\removedTimedOutServer.js">
-      <DependentUpon>removedTimedOutServer.ts</DependentUpon>
+    <EmbeddedResource Include="StoredProcedure\removeTimedOutServer.js">
+      <DependentUpon>removeTimedOutServer.ts</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="StoredProcedure\removeFromList.js">
       <DependentUpon>removeFromList.ts</DependentUpon>

@@ -8,25 +8,24 @@
 function heartbeatServer(id: string, heartbeat: number) {
     let context: IContext = getContext();
     let collection: ICollection = context.getCollection();
+    let collectionLink: string = collection.getSelfLink();
     let response: IResponse = getContext().getResponse();
+    let documentLink: string = `${collectionLink}/docs/${id}`;
 
     // default response
     response.setBody(false);
-
-    let filter = (doc: IServer) => doc.type === 1 && doc.server_id === id;
-
-    let result: IQueryResponse = collection.filter(filter, (error: IRequestCallbackError, docs: Array<IServer>) => {
+    
+    let result: boolean = collection.readDocument(documentLink, (error: IRequestCallbackError, doc: IServer) => {
         if (error) {
             throw error;
         }
-        if (docs.length === 0) {
-            throw new Error(`No server found for id :${id}`);
-        }
-        if (docs.length > 1) {
-            throw new Error(`Found more than one server for :${id}`);
-        }
 
-        let doc: IServer = docs.shift();
+        if (doc === undefined) {
+            response.setBody(false);
+            return;
+        }
+       
+        // set the heartbeat 
         doc.last_heartbeat = heartbeat;
 
         let isAccepted: boolean = collection.replaceDocument(doc._self, doc, (error: IRequestCallbackError) => {
@@ -41,7 +40,7 @@ function heartbeatServer(id: string, heartbeat: number) {
         }
     });
 
-    if (!result.isAccepted) {
+    if (!result) {
         throw new Error("The call was not accepted");
     }
 }
