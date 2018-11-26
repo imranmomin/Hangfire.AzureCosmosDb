@@ -20,13 +20,13 @@ namespace Hangfire.Azure
         private readonly TimeSpan defaultLockTimeout;
         private readonly DocumentTypes[] documents = { DocumentTypes.Lock, DocumentTypes.Job, DocumentTypes.List, DocumentTypes.Set, DocumentTypes.Hash, DocumentTypes.Counter };
         private readonly DocumentDbStorage storage;
-        private readonly Uri spDeleteExpiredDocumentsUri;
+        private readonly Uri spDeleteDocumentsUri;
 
         public ExpirationManager(DocumentDbStorage storage)
         {
             this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
             defaultLockTimeout = TimeSpan.FromSeconds(15) + storage.Options.ExpirationCheckInterval;
-            spDeleteExpiredDocumentsUri = UriFactory.CreateStoredProcedureUri(storage.Options.DatabaseName, storage.Options.CollectionName, "deleteExpiredDocuments");
+            spDeleteDocumentsUri = UriFactory.CreateStoredProcedureUri(storage.Options.DatabaseName, storage.Options.CollectionName, "deleteDocuments");
         }
 
         public void Execute(CancellationToken cancellationToken)
@@ -34,16 +34,26 @@ namespace Hangfire.Azure
             using (new DocumentDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage))
             {
                 int expireOn = DateTime.UtcNow.ToEpoch();
-                
+
                 foreach (DocumentTypes type in documents)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+
                     logger.Trace($"Removing outdated records from the '{type}' document.");
-                    
+
+                    string query = $"SELECT * FROM doc WHERE doc.type = {(int)type} AND IS_DEFINED(doc.expire_on) AND doc.expire_on < {expireOn}";
+
+                    // remove only the aggregate counters when the type is Counter
+                    if (type == DocumentTypes.Counter)
+                    {
+                        query += $" AND doc.counter_type = {(int)CounterTypes.Aggregate}";
+                    }
+
                     int deleted = 0;
                     ProcedureResponse response;
                     do
                     {
-                        Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spDeleteExpiredDocumentsUri, (int)type, expireOn);
+                        Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
                         procedureTask.Wait(cancellationToken);
 
                         response = procedureTask.Result;
