@@ -1,61 +1,60 @@
-function deleteRawCounters(ids) {
+function expireDocument(query, expireOn) {
     let context = getContext();
     let collection = context.getCollection();
     let response = getContext().getResponse();
+    let collectionLink = collection.getSelfLink();
     let responseBody = {
         affected: 0,
         continuation: true
     };
+    if (query === undefined || query === null) {
+        throw new Error("query is either empty or null");
+    }
     response.setBody(responseBody);
-    let filter = (doc) => {
-        if (doc.type === 4 && ids.items.length > 0) {
-            let id = ids.items.find(d => d === doc.id);
-            return id !== undefined;
-        }
-        return false;
-    };
-    tryQueryAndDelete();
-    function tryQueryAndDelete(continuation) {
+    function tryQueryAndUpdate(continuation) {
         let feedOptions = {
             continuation: continuation
         };
-        let result = collection.filter(filter, feedOptions, (error, docs, feedCallbackOptions) => {
+        let result = collection.queryDocuments(collectionLink, query, feedOptions, (error, docs, feedCallbackOptions) => {
             if (error) {
                 throw error;
             }
             if (docs.length > 0) {
-                tryDelete(docs);
+                tryUpdate(docs);
             }
             else if (feedCallbackOptions.continuation) {
-                tryQueryAndDelete(feedCallbackOptions.continuation);
+                tryQueryAndUpdate(feedCallbackOptions.continuation);
             }
             else {
                 responseBody.continuation = false;
                 response.setBody(responseBody);
             }
         });
-        if (!result.isAccepted) {
+        if (!result) {
             response.setBody(responseBody);
         }
     }
-    function tryDelete(documents) {
+    function tryUpdate(documents) {
         if (documents.length > 0) {
             let doc = documents[0];
-            let isAccepted = collection.deleteDocument(doc._self, (error) => {
+            doc.expire_on = expireOn;
+            let option = {
+                etag: doc._etag
+            };
+            let isAccepted = collection.replaceDocument(doc._self, doc, option, (error) => {
                 if (error) {
                     throw error;
                 }
                 responseBody.affected++;
-                ids.items = ids.items.filter(d => d !== doc.id);
                 documents.shift();
-                tryDelete(documents);
+                tryUpdate(documents);
             });
             if (!isAccepted) {
                 response.setBody(responseBody);
             }
         }
         else {
-            tryQueryAndDelete();
+            tryQueryAndUpdate();
         }
     }
 }

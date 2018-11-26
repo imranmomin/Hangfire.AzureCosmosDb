@@ -18,8 +18,18 @@ namespace Hangfire.Azure
     {
         private readonly DocumentDbConnection connection;
         private readonly List<Action> commands = new List<Action>();
+        private readonly Uri spPersistDocumentsUri;
+        private readonly Uri spExpireDocumentsUri;
+        private readonly Uri spDeleteDocumentsUri;
 
-        public DocumentDbWriteOnlyTransaction(DocumentDbConnection connection) => this.connection = connection;
+        public DocumentDbWriteOnlyTransaction(DocumentDbConnection connection)
+        {
+            this.connection = connection;
+            spPersistDocumentsUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "deleteDocuments");
+            spExpireDocumentsUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "expireDocuments");
+            spDeleteDocumentsUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "deleteDocuments");
+        }
+
         private void QueueCommand(Action command) => commands.Add(command);
         public override void Commit() => commands.ForEach(command => command());
         public override void Dispose() { }
@@ -211,10 +221,10 @@ namespace Hangfire.Azure
                 };
 
                 ProcedureResponse response;
+                Uri spRemoveFromSetUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "removeFromSet");
 
                 do
                 {
-                    Uri spRemoveFromSetUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "removeFromSet");
                     Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spRemoveFromSetUri, data);
                     task.Wait();
 
@@ -244,11 +254,12 @@ namespace Hangfire.Azure
                 // loop until the affected records is not zero and attempts are less then equal to 3
                 int affected;
                 int attempts = 0;
+                Uri spAddToSetUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "addToSet");
+
                 do
                 {
                     attempts++;
 
-                    Uri spAddToSetUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "addToSet");
                     Task<StoredProcedureResponse<int>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<int>(spAddToSetUri, set);
                     task.Wait();
 
@@ -266,7 +277,18 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
+                string query = $"SELECT * FROM doc WHERE doc.type = {DocumentTypes.Set}";
+                ProcedureResponse response;
 
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spPersistDocumentsUri, query);
+                    procedureTask.Wait();
+
+                    response = procedureTask.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
             });
         }
 
@@ -276,7 +298,19 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
+                string query = $"SELECT * FROM doc WHERE doc.type = {DocumentTypes.Set}";
                 int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
+                ProcedureResponse response;
+
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
+                    procedureTask.Wait();
+
+                    response = procedureTask.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
             });
         }
 
@@ -297,7 +331,18 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
+                string query = $"SELECT * FROM doc WHERE doc.type = {DocumentTypes.Set} AND doc.key == '{key}'";
+                ProcedureResponse response;
 
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
+                    procedureTask.Wait();
+
+                    response = procedureTask.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
             });
         }
 
@@ -343,7 +388,19 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
+                string query = $"SELECT * FROM doc WHERE doc.type = {DocumentTypes.Hash}";
                 int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
+                ProcedureResponse response;
+
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
+                    procedureTask.Wait();
+
+                    response = procedureTask.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
             });
         }
 
@@ -353,7 +410,18 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
+                string query = $"SELECT * FROM doc WHERE doc.type = {DocumentTypes.Hash}";
+                ProcedureResponse response;
 
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spPersistDocumentsUri, query);
+                    procedureTask.Wait();
+
+                    response = procedureTask.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
             });
         }
 
@@ -426,7 +494,19 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
+                string query = $"SELECT * FROM doc WHERE doc.type = {DocumentTypes.List}";
                 int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
+                ProcedureResponse response;
+
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
+                    procedureTask.Wait();
+
+                    response = procedureTask.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
             });
         }
 
@@ -436,7 +516,18 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                 
+                string query = $"SELECT * FROM doc WHERE doc.type = {DocumentTypes.List}";
+                ProcedureResponse response;
+
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spPersistDocumentsUri, query);
+                    procedureTask.Wait();
+
+                    response = procedureTask.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
             });
         }
 
