@@ -350,21 +350,21 @@ namespace Hangfire.Azure
                 throw new ArgumentException(@"invalid timeout", nameof(timeOut));
             }
 
-            int lastHeartbeat = DateTime.UtcNow.Add(timeOut.Negate()).ToEpoch();
             int removed = 0;
             ProcedureResponse response;
+            int lastHeartbeat = DateTime.UtcNow.Add(timeOut.Negate()).ToEpoch();
+            string query = $"SELECT * FROM doc WHERE doc.type = {DocumentTypes.Server} AND IS_DEFINED(doc.last_heartbeat) AND doc.last_heartbeat <= {lastHeartbeat}";
+            Uri spDeleteDocuments = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "deleteDocuments");
 
             do
             {
-                Uri spRemovedTimeoutServerUri = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "removeTimedOutServer");
-                Task<StoredProcedureResponse<ProcedureResponse>> task = Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spRemovedTimeoutServerUri, lastHeartbeat);
+                Task<StoredProcedureResponse<ProcedureResponse>> task = Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spDeleteDocuments, query);
                 task.Wait();
 
                 response = task.Result;
                 removed += response.Affected;
 
-                // if the continuation is true; run the procedure again
-            } while (response.Continuation);
+            } while (response.Continuation);  // if the continuation is true; run the procedure again
 
             return removed;
         }
