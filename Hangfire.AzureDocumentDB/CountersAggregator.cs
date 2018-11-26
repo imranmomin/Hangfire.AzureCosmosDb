@@ -24,13 +24,13 @@ namespace Hangfire.Azure
         private readonly TimeSpan defaultLockTimeout;
         private readonly DocumentDbStorage storage;
         private readonly FeedOptions queryOptions = new FeedOptions { MaxItemCount = 1000 };
-        private readonly Uri spDeleteRawCounterUri;
+        private readonly Uri spDeleteDocumentsUri;
 
         public CountersAggregator(DocumentDbStorage storage)
         {
             this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
             defaultLockTimeout = TimeSpan.FromSeconds(30) + storage.Options.CountersAggregateInterval;
-            spDeleteRawCounterUri = UriFactory.CreateStoredProcedureUri(storage.Options.DatabaseName, storage.Options.CollectionName, "deleteRawCounters");
+            spDeleteDocumentsUri = UriFactory.CreateStoredProcedureUri(storage.Options.DatabaseName, storage.Options.CollectionName, "deleteDocuments");
         }
 
         public void Execute(CancellationToken cancellationToken)
@@ -83,28 +83,24 @@ namespace Hangfire.Azure
                         }
 
                         Task<ResourceResponse<Document>> task = storage.Client.UpsertDocumentAsync(storage.CollectionUri, aggregated, cancellationToken: cancellationToken);
-
                         Task continueTask = task.ContinueWith(t =>
                         {
                             if (t.Result.StatusCode == HttpStatusCode.Created || t.Result.StatusCode == HttpStatusCode.OK)
                             {
-                                Data<string> deleteCounterIds = new Data<string>
-                                {
-                                    Items = rawCounters.Where(c => c.Key == key).Select(c => c.Id).ToArray()
-                                };
-
                                 int deleted = 0;
                                 ProcedureResponse response;
+                                string ids = string.Join("', '", rawCounters.Where(c => c.Key == key).Select(c => c.Id).ToArray());
+                                string query = $"SELECT * FROM doc WHERE doc.type = {DocumentTypes.Counter} AND doc.counter_type = {CounterTypes.Raw} AND doc.id IN ({ids})";
+
                                 do
                                 {
-                                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spDeleteRawCounterUri, deleteCounterIds);
+                                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
                                     procedureTask.Wait(cancellationToken);
 
                                     response = procedureTask.Result;
                                     deleted += response.Affected;
 
-                                    // if the continuation is true; run the procedure again
-                                } while (response.Continuation);
+                                } while (response.Continuation); // if the continuation is true; run the procedure again
 
 
                                 logger.Trace($"Total {deleted} records from the 'Counter:{aggregated.Key}' were aggregated.");
