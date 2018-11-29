@@ -16,7 +16,6 @@
     <FileVersion>2.0.0.0</FileVersion>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <RootNamespace>Hangfire.Azure</RootNamespace>
-    <TypeScriptCompileBlocked>true</TypeScriptCompileBlocked>
     <TypeScriptToolsVersion>Latest</TypeScriptToolsVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
@@ -97,6 +96,9 @@
       <DependentUpon>document.ts</DependentUpon>
     </None>
   </ItemGroup>
+  <Target Name="TypescriptComplie" BeforeTargets="Build">
+    <Exec Command="tsc --build --verbose --force"/>
+  </Target>
   <ItemGroup>
     <PackageReference Include="Hangfire.Core" Version="1.6.20" />
     <PackageReference Include="Newtonsoft.Json" Version="11.0.2" />
