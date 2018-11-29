@@ -97,11 +97,11 @@
     </None>
   </ItemGroup>
   <Target Name="TypescriptComplie" BeforeTargets="Build">
-    <Exec Command="tsc --build --verbose --force"/>
+    <Exec Command="tsc --build --verbose --force" />
   </Target>
   <ItemGroup>
-    <PackageReference Include="Hangfire.Core" Version="1.6.20" />
-    <PackageReference Include="Newtonsoft.Json" Version="11.0.2" />
+    <PackageReference Include="Hangfire.Core" Version="1.6.21" />
+    <PackageReference Include="Newtonsoft.Json" Version="12.0.1" />
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
