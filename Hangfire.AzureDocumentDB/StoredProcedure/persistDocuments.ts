@@ -9,12 +9,15 @@ function persistDocument(query: string) {
     let collectionLink = collection.getSelfLink();
     let responseBody: IProcedureResponse = {
         affected: 0,
-        continuation: true
+        continuation: false
     };
 
     if (query === undefined || query === null) {
         throw new Error("query is either empty or null");
     }
+
+    // append the query to filter when expire_on is not defined or less than 
+    query = `${query} AND IS_DEFINED(doc.expire_on)`;
 
     // default response
     response.setBody(responseBody);
@@ -48,6 +51,7 @@ function persistDocument(query: string) {
 
         // If we hit execution bounds - return continuation: true.
         if (!result) {
+            responseBody.continuation = true;
             response.setBody(responseBody);
         }
     }
@@ -56,7 +60,7 @@ function persistDocument(query: string) {
     // Attempts to query for more on empty array.
     function tryUpdate(documents: Array<IDocumentBase>) {
         if (documents.length > 0) {
-           
+
             let doc: IDocumentBase = documents[0];
             delete doc.expire_on;
 

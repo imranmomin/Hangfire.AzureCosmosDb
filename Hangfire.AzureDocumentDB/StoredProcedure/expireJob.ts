@@ -7,7 +7,7 @@ function expireJob(id: string, expireOn: number) {
     let context: IContext = getContext();
     let collection: ICollection = context.getCollection();
     let response: IResponse = getContext().getResponse();
-    let collectionLink: string = collection.getSelfLink();
+    let collectionLink: string = collection.getAltLink();
     let documentLink: string = `${collectionLink}/docs/${id}`;
 
     // default response
@@ -17,11 +17,7 @@ function expireJob(id: string, expireOn: number) {
         if (error) {
             throw error;
         }
-
-        if (doc.type !== 2) {
-            throw new Error("The document is not of type `Job`");
-        }
-
+        
         // set the expire_on 
         doc.expire_on = expireOn;
 

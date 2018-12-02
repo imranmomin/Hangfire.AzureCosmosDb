@@ -5,7 +5,7 @@
 function announceServer(server: IServer) {
     let context: IContext = getContext();
     let collection: ICollection = context.getCollection();
-    let collectionLink: string = collection.getSelfLink();
+    let collectionLink: string = collection.getAltLink();
     let response: IResponse = getContext().getResponse();
     let documentLink: string = `${collectionLink}/docs/${server.id}`;
 
@@ -13,7 +13,7 @@ function announceServer(server: IServer) {
     response.setBody(false);
 
     let result: boolean = collection.readDocument(documentLink, (error: IFeedCallbackError, doc: IServer) => {
-        if (error) {
+        if (error !== undefined && error.number !== 404) {
             throw error;
         }
 

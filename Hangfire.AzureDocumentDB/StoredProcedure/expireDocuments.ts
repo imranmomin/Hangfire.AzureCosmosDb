@@ -9,12 +9,15 @@ function expireDocument(query: string, expireOn: number) {
     let collectionLink = collection.getSelfLink();
     let responseBody: IProcedureResponse = {
         affected: 0,
-        continuation: true
+        continuation: false
     };
 
     if (query === undefined || query === null) {
         throw new Error("query is either empty or null");
     }
+
+    // append the query to filter when expire_on is not defined or less than 
+    query = `${query} AND (NOT IS_DEFINED(doc.expire_on) OR doc.expire_on < ${expireOn})`;
 
     // default response
     response.setBody(responseBody);
@@ -48,6 +51,7 @@ function expireDocument(query: string, expireOn: number) {
 
         // If we hit execution bounds - return continuation: true.
         if (!result) {
+            responseBody.continuation = true;
             response.setBody(responseBody);
         }
     }

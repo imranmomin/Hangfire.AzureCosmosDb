@@ -53,33 +53,45 @@ namespace Hangfire.Azure
 
                     if (counters.TryGetValue(key, out var data))
                     {
+                        Counter aggregated = null;
                         string id = $"{key}:{CounterTypes.Aggregate}".GenerateHash();
                         Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, id);
-                        Task<DocumentResponse<Counter>> readTask = storage.Client.ReadDocumentAsync<Counter>(uri, cancellationToken: cancellationToken);
-                        readTask.Wait(cancellationToken);
 
-                        Counter aggregated;
-                        if (readTask.Result.StatusCode != HttpStatusCode.OK)
+                        try
                         {
-                            aggregated = new Counter
+                            Task<DocumentResponse<Counter>> readTask = storage.Client.ReadDocumentAsync<Counter>(uri, cancellationToken: cancellationToken);
+                            readTask.Wait(cancellationToken);
+
+                            if (readTask.Result.StatusCode == HttpStatusCode.OK)
                             {
-                                Id = id,
-                                Key = key,
-                                Type = CounterTypes.Aggregate,
-                                Value = data.Value,
-                                ExpireOn = data.ExpireOn
-                            };
+                                aggregated = readTask.Result;
+                                aggregated.Value += data.Value;
+                                aggregated.ExpireOn = new[] { aggregated.ExpireOn, data.ExpireOn }.Max();
+                            }
+                            else
+                            {
+                                logger.Warn($"Document with ID: {id} is a {readTask.Result.Document.Type.ToString()} type which could not be aggregated");
+                                continue;
+                            }
                         }
-                        else if (readTask.Result.StatusCode == HttpStatusCode.OK && readTask.Result.Document.Type == CounterTypes.Aggregate)
+                        catch (AggregateException ex) when (ex.InnerException is DocumentClientException clientException)
                         {
-                            aggregated = readTask.Result;
-                            aggregated.Value += data.Value;
-                            aggregated.ExpireOn = new[] { aggregated.ExpireOn, data.ExpireOn }.Max();
-                        }
-                        else
-                        {
-                            logger.Warn($"Document with ID: {id} is a {readTask.Result.Document.Type.ToString()} type which could not be aggregated");
-                            continue;
+                            if (clientException.StatusCode == HttpStatusCode.NotFound)
+                            {
+                                aggregated = new Counter
+                                {
+                                    Id = id,
+                                    Key = key,
+                                    Type = CounterTypes.Aggregate,
+                                    Value = data.Value,
+                                    ExpireOn = data.ExpireOn
+                                };
+                            }
+                            else
+                            {
+                                logger.ErrorException("Error while reading document", ex.InnerException);
+                                continue;
+                            }
                         }
 
                         Task<ResourceResponse<Document>> task = storage.Client.UpsertDocumentAsync(storage.CollectionUri, aggregated, cancellationToken: cancellationToken);
@@ -89,8 +101,8 @@ namespace Hangfire.Azure
                             {
                                 int deleted = 0;
                                 ProcedureResponse response;
-                                string ids = string.Join("', '", rawCounters.Where(c => c.Key == key).Select(c => c.Id).ToArray());
-                                string query = $"SELECT * FROM doc WHERE doc.type = {DocumentTypes.Counter} AND doc.counter_type = {CounterTypes.Raw} AND doc.id IN ({ids})";
+                                string ids = string.Join(",", rawCounters.Where(c => c.Key == key).Select(c => $"'{c.Id}'").ToArray());
+                                string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Counter} AND doc.counter_type = {(int)CounterTypes.Raw} AND doc.id IN ({ids})";
 
                                 do
                                 {

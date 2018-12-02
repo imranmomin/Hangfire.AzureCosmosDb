@@ -7,7 +7,7 @@ function setJobState(id: string, state: IState) {
     let context: IContext = getContext();
     let collection: ICollection = context.getCollection();
     let response: IResponse = getContext().getResponse();
-    let collectionLink: string = collection.getSelfLink();
+    let collectionLink: string = collection.getAltLink();
     let documentLink: string = `${collectionLink}/docs/${id}`;
 
     // default response
@@ -16,10 +16,6 @@ function setJobState(id: string, state: IState) {
     let isAccepted: boolean = collection.readDocument(documentLink, (error: IRequestCallbackError, job: IJob) => {
         if (error) {
             throw error;
-        }
-
-        if (job.type !== 2) {
-            throw new Error("The document is not of type `Job`");
         }
         
         // now create the state document
@@ -32,7 +28,6 @@ function setJobState(id: string, state: IState) {
                 if (err) {
                     throw err;
                 }
-
                 response.setBody(true);
             });
 

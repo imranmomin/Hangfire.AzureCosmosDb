@@ -8,7 +8,7 @@
 function heartbeatServer(id: string, heartbeat: number) {
     let context: IContext = getContext();
     let collection: ICollection = context.getCollection();
-    let collectionLink: string = collection.getSelfLink();
+    let collectionLink: string = collection.getAltLink();
     let response: IResponse = getContext().getResponse();
     let documentLink: string = `${collectionLink}/docs/${id}`;
 
@@ -20,12 +20,7 @@ function heartbeatServer(id: string, heartbeat: number) {
             throw error;
         }
 
-        if (doc === undefined) {
-            response.setBody(false);
-            return;
-        }
-       
-        // set the heartbeat 
+        // set the heartbeat
         doc.last_heartbeat = heartbeat;
 
         let isAccepted: boolean = collection.replaceDocument(doc._self, doc, (error: IRequestCallbackError) => {

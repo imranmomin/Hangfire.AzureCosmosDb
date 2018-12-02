@@ -25,7 +25,7 @@ namespace Hangfire.Azure
         public ExpirationManager(DocumentDbStorage storage)
         {
             this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
-            defaultLockTimeout = TimeSpan.FromSeconds(15) + storage.Options.ExpirationCheckInterval;
+            defaultLockTimeout = TimeSpan.FromSeconds(30) + storage.Options.ExpirationCheckInterval;
             spDeleteDocumentsUri = UriFactory.CreateStoredProcedureUri(storage.Options.DatabaseName, storage.Options.CollectionName, "deleteDocuments");
         }
 

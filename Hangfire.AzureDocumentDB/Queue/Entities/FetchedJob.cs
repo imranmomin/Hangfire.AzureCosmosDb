@@ -15,7 +15,6 @@ namespace Hangfire.Azure.Queue
         private readonly ILog logger = LogProvider.GetLogger(typeof(FetchedJob));
         private readonly object syncRoot = new object();
         private readonly Timer timer;
-        private readonly Uri uri;
         private readonly DocumentDbStorage storage;
         private readonly Documents.Queue data;
         private bool disposed;
@@ -26,8 +25,6 @@ namespace Hangfire.Azure.Queue
         {
             this.storage = storage;
             this.data = data;
-
-            uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, data.Id);
 
             TimeSpan keepAliveInterval = TimeSpan.FromMinutes(5);
             timer = new Timer(KeepAliveJobCallback, data, keepAliveInterval, keepAliveInterval);
@@ -55,7 +52,7 @@ namespace Hangfire.Azure.Queue
         {
             lock (syncRoot)
             {
-                Task<ResourceResponse<Document>> task = storage.Client.DeleteDocumentAsync(uri);
+                Task<ResourceResponse<Document>> task = storage.Client.DeleteDocumentAsync(data.SelfLink);
                 task.Wait();
                 removedFromQueue = true;
             }
@@ -68,7 +65,7 @@ namespace Hangfire.Azure.Queue
                 data.CreatedOn = DateTime.UtcNow;
                 data.FetchedAt = null;
 
-                Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentAsync(uri, data);
+                Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentAsync(data.SelfLink, data);
                 task.Wait();
                 reQueued = true;
             }
@@ -84,7 +81,8 @@ namespace Hangfire.Azure.Queue
                 {
                     Documents.Queue queue = (Documents.Queue)obj;
                     queue.FetchedAt = DateTime.UtcNow;
-                    storage.Client.ReplaceDocumentAsync(uri, queue).Wait();
+                    Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentAsync(queue.SelfLink, queue);
+                    task.Wait();
                     logger.Trace($"Keep-alive query for job: {queue.Id} sent");
                 }
                 catch (Exception ex)

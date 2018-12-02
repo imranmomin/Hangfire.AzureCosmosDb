@@ -7,8 +7,8 @@ function setJobParameter(id: string, parameter: IParameter) {
     let context: IContext = getContext();
     let collection: ICollection = context.getCollection();
     let response: IResponse = getContext().getResponse();
-    let collectionLink: string = collection.getSelfLink();
-    let documentLink: string = `${collectionLink}/docs/${id}`;
+    let collectionLink: string = collection.getAltLink();
+    let documentLink: string = `${collectionLink}/docs/${id}/`;
 
     // default response
     response.setBody(false);
@@ -18,15 +18,11 @@ function setJobParameter(id: string, parameter: IParameter) {
             throw error;
         }
 
-        if (doc.type !== 2) {
-            throw new Error("The document is not of type `Job`");
-        }
-        
-        if (doc.parameters.length === 0) {
+        if (doc.parameters === undefined || doc.parameters === null || doc.parameters.length === 0) {
             doc.parameters = new Array<IParameter>();
 
         } else {
-            doc.parameters = doc.parameters.filter((p: IParameter) => p.name !== name);
+            doc.parameters = doc.parameters.filter((p: IParameter) => p.name !== parameter.name);
         }
 
         // add the new parameter

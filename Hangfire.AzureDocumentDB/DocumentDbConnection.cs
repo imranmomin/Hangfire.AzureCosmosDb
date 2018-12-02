@@ -338,8 +338,8 @@ namespace Hangfire.Azure
             if (serverId == null) throw new ArgumentNullException(nameof(serverId));
             string id = $"{serverId}:{DocumentTypes.Server}".GenerateHash();
 
-            Uri spRemoveServerUri = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "removeServer");
-            Task<StoredProcedureResponse<bool>> task = Storage.Client.ExecuteStoredProcedureAsync<bool>(spRemoveServerUri, id);
+            Uri documentUri = UriFactory.CreateDocumentUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, id);
+            Task<ResourceResponse<Document>> task = Storage.Client.DeleteDocumentAsync(documentUri);
             task.Wait();
         }
 
@@ -353,7 +353,7 @@ namespace Hangfire.Azure
             int removed = 0;
             ProcedureResponse response;
             int lastHeartbeat = DateTime.UtcNow.Add(timeOut.Negate()).ToEpoch();
-            string query = $"SELECT * FROM doc WHERE doc.type = {DocumentTypes.Server} AND IS_DEFINED(doc.last_heartbeat) AND doc.last_heartbeat <= {lastHeartbeat}";
+            string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Server} AND IS_DEFINED(doc.last_heartbeat) AND doc.last_heartbeat <= {lastHeartbeat}";
             Uri spDeleteDocuments = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "deleteDocuments");
 
             do

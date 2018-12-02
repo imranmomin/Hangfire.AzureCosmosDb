@@ -54,41 +54,47 @@ namespace Hangfire.Azure
                 // default ttl for lock document
                 TimeSpan ttl = DateTime.UtcNow.Add(timeout).AddMinutes(1).TimeOfDay;
 
-                Task<DocumentResponse<Lock>> readTask = storage.Client.ReadDocumentAsync<Lock>(uri);
-                readTask.Wait();
-
-                if (readTask.Result.StatusCode == HttpStatusCode.NotFound)
+                try
                 {
-                    Lock @lock = new Lock
-                    {
-                        Id = id,
-                        Name = resource,
-                        ExpireOn = DateTime.UtcNow.Add(timeout),
-                        TimeToLive = (int)ttl.TotalSeconds
-                    };
+                    Task<DocumentResponse<Lock>> readTask = storage.Client.ReadDocumentAsync<Lock>(uri);
+                    readTask.Wait();
 
-                    Task<ResourceResponse<Document>> createTask = storage.Client.CreateDocumentAsync(storage.CollectionUri, @lock);
-                    createTask.Wait();
-
-                    if (createTask.Result.StatusCode == HttpStatusCode.Created)
+                    if (readTask.Result.Document != null)
                     {
-                        resourceId = id;
-                        break;
+                        Lock @lock = readTask.Result.Document;
+                        @lock.ExpireOn = DateTime.UtcNow.Add(timeout);
+                        @lock.TimeToLive = (int)ttl.TotalSeconds;
+
+                        Task<ResourceResponse<Document>> updateTask = storage.Client.UpsertDocumentAsync(storage.CollectionUri, @lock);
+                        updateTask.Wait();
+
+                        if (updateTask.Result.StatusCode == HttpStatusCode.OK)
+                        {
+                            resourceId = id;
+                            break;
+                        }
                     }
                 }
-                else if (readTask.Result.Document != null)
+                catch (AggregateException ex) when (ex.InnerException is DocumentClientException clientException)
                 {
-                    Lock @lock = readTask.Result.Document;
-                    @lock.ExpireOn = DateTime.UtcNow.Add(timeout);
-                    @lock.TimeToLive = (int)ttl.TotalSeconds;
-
-                    Task<ResourceResponse<Document>> updateTask = storage.Client.UpsertDocumentAsync(storage.CollectionUri, @lock);
-                    updateTask.Wait();
-
-                    if (updateTask.Result.StatusCode == HttpStatusCode.OK)
+                    if (clientException.StatusCode == HttpStatusCode.NotFound)
                     {
-                        resourceId = id;
-                        break;
+                        Lock @lock = new Lock
+                        {
+                            Id = id,
+                            Name = resource,
+                            ExpireOn = DateTime.UtcNow.Add(timeout),
+                            TimeToLive = (int)ttl.TotalSeconds
+                        };
+
+                        Task<ResourceResponse<Document>> createTask = storage.Client.CreateDocumentAsync(storage.CollectionUri, @lock);
+                        createTask.Wait();
+
+                        if (createTask.Result.StatusCode == HttpStatusCode.Created)
+                        {
+                            resourceId = id;
+                            break;
+                        }
                     }
                 }
 

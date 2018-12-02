@@ -5,11 +5,12 @@ function expireDocument(query, expireOn) {
     let collectionLink = collection.getSelfLink();
     let responseBody = {
         affected: 0,
-        continuation: true
+        continuation: false
     };
     if (query === undefined || query === null) {
         throw new Error("query is either empty or null");
     }
+    query = `${query} AND (NOT IS_DEFINED(doc.expire_on) OR doc.expire_on < ${expireOn})`;
     response.setBody(responseBody);
     function tryQueryAndUpdate(continuation) {
         let feedOptions = {
@@ -31,6 +32,7 @@ function expireDocument(query, expireOn) {
             }
         });
         if (!result) {
+            responseBody.continuation = true;
             response.setBody(responseBody);
         }
     }

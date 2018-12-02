@@ -17,6 +17,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <RootNamespace>Hangfire.Azure</RootNamespace>
     <TypeScriptToolsVersion>Latest</TypeScriptToolsVersion>
+    <TypeScriptCompileBlocked>true</TypeScriptCompileBlocked>
   </PropertyGroup>
   <PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
     <DefineConstants>NETCORE;NETSTANDARD;NETSTANDARD2_0</DefineConstants>
@@ -53,9 +54,6 @@
     <EmbeddedResource Include="StoredProcedure\persistJob.js">
       <DependentUpon>persistJob.ts</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="StoredProcedure\removeTimedOutServer.js">
-      <DependentUpon>removeTimedOutServer.ts</DependentUpon>
-    </EmbeddedResource>
     <EmbeddedResource Include="StoredProcedure\removeFromList.js">
       <DependentUpon>removeFromList.ts</DependentUpon>
     </EmbeddedResource>
@@ -64,9 +62,6 @@
     </EmbeddedResource>
     <EmbeddedResource Include="StoredProcedure\removeHash.js">
       <DependentUpon>removeHash.ts</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="StoredProcedure\removeServer.js">
-      <DependentUpon>removeServer.ts</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="StoredProcedure\setJobParameter.js">
       <DependentUpon>setJobParameter.ts</DependentUpon>
@@ -79,9 +74,6 @@
     </EmbeddedResource>
     <EmbeddedResource Include="StoredProcedure\trimList.js">
       <DependentUpon>trimList.ts</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="StoredProcedure\deleteRawCounters.js">
-      <DependentUpon>deleteRawCounters.ts</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="StoredProcedure\persistDocuments.js">
       <DependentUpon>persistDocuments.ts</DependentUpon>
@@ -96,9 +88,6 @@
       <DependentUpon>document.ts</DependentUpon>
     </None>
   </ItemGroup>
-  <Target Name="TypescriptComplie" BeforeTargets="Build">
-    <Exec Command="tsc --build --verbose --force" />
-  </Target>
   <ItemGroup>
     <PackageReference Include="Hangfire.Core" Version="1.6.21" />
     <PackageReference Include="Newtonsoft.Json" Version="12.0.1" />

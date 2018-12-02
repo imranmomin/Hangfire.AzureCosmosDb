@@ -1,12 +1,12 @@
 function announceServer(server) {
     let context = getContext();
     let collection = context.getCollection();
-    let collectionLink = collection.getSelfLink();
+    let collectionLink = collection.getAltLink();
     let response = getContext().getResponse();
     let documentLink = `${collectionLink}/docs/${server.id}`;
     response.setBody(false);
     let result = collection.readDocument(documentLink, (error, doc) => {
-        if (error) {
+        if (error !== undefined && error.number !== 404) {
             throw error;
         }
         if (doc === undefined) {

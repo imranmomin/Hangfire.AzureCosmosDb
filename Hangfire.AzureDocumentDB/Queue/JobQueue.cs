@@ -18,18 +18,22 @@ namespace Hangfire.Azure.Queue
         private readonly ILog logger = LogProvider.For<JobQueue>();
         private readonly DocumentDbStorage storage;
         private const string DISTRIBUTED_LOCK_KEY = "locks:job:dequeue";
-        private readonly TimeSpan defaultLockTimeout = TimeSpan.FromSeconds(10);
-        private readonly TimeSpan invisibilityTimeout = TimeSpan.FromMinutes(30);
+        private readonly TimeSpan defaultLockTimeout;
+        private readonly TimeSpan invisibilityTimeout = TimeSpan.FromMinutes(15);
         private readonly object syncLock = new object();
 
-        public JobQueue(DocumentDbStorage storage) => this.storage = storage;
+        public JobQueue(DocumentDbStorage storage)
+        {
+            this.storage = storage;
+            defaultLockTimeout = TimeSpan.FromSeconds(30) + storage.Options.QueuePollInterval;
+        }
 
         public IFetchedJob Dequeue(string[] queues, CancellationToken cancellationToken)
         {
             lock (syncLock)
             {
-                string query = $"SELECT TOP 1 * FROM doc WHERE doc.type = @type AND doc.name IN ({string.Join(",", Enumerable.Range(0, queues.Length - 1).Select((q, i) => $"@queue_{i}"))}) " +
-                               "AND (NOT IS_DEFINED(doc.fetched_at) OR doc.fetched_at < @timeout ORDER BY doc.created_on";
+                string query = $"SELECT TOP 1 * FROM doc WHERE doc.type = @type AND doc.name IN ({string.Join(", ", Enumerable.Range(0, queues.Length).Select((q, i) => $"@queue_{i}"))}) " +
+                               "AND (NOT IS_DEFINED(doc.fetched_at) OR doc.fetched_at < @timeout) ORDER BY doc.created_on";
 
                 List<SqlParameter> parameters = new List<SqlParameter> { new SqlParameter("@type", Documents.DocumentTypes.Queue) };
                 for (int index = 0; index < queues.Length; index++)
@@ -63,9 +67,7 @@ namespace Hangfire.Azure.Queue
                         {
                             // mark the document
                             data.FetchedAt = DateTime.UtcNow;
-
-                            Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, data.Id);
-                            Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentAsync(uri, data, cancellationToken: cancellationToken);
+                            Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentAsync(data.SelfLink, data, cancellationToken: cancellationToken);
                             task.Wait(cancellationToken);
 
                             logger.Trace($"Found job {data.JobId} from the queue {data.Name}");

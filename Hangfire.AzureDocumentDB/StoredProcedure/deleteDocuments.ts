@@ -5,7 +5,7 @@
 function deleteDocuments(query: string) {
     let context: IContext = getContext();
     let collection: ICollection = context.getCollection();
-    let collectionLink: string = collection.getSelfLink()
+    let collectionLink: string = collection.getSelfLink();
     let response: IResponse = getContext().getResponse();
     let responseBody: IProcedureResponse = {
         affected: 0,

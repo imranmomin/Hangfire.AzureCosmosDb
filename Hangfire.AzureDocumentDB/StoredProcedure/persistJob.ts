@@ -6,7 +6,7 @@ function persistJob(id: string) {
     let context: IContext = getContext();
     let collection: ICollection = context.getCollection();
     let response: IResponse = getContext().getResponse();
-    let collectionLink: string = collection.getSelfLink();
+    let collectionLink: string = collection.getAltLink();
     let documentLink: string = `${collectionLink}/docs/${id}`;
 
     // default response
@@ -15,10 +15,6 @@ function persistJob(id: string) {
     let isAccepted: boolean = collection.readDocument(documentLink, (error: IRequestCallbackError, doc: IDocumentBase) => {
         if (error) {
             throw error;
-        }
-
-        if (doc.type !== 2) {
-            throw new Error("The document is not of type `Job`");
         }
 
         if (doc.expire_on === undefined || doc.expire_on === null) {

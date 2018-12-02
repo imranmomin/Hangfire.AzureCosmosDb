@@ -5,11 +5,12 @@ function persistDocument(query) {
     let collectionLink = collection.getSelfLink();
     let responseBody = {
         affected: 0,
-        continuation: true
+        continuation: false
     };
     if (query === undefined || query === null) {
         throw new Error("query is either empty or null");
     }
+    query = `${query} AND IS_DEFINED(doc.expire_on)`;
     response.setBody(responseBody);
     function tryQueryAndUpdate(continuation) {
         let feedOptions = {
@@ -31,6 +32,7 @@ function persistDocument(query) {
             }
         });
         if (!result) {
+            responseBody.continuation = true;
             response.setBody(responseBody);
         }
     }
