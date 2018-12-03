@@ -24,7 +24,9 @@ function trimList(key: string, startIndex: number, endIndex: number) {
             if (index < startIndex || index > endIndex) {
                 const newLocal: IList = docs[index];
                 let isAccepted = collection.deleteDocument(newLocal._self, err => {
-                    if (err) throw err;
+                    if (err) {
+                        throw err;
+                    }
                 });
 
                 if (!isAccepted) {

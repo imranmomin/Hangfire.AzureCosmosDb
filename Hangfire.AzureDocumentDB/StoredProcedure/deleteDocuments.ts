@@ -9,7 +9,7 @@ function deleteDocuments(query: string) {
     let response: IResponse = getContext().getResponse();
     let responseBody: IProcedureResponse = {
         affected: 0,
-        continuation: true
+        continuation: false
     };
 
     // default response
@@ -21,7 +21,8 @@ function deleteDocuments(query: string) {
     // Calls tryDelete(documents) as soon as the query returns documents.
     function tryQueryAndDelete(continuation?: string) {
         let feedOptions: IFeedOptions = {
-            continuation: continuation
+            continuation: continuation,
+            pageSize: 10
         };
 
         let result: boolean = collection.queryDocuments(collectionLink, query, feedOptions, (error: IFeedCallbackError, docs: Array<IDocumentBase>, feedCallbackOptions: IFeedCallbackOptions) => {
@@ -46,6 +47,7 @@ function deleteDocuments(query: string) {
 
         // If we hit execution bounds - return continuation: true.
         if (!result) {
+            responseBody.continuation = true;
             response.setBody(responseBody);
         }
     }

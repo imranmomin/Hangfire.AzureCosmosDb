@@ -17,7 +17,7 @@ function announceServer(server: IServer) {
             throw error;
         }
 
-        if (doc === undefined) {
+        if (doc === undefined || doc === null) {
             doc = server;
         } else {
             doc.last_heartbeat = server.last_heartbeat;

@@ -8,9 +8,9 @@ function removeFromList(doc: IList) {
     let response: IResponse = getContext().getResponse();
     let responseBody: IProcedureResponse = {
         affected: 0,
-        continuation: true
+        continuation: false
     };
-    
+
     // default response
     response.setBody(responseBody);
 
@@ -23,7 +23,8 @@ function removeFromList(doc: IList) {
     // Calls tryDelete(documents) as soon as the query returns documents.
     function tryQueryAndDelete(continuation?: string) {
         let feedOptions: IFeedOptions = {
-            continuation: continuation
+            continuation: continuation,
+            pageSize: 10
         };
 
         let result: IQueryResponse = collection.filter(filter, feedOptions, (error: IFeedCallbackError, docs: Array<IDocumentBase>, feedCallbackOptions: IFeedCallbackOptions) => {
@@ -48,6 +49,7 @@ function removeFromList(doc: IList) {
 
         // If we hit execution bounds - return continuation: true.
         if (!result.isAccepted) {
+            responseBody.continuation = true;
             response.setBody(responseBody);
         }
     }

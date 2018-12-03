@@ -16,7 +16,7 @@ function persistDocument(query: string) {
         throw new Error("query is either empty or null");
     }
 
-    // append the query to filter when expire_on is not defined or less than 
+    // append the query to filter by expire_on is defined
     query = `${query} AND IS_DEFINED(doc.expire_on)`;
 
     // default response
@@ -26,7 +26,8 @@ function persistDocument(query: string) {
     // Calls tryUpdate(documents) as soon as the query returns documents.
     function tryQueryAndUpdate(continuation?: string) {
         let feedOptions: IFeedOptions = {
-            continuation: continuation
+            continuation: continuation,
+            pageSize: 10
         };
 
         let result: boolean = collection.queryDocuments(collectionLink, query, feedOptions, (error: IFeedCallbackError, docs: Array<IDocumentBase>, feedCallbackOptions: IFeedCallbackOptions) => {

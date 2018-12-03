@@ -23,9 +23,9 @@ function heartbeatServer(id: string, heartbeat: number) {
         // set the heartbeat
         doc.last_heartbeat = heartbeat;
 
-        let isAccepted: boolean = collection.replaceDocument(doc._self, doc, (error: IRequestCallbackError) => {
-            if (error) {
-                throw error;
+        let isAccepted: boolean = collection.replaceDocument(doc._self, doc, (err: IRequestCallbackError) => {
+            if (err) {
+                throw err;
             }
             response.setBody(true);
         });

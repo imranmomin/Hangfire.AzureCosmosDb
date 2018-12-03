@@ -137,10 +137,19 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                int epochTime = DateTime.UtcNow.Add(expireIn).ToEpoch();
-                Uri spExpireJobUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "expireJob");
-                Task<StoredProcedureResponse<bool>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<bool>(spExpireJobUri, jobId, epochTime);
-                task.Wait();
+                int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
+                string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Job} AND doc.id = '{jobId}'";
+                ProcedureResponse response;
+
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
+                    task.Wait();
+
+                    response = task.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
             });
         }
 
@@ -150,9 +159,18 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                Uri spPersistJobUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "persistJob");
-                Task<StoredProcedureResponse<bool>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<bool>(spPersistJobUri, jobId);
-                task.Wait();
+                string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Job} AND doc.id = '{jobId}'";
+                ProcedureResponse response;
+
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spPersistDocumentsUri, query);
+                    task.Wait();
+
+                    response = task.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
             });
         }
 
@@ -282,10 +300,10 @@ namespace Hangfire.Azure
 
                 do
                 {
-                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spPersistDocumentsUri, query);
-                    procedureTask.Wait();
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spPersistDocumentsUri, query);
+                    task.Wait();
 
-                    response = procedureTask.Result;
+                    response = task.Result;
 
                     // if the continuation is true; run the procedure again
                 } while (response.Continuation);
@@ -304,13 +322,10 @@ namespace Hangfire.Azure
 
                 do
                 {
-                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spExpireDocumentsUri, new RequestOptions
-                    {
-                        EnableScriptLogging = true
-                    }, query, epoch);
-                    procedureTask.Wait();
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
+                    task.Wait();
 
-                    response = procedureTask.Result;
+                    response = task.Result;
 
                     // if the continuation is true; run the procedure again
                 } while (response.Continuation);
@@ -336,13 +351,13 @@ namespace Hangfire.Azure
 
                 do
                 {
-                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
-                    procedureTask.Wait();
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
+                    task.Wait();
 
-                    response = procedureTask.Result;
+                    response = task.Result;
 
-                // if the continuation is true; run the procedure again
-            } while (response.Continuation);
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
             });
         }
 
@@ -397,13 +412,13 @@ namespace Hangfire.Azure
 
                 do
                 {
-                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
-                    procedureTask.Wait();
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
+                    task.Wait();
 
-                    response = procedureTask.Result;
+                    response = task.Result;
 
-                // if the continuation is true; run the procedure again
-            } while (response.Continuation);
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
             });
         }
 
@@ -418,13 +433,13 @@ namespace Hangfire.Azure
 
                 do
                 {
-                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spPersistDocumentsUri, query);
-                    procedureTask.Wait();
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spPersistDocumentsUri, query);
+                    task.Wait();
 
-                    response = procedureTask.Result;
+                    response = task.Result;
 
-                // if the continuation is true; run the procedure again
-            } while (response.Continuation);
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
             });
         }
 
@@ -503,13 +518,13 @@ namespace Hangfire.Azure
 
                 do
                 {
-                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
-                    procedureTask.Wait();
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
+                    task.Wait();
 
-                    response = procedureTask.Result;
+                    response = task.Result;
 
-                // if the continuation is true; run the procedure again
-            } while (response.Continuation);
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
             });
         }
 
@@ -524,13 +539,13 @@ namespace Hangfire.Azure
 
                 do
                 {
-                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spPersistDocumentsUri, query);
-                    procedureTask.Wait();
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spPersistDocumentsUri, query);
+                    task.Wait();
 
-                    response = procedureTask.Result;
+                    response = task.Result;
 
-                // if the continuation is true; run the procedure again
-            } while (response.Continuation);
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
             });
         }
 

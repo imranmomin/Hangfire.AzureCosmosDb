@@ -8,7 +8,7 @@ function removeFromSet(doc: ISet) {
     let response: IResponse = getContext().getResponse();
     let responseBody: IProcedureResponse = {
         affected: 0,
-        continuation: true
+        continuation: false
     };
 
     // default response
@@ -48,6 +48,7 @@ function removeFromSet(doc: ISet) {
 
         // If we hit execution bounds - return continuation: true.
         if (!result.isAccepted) {
+            responseBody.continuation = true;
             response.setBody(responseBody);
         }
     }

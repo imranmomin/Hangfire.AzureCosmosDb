@@ -23,7 +23,7 @@ namespace Hangfire.Azure
         private const string DISTRIBUTED_LOCK_KEY = "locks:counters:aggragator";
         private readonly TimeSpan defaultLockTimeout;
         private readonly DocumentDbStorage storage;
-        private readonly FeedOptions queryOptions = new FeedOptions { MaxItemCount = 1000 };
+        private readonly FeedOptions queryOptions = new FeedOptions { MaxItemCount = 50 };
         private readonly Uri spDeleteDocumentsUri;
 
         public CountersAggregator(DocumentDbStorage storage)

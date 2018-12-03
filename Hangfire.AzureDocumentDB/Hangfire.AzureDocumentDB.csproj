@@ -42,9 +42,6 @@
     <EmbeddedResource Include="StoredProcedure\announceServer.js">
       <DependentUpon>announceServer.ts</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="StoredProcedure\deleteExpiredDocuments.js">
-      <DependentUpon>deleteExpiredDocuments.ts</DependentUpon>
-    </EmbeddedResource>
     <EmbeddedResource Include="StoredProcedure\expireJob.js">
       <DependentUpon>expireJob.ts</DependentUpon>
     </EmbeddedResource>
