@@ -9,6 +9,7 @@ using Hangfire.Storage;
 using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 
+using Hangfire.Azure.Helper;
 using Hangfire.Azure.Documents.Helper;
 
 namespace Hangfire.Azure.Queue
@@ -56,18 +57,26 @@ namespace Hangfire.Azure.Queue
                             QueryText = query,
                             Parameters = new SqlParameterCollection(parameters)
                         };
-
                         sql.Parameters.Add(new SqlParameter("@timeout", invisibilityTimeoutEpoch));
 
-                        Documents.Queue data = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, sql, new FeedOptions { MaxItemCount = 1 })
-                            .AsEnumerable()
+                        FeedOptions feedOptions = new FeedOptions
+                        {
+                            MaxItemCount = 1,
+                            MaxDegreeOfParallelism = 1,
+                            MaxBufferedItemCount = 1
+                        };
+
+                        Documents.Queue data = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, sql, feedOptions)
+                            .ToQueryResult()
                             .FirstOrDefault();
 
                         if (data != null)
                         {
                             // mark the document
                             data.FetchedAt = DateTime.UtcNow;
-                            Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentAsync(data.SelfLink, data, cancellationToken: cancellationToken);
+
+                            Uri replaceUri = new Uri(data.SelfLink);
+                            Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentWithRetriesAsync(replaceUri, data, cancellationToken: cancellationToken);
                             task.Wait(cancellationToken);
 
                             logger.Trace($"Found job {data.JobId} from the queue {data.Name}");
@@ -90,7 +99,7 @@ namespace Hangfire.Azure.Queue
                 CreatedOn = DateTime.UtcNow
             };
 
-            Task<ResourceResponse<Document>> task = storage.Client.CreateDocumentAsync(storage.CollectionUri, data);
+            Task<ResourceResponse<Document>> task = storage.Client.CreateDocumentWithRetriesAsync(storage.CollectionUri, data);
             task.Wait();
         }
     }

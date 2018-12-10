@@ -64,7 +64,7 @@ namespace Hangfire.Azure
 
                         try
                         {
-                            Task<DocumentResponse<Counter>> readTask = storage.Client.ReadDocumentAsync<Counter>(uri, cancellationToken: cancellationToken);
+                            Task<DocumentResponse<Counter>> readTask = storage.Client.ReadDocumentWithRetriesAsync<Counter>(uri, cancellationToken: cancellationToken);
                             readTask.Wait(cancellationToken);
 
                             if (readTask.Result.StatusCode == HttpStatusCode.OK)
@@ -99,7 +99,7 @@ namespace Hangfire.Azure
                             }
                         }
 
-                        Task<ResourceResponse<Document>> task = storage.Client.UpsertDocumentAsync(storage.CollectionUri, aggregated, cancellationToken: cancellationToken);
+                        Task<ResourceResponse<Document>> task = storage.Client.UpsertDocumentWithRetriesAsync(storage.CollectionUri, aggregated, cancellationToken: cancellationToken);
                         Task continueTask = task.ContinueWith(t =>
                         {
                             if (t.Result.StatusCode == HttpStatusCode.Created || t.Result.StatusCode == HttpStatusCode.OK)
@@ -111,7 +111,7 @@ namespace Hangfire.Azure
 
                                 do
                                 {
-                                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spDeleteDocumentsUri, sql);
+                                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spDeleteDocumentsUri, sql);
                                     procedureTask.Wait(cancellationToken);
 
                                     response = procedureTask.Result;

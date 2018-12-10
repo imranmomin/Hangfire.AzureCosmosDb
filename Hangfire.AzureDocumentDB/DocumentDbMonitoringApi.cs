@@ -81,7 +81,7 @@ namespace Hangfire.Azure
             if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
 
             Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, jobId);
-            Task<DocumentResponse<Documents.Job>> task = storage.Client.ReadDocumentAsync<Documents.Job>(uri);
+            Task<DocumentResponse<Documents.Job>> task = storage.Client.ReadDocumentWithRetriesAsync<Documents.Job>(uri);
             task.Wait();
 
             if (task.Result.Document != null)
@@ -323,7 +323,7 @@ namespace Hangfire.Azure
             filterJobs.ForEach(job =>
             {
                 Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, job.StateId);
-                Task<DocumentResponse<State>> task = storage.Client.ReadDocumentAsync<State>(uri);
+                Task<DocumentResponse<State>> task = storage.Client.ReadDocumentWithRetriesAsync<State>(uri);
                 task.Wait();
 
                 if (task.Result.Document != null)
@@ -370,7 +370,7 @@ namespace Hangfire.Azure
             queues.ForEach(queueItem =>
             {
                 Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, queueItem.JobId);
-                Task<DocumentResponse<Documents.Job>> task = storage.Client.ReadDocumentAsync<Documents.Job>(uri);
+                Task<DocumentResponse<Documents.Job>> task = storage.Client.ReadDocumentWithRetriesAsync<Documents.Job>(uri);
                 task.Wait();
 
                 if (task.Result != null)
@@ -380,7 +380,7 @@ namespace Hangfire.Azure
                     invocationData.Arguments = job.Arguments;
 
                     uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, job.StateId);
-                    Task<DocumentResponse<State>> stateTask = storage.Client.ReadDocumentAsync<State>(uri);
+                    Task<DocumentResponse<State>> stateTask = storage.Client.ReadDocumentWithRetriesAsync<State>(uri);
 
                     T data = selector(stateTask.Result, invocationData.Deserialize(), queueItem.FetchedAt);
                     jobs.Add(new KeyValuePair<string, T>(job.Id, data));

@@ -9,6 +9,7 @@ using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 
 using Hangfire.Azure.Queue;
+using Hangfire.Azure.Helper;
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
 
@@ -63,7 +64,7 @@ namespace Hangfire.Azure
                     Value = -1
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
@@ -83,7 +84,7 @@ namespace Hangfire.Azure
                     ExpireOn = DateTime.UtcNow.Add(expireIn)
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
@@ -101,7 +102,7 @@ namespace Hangfire.Azure
                     Value = 1
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
@@ -121,7 +122,7 @@ namespace Hangfire.Azure
                     ExpireOn = DateTime.UtcNow.Add(expireIn)
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
@@ -143,7 +144,7 @@ namespace Hangfire.Azure
 
                 do
                 {
-                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
                     task.Wait();
 
                     response = task.Result;
@@ -164,7 +165,7 @@ namespace Hangfire.Azure
 
                 do
                 {
-                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spPersistDocumentsUri, query);
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spPersistDocumentsUri, query);
                     task.Wait();
 
                     response = task.Result;
@@ -195,7 +196,7 @@ namespace Hangfire.Azure
                 };
 
                 Uri spSetJobStateUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "setJobState");
-                Task<StoredProcedureResponse<bool>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<bool>(spSetJobStateUri, jobId, data);
+                Task<StoredProcedureResponse<bool>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<bool>(spSetJobStateUri, jobId, data);
                 task.Wait();
             });
         }
@@ -216,7 +217,7 @@ namespace Hangfire.Azure
                     Data = state.SerializeData()
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
@@ -243,7 +244,7 @@ namespace Hangfire.Azure
 
                 do
                 {
-                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spRemoveFromSetUri, data);
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spRemoveFromSetUri, data);
                     task.Wait();
 
                     response = task.Result;
@@ -278,7 +279,7 @@ namespace Hangfire.Azure
                 {
                     attempts++;
 
-                    Task<StoredProcedureResponse<int>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<int>(spAddToSetUri, set);
+                    Task<StoredProcedureResponse<int>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<int>(spAddToSetUri, set);
                     task.Wait();
 
                     affected = task.Result;
@@ -300,7 +301,7 @@ namespace Hangfire.Azure
 
                 do
                 {
-                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spPersistDocumentsUri, query);
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spPersistDocumentsUri, query);
                     task.Wait();
 
                     response = task.Result;
@@ -322,7 +323,7 @@ namespace Hangfire.Azure
 
                 do
                 {
-                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
                     task.Wait();
 
                     response = task.Result;
@@ -351,7 +352,7 @@ namespace Hangfire.Azure
 
                 do
                 {
-                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
                     task.Wait();
 
                     response = task.Result;
@@ -376,7 +377,7 @@ namespace Hangfire.Azure
 
                 do
                 {
-                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
                     task.Wait();
 
                     response = task.Result;
@@ -404,7 +405,7 @@ namespace Hangfire.Azure
                 };
 
                 Uri spSetRangeHashUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "setRangeHash");
-                Task<StoredProcedureResponse<int>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<int>(spSetRangeHashUri, key, data);
+                Task<StoredProcedureResponse<int>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<int>(spSetRangeHashUri, key, data);
                 task.Wait();
             });
         }
@@ -421,7 +422,7 @@ namespace Hangfire.Azure
 
                 do
                 {
-                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
                     task.Wait();
 
                     response = task.Result;
@@ -442,7 +443,7 @@ namespace Hangfire.Azure
 
                 do
                 {
-                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spPersistDocumentsUri, query);
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spPersistDocumentsUri, query);
                     task.Wait();
 
                     response = task.Result;
@@ -470,7 +471,7 @@ namespace Hangfire.Azure
                     CreatedOn = DateTime.UtcNow
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
@@ -493,7 +494,7 @@ namespace Hangfire.Azure
                 do
                 {
                     Uri spRemoveFromListUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "removeFromList");
-                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spRemoveFromListUri, data);
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spRemoveFromListUri, data);
                     task.Wait();
 
                     response = task.Result;
@@ -510,7 +511,7 @@ namespace Hangfire.Azure
             QueueCommand(() =>
             {
                 Uri spTrimListUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "trimList");
-                Task<StoredProcedureResponse<bool>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<bool>(spTrimListUri, key, keepStartingFrom, keepEndingAt);
+                Task<StoredProcedureResponse<bool>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<bool>(spTrimListUri, key, keepStartingFrom, keepEndingAt);
                 task.Wait();
             });
         }
@@ -527,7 +528,7 @@ namespace Hangfire.Azure
 
                 do
                 {
-                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
                     task.Wait();
 
                     response = task.Result;
@@ -548,7 +549,7 @@ namespace Hangfire.Azure
 
                 do
                 {
-                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spPersistDocumentsUri, query);
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spPersistDocumentsUri, query);
                     task.Wait();
 
                     response = task.Result;

@@ -6,6 +6,7 @@ using Hangfire.Server;
 using Hangfire.Logging;
 using Microsoft.Azure.Documents.Client;
 
+using Hangfire.Azure.Helper;
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
 
@@ -53,7 +54,7 @@ namespace Hangfire.Azure
                     ProcedureResponse response;
                     do
                     {
-                        Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
+                        Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
                         procedureTask.Wait(cancellationToken);
 
                         response = procedureTask.Result;

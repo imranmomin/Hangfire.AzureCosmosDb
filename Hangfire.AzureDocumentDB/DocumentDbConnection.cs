@@ -56,7 +56,7 @@ namespace Hangfire.Azure
                 }).ToArray()
             };
 
-            Task<ResourceResponse<Document>> task = Storage.Client.CreateDocumentAsync(Storage.CollectionUri, entityJob);
+            Task<ResourceResponse<Document>> task = Storage.Client.CreateDocumentWithRetriesAsync(Storage.CollectionUri, entityJob);
             task.Wait();
 
             if (task.Result.StatusCode == HttpStatusCode.Created || task.Result.StatusCode == HttpStatusCode.OK)
@@ -90,7 +90,7 @@ namespace Hangfire.Azure
             if (jobId == null) throw new ArgumentNullException(nameof(jobId));
 
             Uri uri = UriFactory.CreateDocumentUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, jobId);
-            Task<DocumentResponse<Documents.Job>> task = Storage.Client.ReadDocumentAsync<Documents.Job>(uri);
+            Task<DocumentResponse<Documents.Job>> task = Storage.Client.ReadDocumentWithRetriesAsync<Documents.Job>(uri);
             task.Wait();
 
             if (task.Result.Document != null)
@@ -128,7 +128,7 @@ namespace Hangfire.Azure
             if (jobId == null) throw new ArgumentNullException(nameof(jobId));
 
             Uri uri = UriFactory.CreateDocumentUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, jobId);
-            Task<DocumentResponse<Documents.Job>> task = Storage.Client.ReadDocumentAsync<Documents.Job>(uri);
+            Task<DocumentResponse<Documents.Job>> task = Storage.Client.ReadDocumentWithRetriesAsync<Documents.Job>(uri);
             task.Wait();
 
             if (task.Result.Document != null)
@@ -137,7 +137,7 @@ namespace Hangfire.Azure
 
                 // get the state document
                 uri = UriFactory.CreateDocumentUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, job.StateId);
-                Task<DocumentResponse<State>> stateTask = Storage.Client.ReadDocumentAsync<State>(uri);
+                Task<DocumentResponse<State>> stateTask = Storage.Client.ReadDocumentWithRetriesAsync<State>(uri);
                 stateTask.Wait();
 
                 if (stateTask.Result.Document != null)
@@ -165,7 +165,7 @@ namespace Hangfire.Azure
             if (name == null) throw new ArgumentNullException(nameof(name));
 
             Uri uri = UriFactory.CreateDocumentUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, id);
-            Task<DocumentResponse<Documents.Job>> task = Storage.Client.ReadDocumentAsync<Documents.Job>(uri);
+            Task<DocumentResponse<Documents.Job>> task = Storage.Client.ReadDocumentWithRetriesAsync<Documents.Job>(uri);
             Documents.Job data = task.Result;
 
             return data?.Parameters.Where(p => p.Name == name).Select(p => p.Value).FirstOrDefault();
@@ -183,7 +183,7 @@ namespace Hangfire.Azure
             };
 
             Uri spSetJobParameterUri = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "setJobParameter");
-            Task<StoredProcedureResponse<bool>> task = Storage.Client.ExecuteStoredProcedureAsync<bool>(spSetJobParameterUri, id, parameter);
+            Task<StoredProcedureResponse<bool>> task = Storage.Client.ExecuteStoredProcedureWithRetriesAsync<bool>(spSetJobParameterUri, id, parameter);
             task.Wait();
         }
 
@@ -321,7 +321,7 @@ namespace Hangfire.Azure
             };
 
             Uri spAnnounceServerUri = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "announceServer");
-            Task<StoredProcedureResponse<bool>> task = Storage.Client.ExecuteStoredProcedureAsync<bool>(spAnnounceServerUri, server);
+            Task<StoredProcedureResponse<bool>> task = Storage.Client.ExecuteStoredProcedureWithRetriesAsync<bool>(spAnnounceServerUri, server);
             task.Wait();
         }
 
@@ -331,7 +331,7 @@ namespace Hangfire.Azure
             string id = $"{serverId}:{DocumentTypes.Server}".GenerateHash();
 
             Uri spHeartbeatServerUri = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "heartbeatServer");
-            Task<StoredProcedureResponse<bool>> task = Storage.Client.ExecuteStoredProcedureAsync<bool>(spHeartbeatServerUri, id, DateTime.UtcNow.ToEpoch());
+            Task<StoredProcedureResponse<bool>> task = Storage.Client.ExecuteStoredProcedureWithRetriesAsync<bool>(spHeartbeatServerUri, id, DateTime.UtcNow.ToEpoch());
             task.Wait();
         }
 
@@ -341,7 +341,7 @@ namespace Hangfire.Azure
             string id = $"{serverId}:{DocumentTypes.Server}".GenerateHash();
 
             Uri documentUri = UriFactory.CreateDocumentUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, id);
-            Task<ResourceResponse<Document>> task = Storage.Client.DeleteDocumentAsync(documentUri);
+            Task<ResourceResponse<Document>> task = Storage.Client.DeleteDocumentWithRetriesAsync(documentUri);
             task.Wait();
         }
 
@@ -362,7 +362,7 @@ namespace Hangfire.Azure
 
             do
             {
-                Task<StoredProcedureResponse<ProcedureResponse>> task = Storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spDeleteDocuments, query);
+                Task<StoredProcedureResponse<ProcedureResponse>> task = Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spDeleteDocuments, query);
                 task.Wait();
 
                 response = task.Result;
@@ -411,7 +411,7 @@ namespace Hangfire.Azure
                 data.Items = data.Items.Skip(data.Items.Length - affected).ToArray();
 
                 Uri spSetRangeHashUri = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "setRangeHash");
-                Task<StoredProcedureResponse<int>> task = Storage.Client.ExecuteStoredProcedureAsync<int>(spSetRangeHashUri, key, data);
+                Task<StoredProcedureResponse<int>> task = Storage.Client.ExecuteStoredProcedureWithRetriesAsync<int>(spSetRangeHashUri, key, data);
                 task.Wait();
 
                 // know how much was processed

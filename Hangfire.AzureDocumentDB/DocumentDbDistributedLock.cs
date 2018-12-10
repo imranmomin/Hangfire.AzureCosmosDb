@@ -30,7 +30,7 @@ namespace Hangfire.Azure
             if (!string.IsNullOrEmpty(resourceId))
             {
                 Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, resourceId);
-                Task task = storage.Client.DeleteDocumentAsync(uri).ContinueWith(t =>
+                Task task = storage.Client.DeleteDocumentWithRetriesAsync(uri).ContinueWith(t =>
                 {
                     resourceId = string.Empty;
                     logger.Trace($"Lock released for {resource}");
@@ -56,7 +56,7 @@ namespace Hangfire.Azure
 
                 try
                 {
-                    Task<DocumentResponse<Lock>> readTask = storage.Client.ReadDocumentAsync<Lock>(uri);
+                    Task<DocumentResponse<Lock>> readTask = storage.Client.ReadDocumentWithRetriesAsync<Lock>(uri);
                     readTask.Wait();
 
                     if (readTask.Result.Document != null)
@@ -65,7 +65,7 @@ namespace Hangfire.Azure
                         @lock.ExpireOn = DateTime.UtcNow.Add(timeout);
                         @lock.TimeToLive = (int)ttl.TotalSeconds;
 
-                        Task<ResourceResponse<Document>> updateTask = storage.Client.UpsertDocumentAsync(storage.CollectionUri, @lock);
+                        Task<ResourceResponse<Document>> updateTask = storage.Client.UpsertDocumentWithRetriesAsync(storage.CollectionUri, @lock);
                         updateTask.Wait();
 
                         if (updateTask.Result.StatusCode == HttpStatusCode.OK)
@@ -87,7 +87,7 @@ namespace Hangfire.Azure
                             TimeToLive = (int)ttl.TotalSeconds
                         };
 
-                        Task<ResourceResponse<Document>> createTask = storage.Client.CreateDocumentAsync(storage.CollectionUri, @lock);
+                        Task<ResourceResponse<Document>> createTask = storage.Client.CreateDocumentWithRetriesAsync(storage.CollectionUri, @lock);
                         createTask.Wait();
 
                         if (createTask.Result.StatusCode == HttpStatusCode.Created)

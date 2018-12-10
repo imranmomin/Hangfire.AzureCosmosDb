@@ -7,6 +7,8 @@ using Hangfire.Storage;
 using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 
+using Hangfire.Azure.Helper;
+
 // ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Queue
 {
@@ -52,7 +54,8 @@ namespace Hangfire.Azure.Queue
         {
             lock (syncRoot)
             {
-                Task<ResourceResponse<Document>> task = storage.Client.DeleteDocumentAsync(data.SelfLink);
+                Uri deleteUri = new Uri(data.SelfLink); 
+                Task<ResourceResponse<Document>> task = storage.Client.DeleteDocumentWithRetriesAsync(deleteUri);
                 task.Wait();
                 removedFromQueue = true;
             }
@@ -65,7 +68,8 @@ namespace Hangfire.Azure.Queue
                 data.CreatedOn = DateTime.UtcNow;
                 data.FetchedAt = null;
 
-                Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentAsync(data.SelfLink, data);
+                Uri replaceUri = new Uri(data.SelfLink);
+                Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentWithRetriesAsync(replaceUri, data);
                 task.Wait();
                 reQueued = true;
             }
@@ -81,8 +85,11 @@ namespace Hangfire.Azure.Queue
                 {
                     Documents.Queue queue = (Documents.Queue)obj;
                     queue.FetchedAt = DateTime.UtcNow;
-                    Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentAsync(queue.SelfLink, queue);
+
+                    Uri replaceUri = new Uri(queue.SelfLink);
+                    Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentWithRetriesAsync(replaceUri, queue);
                     task.Wait();
+
                     logger.Trace($"Keep-alive query for job: {queue.Id} sent");
                 }
                 catch (Exception ex)
