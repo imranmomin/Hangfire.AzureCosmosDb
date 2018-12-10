@@ -57,9 +57,6 @@
     <EmbeddedResource Include="StoredProcedure\removeFromSet.js">
       <DependentUpon>removeFromSet.ts</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="StoredProcedure\removeHash.js">
-      <DependentUpon>removeHash.ts</DependentUpon>
-    </EmbeddedResource>
     <EmbeddedResource Include="StoredProcedure\setJobParameter.js">
       <DependentUpon>setJobParameter.ts</DependentUpon>
     </EmbeddedResource>
