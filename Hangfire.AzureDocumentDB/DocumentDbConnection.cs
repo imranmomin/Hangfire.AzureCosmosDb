@@ -23,7 +23,7 @@ namespace Hangfire.Azure
         public DocumentDbStorage Storage { get; }
         public PersistentJobQueueProviderCollection QueueProviders { get; }
 
-        private readonly FeedOptions queryOptions = new FeedOptions { MaxItemCount = -1 };
+        private readonly FeedOptions queryOptions = new FeedOptions { MaxItemCount = 10, MaxBufferedItemCount = 100, MaxDegreeOfParallelism = -1 };
 
         public DocumentDbConnection(DocumentDbStorage storage)
         {
@@ -197,7 +197,7 @@ namespace Hangfire.Azure
 
             SqlQuerySpec sql = new SqlQuerySpec
             {
-                QueryText = "SELECT VALUE MIN(doc['expire_on']) FROM doc WHERE doc.type = @type AND doc.key = @key",
+                QueryText = "SELECT TOP 1 VALUE MIN(doc['expire_on']) FROM doc WHERE doc.type = @type AND doc.key = @key",
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
@@ -206,7 +206,7 @@ namespace Hangfire.Azure
             };
 
             int? expireOn = Storage.Client.CreateDocumentQuery<int?>(Storage.CollectionUri, sql)
-                .AsEnumerable()
+                .ToQueryResult()
                 .FirstOrDefault();
 
             return expireOn.HasValue ? expireOn.Value.ToDateTime() - DateTime.UtcNow : TimeSpan.FromSeconds(-1);
@@ -220,8 +220,9 @@ namespace Hangfire.Azure
                 .Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
                 .OrderBy(s => s.Score)
                 .ThenBy(s => s.CreatedOn)
-                .AsEnumerable()
-                .Select((s, i) => new { s.Value, Index = i })
+                .Select(s => s.Value)
+                .ToQueryResult()
+                .Select((s, i) => new { Value = s, Index = i })
                 .Where(s => s.Index >= startingFrom && s.Index <= endingAt)
                 .Select(s => s.Value)
                 .ToList();
@@ -233,7 +234,7 @@ namespace Hangfire.Azure
 
             SqlQuerySpec sql = new SqlQuerySpec
             {
-                QueryText = "SELECT VALUE SUM(doc['value']) FROM doc WHERE doc.type = @type AND doc.key = @key",
+                QueryText = "SELECT TOP 1 VALUE SUM(doc['value']) FROM doc WHERE doc.type = @type AND doc.key = @key",
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
@@ -242,7 +243,7 @@ namespace Hangfire.Azure
             };
 
             return Storage.Client.CreateDocumentQuery<long>(Storage.CollectionUri, sql)
-                .AsEnumerable()
+                .ToQueryResult()
                 .FirstOrDefault();
         }
 
@@ -252,7 +253,7 @@ namespace Hangfire.Azure
 
             SqlQuerySpec sql = new SqlQuerySpec
             {
-                QueryText = "SELECT VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.key = @key",
+                QueryText = "SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.key = @key",
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
@@ -261,7 +262,7 @@ namespace Hangfire.Azure
             };
 
             return Storage.Client.CreateDocumentQuery<long>(Storage.CollectionUri, sql)
-                .AsEnumerable()
+                .ToQueryResult()
                 .FirstOrDefault();
         }
 
@@ -272,7 +273,7 @@ namespace Hangfire.Azure
             IEnumerable<string> sets = Storage.Client.CreateDocumentQuery<Set>(Storage.CollectionUri, queryOptions)
                 .Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
                 .Select(s => s.Value)
-                .AsEnumerable();
+                .ToQueryResult();
 
             return new HashSet<string>(sets);
         }
@@ -284,7 +285,8 @@ namespace Hangfire.Azure
 
             SqlQuerySpec sql = new SqlQuerySpec
             {
-                QueryText = "SELECT TOP 1 VALUE doc['value'] FROM doc WHERE doc.type = @type AND doc.key = @key AND (doc.score BETWEEN @from AND @to) ORDER BY doc.score",
+                QueryText = "SELECT TOP 1 VALUE doc['value'] FROM doc WHERE doc.type = @type AND doc.key = @key " +
+                            "AND (doc.score BETWEEN @from AND @to) ORDER BY doc.score",
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
@@ -295,7 +297,7 @@ namespace Hangfire.Azure
             };
 
             return Storage.Client.CreateDocumentQuery<string>(Storage.CollectionUri, sql)
-                .AsEnumerable()
+                .ToQueryResult()
                 .FirstOrDefault();
         }
 
@@ -353,7 +355,9 @@ namespace Hangfire.Azure
             int removed = 0;
             ProcedureResponse response;
             int lastHeartbeat = DateTime.UtcNow.Add(timeOut.Negate()).ToEpoch();
-            string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Server} AND IS_DEFINED(doc.last_heartbeat) AND doc.last_heartbeat <= {lastHeartbeat}";
+
+            string query = $"SELECT doc.id FROM doc WHERE doc.type = {(int)DocumentTypes.Server} AND IS_DEFINED(doc.last_heartbeat) " +
+                           $"AND doc.last_heartbeat <= {lastHeartbeat}";
             Uri spDeleteDocuments = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "deleteDocuments");
 
             do
@@ -380,7 +384,7 @@ namespace Hangfire.Azure
             return Storage.Client.CreateDocumentQuery<Hash>(Storage.CollectionUri, queryOptions)
                 .Where(h => h.DocumentType == DocumentTypes.Hash && h.Key == key)
                 .Select(h => new { h.Field, h.Value })
-                .AsEnumerable()
+                .ToQueryResult()
                 .ToDictionary(h => h.Field, h => h.Value);
         }
 
@@ -422,7 +426,7 @@ namespace Hangfire.Azure
 
             SqlQuerySpec sql = new SqlQuerySpec
             {
-                QueryText = "SELECT VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.key = @key",
+                QueryText = "SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.key = @key",
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
@@ -431,7 +435,7 @@ namespace Hangfire.Azure
             };
 
             return Storage.Client.CreateDocumentQuery<long>(Storage.CollectionUri, sql)
-                .AsEnumerable()
+                .ToQueryResult()
                 .FirstOrDefault();
         }
 
@@ -452,7 +456,7 @@ namespace Hangfire.Azure
             };
 
             return Storage.Client.CreateDocumentQuery<string>(Storage.CollectionUri, sql)
-                .AsEnumerable()
+                .ToQueryResult()
                 .FirstOrDefault();
         }
 
@@ -462,7 +466,7 @@ namespace Hangfire.Azure
 
             SqlQuerySpec sql = new SqlQuerySpec
             {
-                QueryText = "SELECT VALUE MIN(doc['expire_on']) FROM doc WHERE doc.type = @type AND doc.key = @key ",
+                QueryText = "SELECT TOP 1 VALUE MIN(doc['expire_on']) FROM doc WHERE doc.type = @type AND doc.key = @key ",
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
@@ -471,7 +475,7 @@ namespace Hangfire.Azure
             };
 
             int? expireOn = Storage.Client.CreateDocumentQuery<int?>(Storage.CollectionUri, sql)
-                .AsEnumerable()
+                .ToQueryResult()
                 .FirstOrDefault();
 
             return expireOn.HasValue ? expireOn.Value.ToDateTime() - DateTime.UtcNow : TimeSpan.FromSeconds(-1);
@@ -489,8 +493,7 @@ namespace Hangfire.Azure
                 .Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
                 .OrderByDescending(l => l.CreatedOn)
                 .Select(l => l.Value)
-                .AsEnumerable()
-                .ToList();
+                .ToQueryResult();
         }
 
         public override List<string> GetRangeFromList(string key, int startingFrom, int endingAt)
@@ -500,8 +503,9 @@ namespace Hangfire.Azure
             return Storage.Client.CreateDocumentQuery<List>(Storage.CollectionUri, queryOptions)
                 .Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
                 .OrderByDescending(l => l.CreatedOn)
-                .AsEnumerable()
-                .Select((l, i) => new { l.Value, Index = i })
+                .Select(l => l.Value)
+                .ToQueryResult()
+                .Select((l, i) => new { Value = l, Index = i })
                 .Where(l => l.Index >= startingFrom && l.Index <= endingAt)
                 .Select(l => l.Value)
                 .ToList();
@@ -514,7 +518,7 @@ namespace Hangfire.Azure
 
             SqlQuerySpec sql = new SqlQuerySpec
             {
-                QueryText = "SELECT VALUE MIN(doc['expire_on']) FROM doc WHERE doc.type = @type AND doc.key = @key",
+                QueryText = "SELECT TOP 1 VALUE MIN(doc['expire_on']) FROM doc WHERE doc.type = @type AND doc.key = @key",
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
@@ -523,7 +527,7 @@ namespace Hangfire.Azure
             };
 
             int? expireOn = Storage.Client.CreateDocumentQuery<int?>(Storage.CollectionUri, sql)
-                .AsEnumerable()
+                .ToQueryResult()
                 .FirstOrDefault();
 
             return expireOn.HasValue ? expireOn.Value.ToDateTime() - DateTime.UtcNow : TimeSpan.FromSeconds(-1);
@@ -535,7 +539,7 @@ namespace Hangfire.Azure
 
             SqlQuerySpec sql = new SqlQuerySpec
             {
-                QueryText = "SELECT VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.key = @key",
+                QueryText = "SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.key = @key",
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
@@ -544,7 +548,7 @@ namespace Hangfire.Azure
             };
 
             return Storage.Client.CreateDocumentQuery<long>(Storage.CollectionUri, sql)
-                .AsEnumerable()
+                .ToQueryResult()
                 .FirstOrDefault();
         }
 

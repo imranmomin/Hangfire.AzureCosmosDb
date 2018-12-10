@@ -23,7 +23,6 @@ namespace Hangfire.Azure
         private const string DISTRIBUTED_LOCK_KEY = "locks:counters:aggragator";
         private readonly TimeSpan defaultLockTimeout;
         private readonly DocumentDbStorage storage;
-        private readonly FeedOptions queryOptions = new FeedOptions { MaxItemCount = 50 };
         private readonly Uri spDeleteDocumentsUri;
 
         public CountersAggregator(DocumentDbStorage storage)
@@ -39,10 +38,16 @@ namespace Hangfire.Azure
             {
                 logger.Trace("Aggregating records in 'Counter' table.");
 
+                FeedOptions queryOptions = new FeedOptions
+                {
+                    MaxItemCount = 50,
+                    MaxBufferedItemCount = 50,
+                    MaxDegreeOfParallelism = -1
+                };
+
                 List<Counter> rawCounters = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri, queryOptions)
                     .Where(c => c.DocumentType == DocumentTypes.Counter && c.Type == CounterTypes.Raw)
-                    .AsEnumerable()
-                    .ToList();
+                    .ToQueryResult();
 
                 Dictionary<string, (int Value, DateTime? ExpireOn)> counters = rawCounters.GroupBy(c => c.Key)
                     .ToDictionary(k => k.Key, v => (Value: v.Sum(c => c.Value), ExpireOn: v.Max(c => c.ExpireOn)));
@@ -53,7 +58,7 @@ namespace Hangfire.Azure
 
                     if (counters.TryGetValue(key, out var data))
                     {
-                        Counter aggregated = null;
+                        Counter aggregated;
                         string id = $"{key}:{CounterTypes.Aggregate}".GenerateHash();
                         Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, id);
 
@@ -102,11 +107,11 @@ namespace Hangfire.Azure
                                 int deleted = 0;
                                 ProcedureResponse response;
                                 string ids = string.Join(",", rawCounters.Where(c => c.Key == key).Select(c => $"'{c.Id}'").ToArray());
-                                string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Counter} AND doc.counter_type = {(int)CounterTypes.Raw} AND doc.id IN ({ids})";
+                                string sql = $"SELECT doc.id FROM doc WHERE doc.type = {(int)DocumentTypes.Counter} AND doc.counter_type = {(int)CounterTypes.Raw} AND doc.id IN ({ids})";
 
                                 do
                                 {
-                                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
+                                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = storage.Client.ExecuteStoredProcedureAsync<ProcedureResponse>(spDeleteDocumentsUri, sql);
                                     procedureTask.Wait(cancellationToken);
 
                                     response = procedureTask.Result;

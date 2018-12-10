@@ -11,6 +11,7 @@ using Hangfire.Storage.Monitoring;
 using Microsoft.Azure.Documents.Client;
 
 using Hangfire.Azure.Queue;
+using Hangfire.Azure.Helper;
 using Hangfire.Azure.Documents;
 
 namespace Hangfire.Azure
@@ -18,7 +19,6 @@ namespace Hangfire.Azure
     internal sealed class DocumentDbMonitoringApi : IMonitoringApi
     {
         private readonly DocumentDbStorage storage;
-        private readonly FeedOptions queryOptions = new FeedOptions { MaxItemCount = -1 };
         private readonly object cacheLock = new object();
         private static readonly TimeSpan cacheTimeout = TimeSpan.FromSeconds(2);
         private static DateTime cacheUpdated;
@@ -55,10 +55,17 @@ namespace Hangfire.Azure
 
         public IList<ServerDto> Servers()
         {
-            return storage.Client.CreateDocumentQuery<Documents.Server>(storage.CollectionUri, queryOptions)
+            FeedOptions feedOptions = new FeedOptions
+            {
+                MaxItemCount = 10,
+                MaxBufferedItemCount = -1,
+                MaxDegreeOfParallelism = -1
+            };
+
+            return storage.Client.CreateDocumentQuery<Documents.Server>(storage.CollectionUri, feedOptions)
                 .Where(s => s.DocumentType == DocumentTypes.Server)
                 .OrderByDescending(s => s.CreatedOn)
-                .AsEnumerable()
+                .ToQueryResult()
                 .Select(server => new ServerDto
                 {
                     Name = server.ServerId,
@@ -83,10 +90,17 @@ namespace Hangfire.Azure
                 InvocationData invocationData = job.InvocationData;
                 invocationData.Arguments = job.Arguments;
 
-                List<StateHistoryDto> states = storage.Client.CreateDocumentQuery<State>(storage.CollectionUri, queryOptions)
+                FeedOptions feedOptions = new FeedOptions
+                {
+                    MaxItemCount = 10,
+                    MaxBufferedItemCount = 10,
+                    MaxDegreeOfParallelism = -1
+                };
+
+                List<StateHistoryDto> states = storage.Client.CreateDocumentQuery<State>(storage.CollectionUri, feedOptions)
                     .Where(s => s.DocumentType == DocumentTypes.State && s.JobId == jobId)
                     .OrderByDescending(s => s.CreatedOn)
-                    .AsEnumerable()
+                    .ToQueryResult()
                     .Select(s => new StateHistoryDto
                     {
                         Data = s.Data,
@@ -116,11 +130,18 @@ namespace Hangfire.Azure
                 {
                     Dictionary<string, long> results = new Dictionary<string, long>();
 
+                    FeedOptions feedOptions = new FeedOptions
+                    {
+                        MaxItemCount = 10,
+                        MaxBufferedItemCount = 100,
+                        MaxDegreeOfParallelism = -1
+                    };
+
                     // get counts of jobs group-by on state
-                    Dictionary<string, long> states = storage.Client.CreateDocumentQuery<Documents.Job>(storage.CollectionUri, queryOptions)
+                    Dictionary<string, long> states = storage.Client.CreateDocumentQuery<Documents.Job>(storage.CollectionUri, feedOptions)
                         .Where(j => j.DocumentType == DocumentTypes.Job && Microsoft.Azure.Documents.SystemFunctions.TypeCheckFunctionsExtensions.IsDefined(j.StateName))
                         .Select(j => j.StateName)
-                        .AsEnumerable()
+                        .ToQueryResult()
                         .GroupBy(j => j)
                         .ToDictionary(g => g.Key, g => g.LongCount());
 
@@ -129,7 +150,7 @@ namespace Hangfire.Azure
                     // get counts of servers
                     SqlQuerySpec sql = new SqlQuerySpec
                     {
-                        QueryText = "SELECT VALUE COUNT(1) FROM doc WHERE doc.type = @type",
+                        QueryText = "SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type",
                         Parameters = new SqlParameterCollection
                         {
                             new SqlParameter("@type", DocumentTypes.Server)
@@ -137,15 +158,16 @@ namespace Hangfire.Azure
                     };
 
                     long servers = storage.Client.CreateDocumentQuery<long>(storage.CollectionUri, sql)
-                        .AsEnumerable()
+                        .ToQueryResult()
                         .FirstOrDefault();
 
                     results.Add("Servers", servers);
 
                     // get sum of stats:succeeded counters  raw / aggregate
-                    Dictionary<string, long> counters = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri, queryOptions)
+                    Dictionary<string, long> counters = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri, feedOptions)
                         .Where(c => c.DocumentType == DocumentTypes.Counter && (c.Key == "stats:succeeded" || c.Key == "stats:deleted"))
-                        .AsEnumerable()
+                        .Select(c => new { c.Key, c.Value })
+                        .ToQueryResult()
                         .GroupBy(c => c.Key)
                         .ToDictionary(g => g.Key, g => (long)g.Sum(c => c.Value));
 
@@ -153,7 +175,7 @@ namespace Hangfire.Azure
 
                     sql = new SqlQuerySpec
                     {
-                        QueryText = "SELECT VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.key = @key",
+                        QueryText = "SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.key = @key",
                         Parameters = new SqlParameterCollection
                         {
                             new SqlParameter("@key", "recurring-jobs"),
@@ -162,7 +184,7 @@ namespace Hangfire.Azure
                     };
 
                     long count = storage.Client.CreateDocumentQuery<long>(storage.CollectionUri, sql)
-                        .AsEnumerable()
+                        .ToQueryResult()
                         .FirstOrDefault();
 
                     results.Add("recurring-jobs", count);
@@ -282,15 +304,21 @@ namespace Hangfire.Azure
 
         private JobList<T> GetJobsOnState<T>(string stateName, int from, int count, Func<State, Common.Job, T> selector)
         {
-            // TODO: move to stored procedure
             List<KeyValuePair<string, T>> jobs = new List<KeyValuePair<string, T>>();
 
-            List<Documents.Job> filterJobs = storage.Client.CreateDocumentQuery<Documents.Job>(storage.CollectionUri, queryOptions)
-                .Where(j => j.DocumentType == DocumentTypes.Job && j.StateName == stateName)
-                .OrderByDescending(j => j.CreatedOn)
-                .AsEnumerable()
-                .Skip(from).Take(count)
-                .ToList();
+            FeedOptions feedOptions = new FeedOptions
+            {
+                MaxItemCount = 10,
+                MaxBufferedItemCount = 100,
+                MaxDegreeOfParallelism = -1
+            };
+
+            List<Documents.Job> filterJobs = storage.Client.CreateDocumentQuery<Documents.Job>(storage.CollectionUri, feedOptions)
+                 .Where(j => j.DocumentType == DocumentTypes.Job && j.StateName == stateName)
+                 .OrderByDescending(j => j.CreatedOn)
+                 .ToQueryResult()
+                 .Skip(from).Take(count)
+                 .ToList();
 
             filterJobs.ForEach(job =>
             {
@@ -327,9 +355,15 @@ namespace Hangfire.Azure
                 }
             };
 
-            List<Documents.Queue> queues = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, sql)
-                .AsEnumerable()
-                .OrderBy(q => q.CreatedOn)
+            FeedOptions feedOptions = new FeedOptions
+            {
+                MaxItemCount = 10,
+                MaxBufferedItemCount = 100,
+                MaxDegreeOfParallelism = -1
+            };
+
+            List<Documents.Queue> queues = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, sql, feedOptions)
+                .ToQueryResult()
                 .Skip(from).Take(count)
                 .ToList();
 
@@ -339,7 +373,7 @@ namespace Hangfire.Azure
                 Task<DocumentResponse<Documents.Job>> task = storage.Client.ReadDocumentAsync<Documents.Job>(uri);
                 task.Wait();
 
-                if (task.Result.Document != null)
+                if (task.Result != null)
                 {
                     Documents.Job job = task.Result;
                     InvocationData invocationData = job.InvocationData;
@@ -394,7 +428,7 @@ namespace Hangfire.Azure
         {
             SqlQuerySpec sql = new SqlQuerySpec
             {
-                QueryText = "SELECT VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.state_name = @state",
+                QueryText = "SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.state_name = @state",
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@state", state),
@@ -403,7 +437,7 @@ namespace Hangfire.Azure
             };
 
             return storage.Client.CreateDocumentQuery<long>(storage.CollectionUri, sql)
-                  .AsEnumerable()
+                  .ToQueryResult()
                   .FirstOrDefault();
         }
 
@@ -447,17 +481,27 @@ namespace Hangfire.Azure
         {
             Dictionary<DateTime, long> result = keys.ToDictionary(k => k.Value, v => default(long));
 
-            Dictionary<string, int> data = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri, queryOptions)
+            FeedOptions feedOptions = new FeedOptions
+            {
+                MaxItemCount = 10,
+                MaxBufferedItemCount = 100,
+                MaxDegreeOfParallelism = -1
+            };
+
+            string[] filter = keys.Keys.ToArray();
+
+            Dictionary<string, int> data = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri, feedOptions)
                 .Where(c => c.Type == CounterTypes.Aggregate && c.DocumentType == DocumentTypes.Counter)
-                .AsEnumerable()
-                .Where(c => keys.ContainsKey(c.Key))
+                .Where(c => filter.Contains(c.Key))
+                .Select(c => new { c.Key, c.Value })
+                .ToQueryResult()
                 .GroupBy(c => c.Key)
                 .ToDictionary(k => k.Key, k => k.Sum(c => c.Value));
 
             foreach (string key in keys.Keys)
             {
                 DateTime date = keys.Where(k => k.Key == key).Select(k => k.Value).First();
-                result[date] = data.ContainsKey(key) ? data[key] : 0;
+                result[date] = data.TryGetValue(key, out int value) ? value : 0;
             }
 
             return result;
