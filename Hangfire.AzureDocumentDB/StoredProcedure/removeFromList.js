@@ -4,14 +4,15 @@ function removeFromList(doc) {
     let response = getContext().getResponse();
     let responseBody = {
         affected: 0,
-        continuation: true
+        continuation: false
     };
     response.setBody(responseBody);
     let filter = (d) => d.type === 5 && d.key === doc.key && d.value === doc.value;
     tryQueryAndDelete();
     function tryQueryAndDelete(continuation) {
         let feedOptions = {
-            continuation: continuation
+            continuation: continuation,
+            pageSize: 10
         };
         let result = collection.filter(filter, feedOptions, (error, docs, feedCallbackOptions) => {
             if (error) {
@@ -29,6 +30,7 @@ function removeFromList(doc) {
             }
         });
         if (!result.isAccepted) {
+            responseBody.continuation = true;
             response.setBody(responseBody);
         }
     }

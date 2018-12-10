@@ -14,7 +14,8 @@ function persistDocument(query) {
     response.setBody(responseBody);
     function tryQueryAndUpdate(continuation) {
         let feedOptions = {
-            continuation: continuation
+            continuation: continuation,
+            pageSize: 10
         };
         let result = collection.queryDocuments(collectionLink, query, feedOptions, (error, docs, feedCallbackOptions) => {
             if (error) {

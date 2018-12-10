@@ -9,7 +9,7 @@ function announceServer(server) {
         if (error !== undefined && error.number !== 404) {
             throw error;
         }
-        if (doc === undefined) {
+        if (doc === undefined || doc === null) {
             doc = server;
         }
         else {

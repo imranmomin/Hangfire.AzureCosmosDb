@@ -10,9 +10,9 @@ function heartbeatServer(id, heartbeat) {
             throw error;
         }
         doc.last_heartbeat = heartbeat;
-        let isAccepted = collection.replaceDocument(doc._self, doc, (error) => {
-            if (error) {
-                throw error;
+        let isAccepted = collection.replaceDocument(doc._self, doc, (err) => {
+            if (err) {
+                throw err;
             }
             response.setBody(true);
         });

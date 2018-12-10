@@ -13,8 +13,9 @@ function trimList(key, startIndex, endIndex) {
             if (index < startIndex || index > endIndex) {
                 const newLocal = docs[index];
                 let isAccepted = collection.deleteDocument(newLocal._self, err => {
-                    if (err)
+                    if (err) {
                         throw err;
+                    }
                 });
                 if (!isAccepted) {
                     throw new Error("Failed to remove keys");

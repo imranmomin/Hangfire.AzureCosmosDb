@@ -4,7 +4,7 @@ function removeFromSet(doc) {
     let response = getContext().getResponse();
     let responseBody = {
         affected: 0,
-        continuation: true
+        continuation: false
     };
     response.setBody(responseBody);
     let filter = (d) => d.type === 7 && d.key === doc.key && d.value === doc.value;
@@ -29,6 +29,7 @@ function removeFromSet(doc) {
             }
         });
         if (!result.isAccepted) {
+            responseBody.continuation = true;
             response.setBody(responseBody);
         }
     }

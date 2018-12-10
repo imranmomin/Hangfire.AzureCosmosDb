@@ -5,13 +5,14 @@ function deleteDocuments(query) {
     let response = getContext().getResponse();
     let responseBody = {
         affected: 0,
-        continuation: true
+        continuation: false
     };
     response.setBody(responseBody);
     tryQueryAndDelete();
     function tryQueryAndDelete(continuation) {
         let feedOptions = {
-            continuation: continuation
+            continuation: continuation,
+            pageSize: 10
         };
         let result = collection.queryDocuments(collectionLink, query, feedOptions, (error, docs, feedCallbackOptions) => {
             if (error) {
@@ -29,6 +30,7 @@ function deleteDocuments(query) {
             }
         });
         if (!result) {
+            responseBody.continuation = true;
             response.setBody(responseBody);
         }
     }
