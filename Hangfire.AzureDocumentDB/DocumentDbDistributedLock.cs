@@ -75,26 +75,23 @@ namespace Hangfire.Azure
                         }
                     }
                 }
-                catch (AggregateException ex) when (ex.InnerException is DocumentClientException clientException)
+                catch (AggregateException ex) when (ex.InnerException is DocumentClientException clientException && clientException.StatusCode == HttpStatusCode.NotFound)
                 {
-                    if (clientException.StatusCode == HttpStatusCode.NotFound)
+                    Lock @lock = new Lock
                     {
-                        Lock @lock = new Lock
-                        {
-                            Id = id,
-                            Name = resource,
-                            ExpireOn = DateTime.UtcNow.Add(timeout),
-                            TimeToLive = (int)ttl.TotalSeconds
-                        };
+                        Id = id,
+                        Name = resource,
+                        ExpireOn = DateTime.UtcNow.Add(timeout),
+                        TimeToLive = (int)ttl.TotalSeconds
+                    };
 
-                        Task<ResourceResponse<Document>> createTask = storage.Client.CreateDocumentWithRetriesAsync(storage.CollectionUri, @lock);
-                        createTask.Wait();
+                    Task<ResourceResponse<Document>> createTask = storage.Client.UpsertDocumentWithRetriesAsync(storage.CollectionUri, @lock);
+                    createTask.Wait();
 
-                        if (createTask.Result.StatusCode == HttpStatusCode.Created)
-                        {
-                            resourceId = id;
-                            break;
-                        }
+                    if (createTask.Result.StatusCode == HttpStatusCode.Created)
+                    {
+                        resourceId = id;
+                        break;
                     }
                 }
 
