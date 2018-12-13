@@ -88,7 +88,7 @@ namespace Hangfire.Azure
                     Task<ResourceResponse<Document>> createTask = storage.Client.UpsertDocumentWithRetriesAsync(storage.CollectionUri, @lock);
                     createTask.Wait();
 
-                    if (createTask.Result.StatusCode == HttpStatusCode.Created)
+                    if (createTask.Result.StatusCode == HttpStatusCode.OK || createTask.Result.StatusCode == HttpStatusCode.Created)
                     {
                         resourceId = id;
                         break;
