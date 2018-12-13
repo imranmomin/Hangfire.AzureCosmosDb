@@ -1,4 +1,4 @@
-function setRangeHash(key, data) {
+function setRangeHash(data) {
     let context = getContext();
     let collection = context.getCollection();
     let response = getContext().getResponse();
@@ -7,46 +7,26 @@ function setRangeHash(key, data) {
         response.setBody(0);
         return;
     }
-    let filter = (doc) => doc.type === 6 && doc.key === key;
-    let result = collection.filter(filter, (error, docs) => {
-        if (error) {
-            throw error;
+    let count = 0;
+    let hashes = data.items;
+    let docsLength = hashes.length;
+    tryUpsert(hashes[count]);
+    function tryUpsert(doc) {
+        let isAccepted = collection.upsertDocument(collectionLink, doc, callback);
+        if (!isAccepted) {
+            response.setBody(count);
         }
-        let hashes = new Array();
-        for (let index = 0; index < data.items.length; index++) {
-            let source = data.items[index];
-            let hash = docs.find((h) => h.field === source.field);
-            if (hash) {
-                hash.value = source.value;
-            }
-            else {
-                hash = source;
-            }
-            hashes.push(hash);
+    }
+    function callback(err) {
+        if (err) {
+            throw err;
         }
-        let count = 0;
-        let docsLength = hashes.length;
-        tryUpsert(hashes[count]);
-        function tryUpsert(doc) {
-            let isAccepted = collection.upsertDocument(collectionLink, doc, callback);
-            if (!isAccepted) {
-                response.setBody(count);
-            }
+        count++;
+        if (count >= docsLength) {
+            response.setBody(count);
         }
-        function callback(err) {
-            if (err) {
-                throw err;
-            }
-            count++;
-            if (count >= docsLength) {
-                response.setBody(count);
-            }
-            else {
-                tryUpsert(hashes[count]);
-            }
+        else {
+            tryUpsert(hashes[count]);
         }
-    });
-    if (!result.isAccepted) {
-        throw new Error("The call was not accepted");
     }
 }

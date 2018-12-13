@@ -139,7 +139,7 @@ namespace Hangfire.Azure
             QueueCommand(() =>
             {
                 int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
-                string query = $"SELECT doc.id FROM doc WHERE doc.type = {(int)DocumentTypes.Job} AND doc.id = '{jobId}'";
+                string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Job} AND doc.id = '{jobId}'";
                 ProcedureResponse response;
 
                 do
@@ -160,7 +160,7 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                string query = $"SELECT doc.id FROM doc WHERE doc.type = {(int)DocumentTypes.Job} AND doc.id = '{jobId}'";
+                string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Job} AND doc.id = '{jobId}'";
                 ProcedureResponse response;
 
                 do
@@ -296,7 +296,7 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                string query = $"SELECT doc.id FROM doc WHERE doc.type = {(int)DocumentTypes.Set} AND doc.key = '{key}'";
+                string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Set} AND doc.key = '{key}'";
                 ProcedureResponse response;
 
                 do
@@ -317,7 +317,7 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                string query = $"SELECT doc.id FROM doc WHERE doc.type = {(int)DocumentTypes.Set} AND doc.key = '{key}'";
+                string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Set} AND doc.key = '{key}'";
                 int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
                 ProcedureResponse response;
 
@@ -347,7 +347,7 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                string query = $"SELECT doc.id FROM doc WHERE doc.type = {(int)DocumentTypes.Set} AND doc.key == '{key}'";
+                string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Set} AND doc.key == '{key}'";
                 ProcedureResponse response;
 
                 do
@@ -372,7 +372,7 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                string query = $"SELECT doc.id FROM doc WHERE doc.type = {(int)DocumentTypes.Hash} AND doc.key == '{key}'";
+                string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Hash} AND doc.key == '{key}'";
                 ProcedureResponse response;
 
                 do
@@ -394,19 +394,42 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                Data<Hash> data = new Data<Hash>
-                {
-                    Items = keyValuePairs.Select(k => new Hash
-                    {
-                        Key = key,
-                        Field = k.Key,
-                        Value = k.Value.TryParseToEpoch()
-                    }).ToArray()
-                };
+                Data<Hash> data = new Data<Hash>();
 
+                FeedOptions feedOptions = new FeedOptions { MaxItemCount = 10, MaxBufferedItemCount = 100, MaxDegreeOfParallelism = -1 };
+                List<Hash> hashes = connection.Storage.Client.CreateDocumentQuery<Hash>(connection.Storage.CollectionUri, feedOptions)
+                    .Where(h => h.DocumentType == DocumentTypes.Hash && h.Key == key)
+                    .ToQueryResult();
+
+                Hash[] sources = keyValuePairs.Select(k => new Hash
+                {
+                    Key = key,
+                    Field = k.Key,
+                    Value = k.Value.TryParseToEpoch()
+                }).ToArray();
+
+                foreach (Hash source in sources)
+                {
+                    Hash hash = hashes.SingleOrDefault(h => h.Field == source.Field) ?? source;
+                    if (!string.Equals(hash.Value, source.Value, StringComparison.InvariantCultureIgnoreCase)) hash.Value = source.Value;
+                    data.Items.Add(hash);
+                }
+
+                int affected = 0;
                 Uri spSetRangeHashUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "setRangeHash");
-                Task<StoredProcedureResponse<int>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<int>(spSetRangeHashUri, key, data);
-                task.Wait();
+
+                do
+                {
+                    // process only remaining items
+                    data.Items = data.Items.Skip(affected).ToList();
+
+                    Task<StoredProcedureResponse<int>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<int>(spSetRangeHashUri, data);
+                    task.Wait();
+
+                    // know how much was processed
+                    affected += task.Result;
+
+                } while (affected < data.Items.Count);
             });
         }
 
@@ -416,7 +439,7 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                string query = $"SELECT doc.id FROM doc WHERE doc.type = {(int)DocumentTypes.Hash} AND doc.key = '{key}'";
+                string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Hash} AND doc.key = '{key}'";
                 int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
                 ProcedureResponse response;
 
@@ -438,7 +461,7 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                string query = $"SELECT doc.id FROM doc WHERE doc.type = {(int)DocumentTypes.Hash} AND doc.key = '{key}'";
+                string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Hash} AND doc.key = '{key}'";
                 ProcedureResponse response;
 
                 do
@@ -522,7 +545,7 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                string query = $"SELECT doc.id FROM doc WHERE doc.type = {(int)DocumentTypes.List} AND doc.key = '{key}'";
+                string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.List} AND doc.key = '{key}'";
                 int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
                 ProcedureResponse response;
 
@@ -544,7 +567,7 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                string query = $"SELECT doc.id FROM doc WHERE doc.type = {(int)DocumentTypes.List} AND doc.key = '{key}'";
+                string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.List} AND doc.key = '{key}'";
                 ProcedureResponse response;
 
                 do

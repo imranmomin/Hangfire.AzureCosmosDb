@@ -1,6 +1,8 @@
 ﻿using System;
-using Microsoft.Azure.Documents;
 using Newtonsoft.Json;
+using System.Collections.Generic;
+
+using Microsoft.Azure.Documents;
 
 // ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents
@@ -46,6 +48,6 @@ namespace Hangfire.Azure.Documents
     internal class Data<T>
     {
         [JsonProperty("items")]
-        public T[] Items { get; set; }
+        public List<T> Items { get; set; } = new List<T>();
     }
 }

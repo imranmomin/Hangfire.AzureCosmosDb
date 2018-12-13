@@ -354,7 +354,7 @@ namespace Hangfire.Azure
             ProcedureResponse response;
             int lastHeartbeat = DateTime.UtcNow.Add(timeOut.Negate()).ToEpoch();
 
-            string query = $"SELECT doc.id FROM doc WHERE doc.type = {(int)DocumentTypes.Server} AND IS_DEFINED(doc.last_heartbeat) " +
+            string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Server} AND IS_DEFINED(doc.last_heartbeat) " +
                            $"AND doc.last_heartbeat <= {lastHeartbeat}";
             Uri spDeleteDocuments = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "deleteDocuments");
 
@@ -391,31 +391,41 @@ namespace Hangfire.Azure
             if (key == null) throw new ArgumentNullException(nameof(key));
             if (keyValuePairs == null) throw new ArgumentNullException(nameof(keyValuePairs));
 
-            Data<Hash> data = new Data<Hash>
+            Data<Hash> data = new Data<Hash>();
+
+            List<Hash> hashes = Storage.Client.CreateDocumentQuery<Hash>(Storage.CollectionUri, queryOptions)
+                .Where(h => h.DocumentType == DocumentTypes.Hash && h.Key == key)
+                .ToQueryResult();
+
+            Hash[] sources = keyValuePairs.Select(k => new Hash
             {
-                Items = keyValuePairs.Select(k => new Hash
-                {
-                    Key = key,
-                    Field = k.Key,
-                    Value = k.Value.TryParseToEpoch()
-                }).ToArray()
-            };
+                Key = key,
+                Field = k.Key,
+                Value = k.Value.TryParseToEpoch()
+            }).ToArray();
+
+            foreach (Hash source in sources)
+            {
+                Hash hash = hashes.SingleOrDefault(h => h.Field == source.Field) ?? source;
+                if (!string.Equals(hash.Value, source.Value, StringComparison.InvariantCultureIgnoreCase)) hash.Value = source.Value;
+                data.Items.Add(hash);
+            }
 
             int affected = 0;
+            Uri spSetRangeHashUri = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "setRangeHash");
 
             do
             {
                 // process only remaining items
-                data.Items = data.Items.Skip(data.Items.Length - affected).ToArray();
+                data.Items = data.Items.Skip(affected).ToList();
 
-                Uri spSetRangeHashUri = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "setRangeHash");
-                Task<StoredProcedureResponse<int>> task = Storage.Client.ExecuteStoredProcedureWithRetriesAsync<int>(spSetRangeHashUri, key, data);
+                Task<StoredProcedureResponse<int>> task = Storage.Client.ExecuteStoredProcedureWithRetriesAsync<int>(spSetRangeHashUri, data);
                 task.Wait();
 
                 // know how much was processed
-                affected = task.Result;
+                affected += task.Result;
 
-            } while (affected < data.Items.Length);
+            } while (affected < data.Items.Count);
         }
 
         public override long GetHashCount(string key)
