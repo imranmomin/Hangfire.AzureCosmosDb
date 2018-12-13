@@ -54,7 +54,7 @@ namespace Hangfire.Azure.Queue
         {
             lock (syncRoot)
             {
-                Uri deleteUri = new Uri(data.SelfLink); 
+                Uri deleteUri = new Uri(data.SelfLink, UriKind.Relative); 
                 Task<ResourceResponse<Document>> task = storage.Client.DeleteDocumentWithRetriesAsync(deleteUri);
                 task.Wait();
                 removedFromQueue = true;
@@ -68,7 +68,7 @@ namespace Hangfire.Azure.Queue
                 data.CreatedOn = DateTime.UtcNow;
                 data.FetchedAt = null;
 
-                Uri replaceUri = new Uri(data.SelfLink);
+                Uri replaceUri = new Uri(data.SelfLink, UriKind.Relative);
                 Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentWithRetriesAsync(replaceUri, data);
                 task.Wait();
                 reQueued = true;
@@ -86,7 +86,7 @@ namespace Hangfire.Azure.Queue
                     Documents.Queue queue = (Documents.Queue)obj;
                     queue.FetchedAt = DateTime.UtcNow;
 
-                    Uri replaceUri = new Uri(queue.SelfLink);
+                    Uri replaceUri = new Uri(queue.SelfLink, UriKind.Relative);
                     Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentWithRetriesAsync(replaceUri, queue);
                     task.Wait();
 

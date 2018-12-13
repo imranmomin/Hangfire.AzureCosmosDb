@@ -75,7 +75,7 @@ namespace Hangfire.Azure.Queue
                             // mark the document
                             data.FetchedAt = DateTime.UtcNow;
 
-                            Uri replaceUri = new Uri(data.SelfLink);
+                            Uri replaceUri = new Uri(data.SelfLink, UriKind.Relative);
                             Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentWithRetriesAsync(replaceUri, data, cancellationToken: cancellationToken);
                             task.Wait(cancellationToken);
 
