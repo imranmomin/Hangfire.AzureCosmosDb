@@ -319,9 +319,7 @@ namespace Hangfire.Azure
                 CreatedOn = DateTime.UtcNow,
                 LastHeartbeat = DateTime.UtcNow
             };
-
-            Uri spAnnounceServerUri = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "announceServer");
-            Task<StoredProcedureResponse<bool>> task = Storage.Client.ExecuteStoredProcedureWithRetriesAsync<bool>(spAnnounceServerUri, server);
+            Task<ResourceResponse<Document>> task = Storage.Client.UpsertDocumentWithRetriesAsync(Storage.CollectionUri, server);
             task.Wait();
         }
 

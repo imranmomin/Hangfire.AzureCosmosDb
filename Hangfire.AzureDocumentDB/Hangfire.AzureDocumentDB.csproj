@@ -39,9 +39,6 @@
     <EmbeddedResource Include="StoredProcedure\addToSet.js">
       <DependentUpon>addToSet.ts</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="StoredProcedure\announceServer.js">
-      <DependentUpon>announceServer.ts</DependentUpon>
-    </EmbeddedResource>
     <EmbeddedResource Include="StoredProcedure\expireJob.js">
       <DependentUpon>expireJob.ts</DependentUpon>
     </EmbeddedResource>
