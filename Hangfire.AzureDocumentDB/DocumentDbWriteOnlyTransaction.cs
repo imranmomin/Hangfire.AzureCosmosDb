@@ -287,7 +287,6 @@ namespace Hangfire.Azure
                     sets.ForEach(s => s.Score = score);
                 }
 
-                // loop until the affected records is not zero and attempts are less then equal to 3
                 int affected = 0;
                 Data<Set> data = new Data<Set>(sets);
 
@@ -303,7 +302,6 @@ namespace Hangfire.Azure
                     affected += task.Result;
 
                 } while (affected < data.Items.Count);
-
             });
         }
 
@@ -355,7 +353,32 @@ namespace Hangfire.Azure
             if (key == null) throw new ArgumentNullException(nameof(key));
             if (items == null) throw new ArgumentNullException(nameof(items));
 
-            QueueCommand(() => throw new NotImplementedException());
+            QueueCommand(() =>
+            {
+                List<Set> sets = items.Select(value => new Set
+                {
+                    Key = key,
+                    Value = value,
+                    Score = 0.00,
+                    CreatedOn = DateTime.UtcNow
+                }).ToList();
+
+                int affected = 0;
+                Data<Set> data = new Data<Set>(sets);
+
+                do
+                {
+                    // process only remaining items
+                    data.Items = data.Items.Skip(affected).ToList();
+
+                    Task<StoredProcedureResponse<int>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<int>(spUpsertDocumentsUri, data);
+                    task.Wait();
+
+                    // know how much was processed
+                    affected += task.Result;
+
+                } while (affected < data.Items.Count);
+            });
         }
 
         public override void RemoveSet(string key)
