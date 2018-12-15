@@ -23,7 +23,8 @@ function removeFromSet(doc: ISet) {
     // Calls tryDelete(documents) as soon as the query returns documents.
     function tryQueryAndDelete(continuation?: string) {
         let feedOptions: IFeedOptions = {
-            continuation: continuation
+            continuation: continuation,
+            pageSize: 10
         };
 
         let result: IQueryResponse = collection.filter(filter, feedOptions, (error: IFeedCallbackError, docs: Array<IDocumentBase>, feedCallbackOptions: IFeedCallbackOptions) => {

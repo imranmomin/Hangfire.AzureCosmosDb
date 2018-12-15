@@ -14,7 +14,8 @@ function persistJob(id) {
             return;
         }
         delete doc.expire_on;
-        let result = collection.replaceDocument(doc._self, doc, (err) => {
+        let options = { etag: doc._etag };
+        let result = collection.replaceDocument(doc._self, doc, options, (err) => {
             if (err) {
                 throw err;
             }

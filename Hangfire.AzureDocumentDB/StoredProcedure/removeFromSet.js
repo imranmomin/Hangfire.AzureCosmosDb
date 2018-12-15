@@ -11,7 +11,8 @@ function removeFromSet(doc) {
     tryQueryAndDelete();
     function tryQueryAndDelete(continuation) {
         let feedOptions = {
-            continuation: continuation
+            continuation: continuation,
+            pageSize: 10
         };
         let result = collection.filter(filter, feedOptions, (error, docs, feedCallbackOptions) => {
             if (error) {

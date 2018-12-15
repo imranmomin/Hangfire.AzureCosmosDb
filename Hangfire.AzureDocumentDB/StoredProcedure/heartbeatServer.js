@@ -10,7 +10,8 @@ function heartbeatServer(id, heartbeat) {
             throw error;
         }
         doc.last_heartbeat = heartbeat;
-        let isAccepted = collection.replaceDocument(doc._self, doc, (err) => {
+        let options = { etag: doc._etag };
+        let isAccepted = collection.replaceDocument(doc._self, doc, options, (err) => {
             if (err) {
                 throw err;
             }

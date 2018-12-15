@@ -27,8 +27,9 @@ function setJobParameter(id: string, parameter: IParameter) {
 
         // add the new parameter
         doc.parameters.push(parameter);
+        let options: IReplaceOptions = { etag: doc._etag };
 
-        let result: boolean = collection.replaceDocument(doc._self, doc, (err: IRequestCallbackError) => {
+        let result: boolean = collection.replaceDocument(doc._self, doc, options, (err: IRequestCallbackError) => {
             if (err) {
                 throw err;
             }

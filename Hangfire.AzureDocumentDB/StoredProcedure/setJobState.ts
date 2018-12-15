@@ -17,14 +17,15 @@ function setJobState(id: string, state: IState) {
         if (error) {
             throw error;
         }
-        
+
         // now create the state document
         // on callback replace the job documented with state_id, state_name
         createState(state, (doc: IState): void => {
             job.state_id = doc.id;
             job.state_name = doc.name;
+            let options: IReplaceOptions = { etag: job._etag };
 
-            let success: boolean = collection.replaceDocument(job._self, job, (err: IRequestCallbackError) => {
+            let success: boolean = collection.replaceDocument(job._self, job, options, (err: IRequestCallbackError) => {
                 if (err) {
                     throw err;
                 }

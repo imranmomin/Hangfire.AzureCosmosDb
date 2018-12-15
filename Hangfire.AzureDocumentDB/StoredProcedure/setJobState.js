@@ -12,7 +12,8 @@ function setJobState(id, state) {
         createState(state, (doc) => {
             job.state_id = doc.id;
             job.state_name = doc.name;
-            let success = collection.replaceDocument(job._self, job, (err) => {
+            let options = { etag: job._etag };
+            let success = collection.replaceDocument(job._self, job, options, (err) => {
                 if (err) {
                     throw err;
                 }

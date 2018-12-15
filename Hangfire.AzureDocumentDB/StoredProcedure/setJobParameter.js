@@ -16,7 +16,8 @@ function setJobParameter(id, parameter) {
             doc.parameters = doc.parameters.filter((p) => p.name !== parameter.name);
         }
         doc.parameters.push(parameter);
-        let result = collection.replaceDocument(doc._self, doc, (err) => {
+        let options = { etag: doc._etag };
+        let result = collection.replaceDocument(doc._self, doc, options, (err) => {
             if (err) {
                 throw err;
             }

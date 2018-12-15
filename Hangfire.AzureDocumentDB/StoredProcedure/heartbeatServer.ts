@@ -14,7 +14,7 @@ function heartbeatServer(id: string, heartbeat: number) {
 
     // default response
     response.setBody(false);
-    
+
     let result: boolean = collection.readDocument(documentLink, (error: IRequestCallbackError, doc: IServer) => {
         if (error) {
             throw error;
@@ -22,8 +22,9 @@ function heartbeatServer(id: string, heartbeat: number) {
 
         // set the heartbeat
         doc.last_heartbeat = heartbeat;
+        let options: IReplaceOptions = { etag: doc._etag };
 
-        let isAccepted: boolean = collection.replaceDocument(doc._self, doc, (err: IRequestCallbackError) => {
+        let isAccepted: boolean = collection.replaceDocument(doc._self, doc, options, (err: IRequestCallbackError) => {
             if (err) {
                 throw err;
             }

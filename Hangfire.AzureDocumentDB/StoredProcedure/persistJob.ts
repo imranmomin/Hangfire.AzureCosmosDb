@@ -24,8 +24,9 @@ function persistJob(id: string) {
 
         // remove the expire_on property
         delete doc.expire_on;
+        let options: IReplaceOptions = { etag: doc._etag };
 
-        let result: boolean = collection.replaceDocument(doc._self, doc, (err: IRequestCallbackError) => {
+        let result: boolean = collection.replaceDocument(doc._self, doc, options, (err: IRequestCallbackError) => {
             if (err) {
                 throw err;
             }
@@ -33,12 +34,12 @@ function persistJob(id: string) {
         });
 
         if (!result) {
-             throw new Error("The call was not accepted");
+            throw new Error("The call was not accepted");
         }
 
     });
 
     if (!isAccepted) {
-         throw new Error("The call was not accepted");
+        throw new Error("The call was not accepted");
     }
 }
