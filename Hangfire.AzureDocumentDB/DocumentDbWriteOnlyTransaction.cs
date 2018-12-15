@@ -450,20 +450,26 @@ namespace Hangfire.Azure
 
                 foreach (Hash source in sources)
                 {
-                    Hash hash = hashes.SingleOrDefault(h => h.Field == source.Field) ?? source;
-                    if (!string.Equals(hash.Value, source.Value, StringComparison.InvariantCultureIgnoreCase)) hash.Value = source.Value;
-                    data.Items.Add(hash);
+                    Hash hash = hashes.SingleOrDefault(h => h.Field == source.Field);
+                    if (hash == null)
+                    {
+                        data.Items.Add(source);
+                    }
+                    else if (!string.Equals(hash.Value, source.Value, StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        hash.Value = source.Value;
+                        data.Items.Add(hash);
+                    }
                 }
 
                 int affected = 0;
-                Uri spSetRangeHashUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "setRangeHash");
 
                 do
                 {
                     // process only remaining items
                     data.Items = data.Items.Skip(affected).ToList();
 
-                    Task<StoredProcedureResponse<int>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<int>(spSetRangeHashUri, data);
+                    Task<StoredProcedureResponse<int>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<int>(spUpsertDocumentsUri, data);
                     task.Wait();
 
                     // know how much was processed
