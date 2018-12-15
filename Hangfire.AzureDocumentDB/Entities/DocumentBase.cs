@@ -47,7 +47,11 @@ namespace Hangfire.Azure.Documents
 
     internal class Data<T>
     {
+        public Data() => Items = new List<T>();
+
+        public Data(List<T> items) => Items = items;
+
         [JsonProperty("items")]
-        public List<T> Items { get; set; } = new List<T>();
+        public List<T> Items { get; set; }
     }
 }

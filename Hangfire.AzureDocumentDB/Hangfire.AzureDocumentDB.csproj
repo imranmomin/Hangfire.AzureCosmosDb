@@ -36,9 +36,6 @@
     <None Remove="package-lock.json" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="StoredProcedure\addToSet.js">
-      <DependentUpon>addToSet.ts</DependentUpon>
-    </EmbeddedResource>
     <EmbeddedResource Include="StoredProcedure\heartbeatServer.js">
       <DependentUpon>heartbeatServer.ts</DependentUpon>
     </EmbeddedResource>

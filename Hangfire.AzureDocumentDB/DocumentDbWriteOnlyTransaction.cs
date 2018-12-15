@@ -22,6 +22,7 @@ namespace Hangfire.Azure
         private readonly Uri spPersistDocumentsUri;
         private readonly Uri spExpireDocumentsUri;
         private readonly Uri spDeleteDocumentsUri;
+        private readonly Uri spUpsertDocumentsUri;
 
         public DocumentDbWriteOnlyTransaction(DocumentDbConnection connection)
         {
@@ -29,6 +30,7 @@ namespace Hangfire.Azure
             spPersistDocumentsUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "persistDocuments");
             spExpireDocumentsUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "expireDocuments");
             spDeleteDocumentsUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "deleteDocuments");
+            spUpsertDocumentsUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "upsertDocuments");
         }
 
         private void QueueCommand(Action command) => commands.Add(command);
@@ -262,30 +264,45 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                Set set = new Set
+                FeedOptions feedOptions = new FeedOptions { MaxItemCount = 10, MaxBufferedItemCount = 100, MaxDegreeOfParallelism = -1 };
+                List<Set> sets = connection.Storage.Client.CreateDocumentQuery<Set>(connection.Storage.CollectionUri, feedOptions)
+                    .Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
+                    .ToQueryResult()
+                    .Where(s => s.Value == value) // value may contain json string.. which interfere with query 
+                    .ToList();
+
+                if (sets.Count == 0)
                 {
-                    Key = key,
-                    Value = value,
-                    Score = score,
-                    CreatedOn = DateTime.UtcNow
-                };
+                    sets.Add(new Set
+                    {
+                        Key = key,
+                        Value = value,
+                        Score = score,
+                        CreatedOn = DateTime.UtcNow
+                    });
+                }
+                else
+                {
+                    // set the sets score
+                    sets.ForEach(s => s.Score = score);
+                }
 
                 // loop until the affected records is not zero and attempts are less then equal to 3
-                int affected;
-                int attempts = 0;
-                Uri spAddToSetUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "addToSet");
+                int affected = 0;
+                Data<Set> data = new Data<Set>(sets);
 
                 do
                 {
-                    attempts++;
+                    // process only remaining items
+                    data.Items = data.Items.Skip(affected).ToList();
 
-                    Task<StoredProcedureResponse<int>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<int>(spAddToSetUri, set);
+                    Task<StoredProcedureResponse<int>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<int>(spUpsertDocumentsUri, data);
                     task.Wait();
 
-                    affected = task.Result;
+                    // know how much was processed
+                    affected += task.Result;
 
-                    // loop back if the result and attempts satisfy
-                } while (affected == 0 && attempts < 3);
+                } while (affected < data.Items.Count);
 
             });
         }
