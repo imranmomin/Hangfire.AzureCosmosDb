@@ -573,9 +573,31 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                Uri spTrimListUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "trimList");
-                Task<StoredProcedureResponse<bool>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<bool>(spTrimListUri, key, keepStartingFrom, keepEndingAt);
-                task.Wait();
+                FeedOptions feedOptions = new FeedOptions { MaxItemCount = 10, MaxBufferedItemCount = 100, MaxDegreeOfParallelism = -1 };
+                string[] lists = connection.Storage.Client.CreateDocumentQuery<List>(connection.Storage.CollectionUri, feedOptions)
+                     .Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
+                     .OrderByDescending(l => l.CreatedOn)
+                     .Select(l => l.Id)
+                     .ToQueryResult()
+                     .Select((l, index) => new { Id = l, index })
+                     .Where(l => l.index < keepStartingFrom || l.index > keepEndingAt)
+                     .Select(l => l.Id)
+                     .ToArray();
+
+                string ids = string.Join(",", lists.Select(l => $"'{l}'"));
+                string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.List} AND doc.id IN ({ids})";
+                ProcedureResponse response;
+
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
+                    task.Wait();
+
+                    response = task.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
+
             });
         }
 
