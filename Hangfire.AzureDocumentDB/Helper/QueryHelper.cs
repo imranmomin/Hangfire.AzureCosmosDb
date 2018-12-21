@@ -16,7 +16,7 @@ namespace Hangfire.Azure.Helper
 
             while (query.HasMoreResults)
             {
-                Task<FeedResponse<T>> task = query.ExecuteNextWithRetriesAsync();
+                Task<FeedResponse<T>> task = Task.Run(async () => await query.ExecuteNextWithRetriesAsync());
                 task.Wait();
                 results.AddRange(task.Result);
             }
