@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -54,11 +55,18 @@ namespace Hangfire.Azure.Queue
         {
             lock (syncRoot)
             {
-                Uri deleteUri = new Uri(data.SelfLink, UriKind.Relative); 
-                Task<ResourceResponse<Document>> task = storage.Client.DeleteDocumentWithRetriesAsync(deleteUri);
-                task.Wait();
-                removedFromQueue = true;
+                try
+                {
+                    Uri deleteUri = new Uri(data.SelfLink, UriKind.Relative);
+                    Task<ResourceResponse<Document>> task = storage.Client.DeleteDocumentWithRetriesAsync(deleteUri);
+                    task.Wait();
+                }
+                finally
+                {
+                    removedFromQueue = true;
+                }
             }
+
         }
 
         public void Requeue()
@@ -68,10 +76,25 @@ namespace Hangfire.Azure.Queue
                 data.CreatedOn = DateTime.UtcNow;
                 data.FetchedAt = null;
 
-                Uri replaceUri = new Uri(data.SelfLink, UriKind.Relative);
-                Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentWithRetriesAsync(replaceUri, data);
-                task.Wait();
-                reQueued = true;
+                try
+                {
+                    Uri replaceUri = new Uri(data.SelfLink, UriKind.Relative);
+                    Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentWithRetriesAsync(replaceUri, data);
+                    task.Wait();
+                }
+                catch (DocumentClientException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+                {
+                    data.Id = Guid.NewGuid().ToString();
+                    data.SelfLink = null;
+
+                    Uri collectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, storage.Options.CollectionName);
+                    Task<ResourceResponse<Document>> task = storage.Client.CreateDocumentWithRetriesAsync(collectionUri, data);
+                    task.Wait();
+                }
+                finally
+                {
+                    reQueued = true;
+                }
             }
         }
 
