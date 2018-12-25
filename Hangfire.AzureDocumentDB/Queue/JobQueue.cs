@@ -33,7 +33,8 @@ namespace Hangfire.Azure.Queue
         {
             lock (syncLock)
             {
-                string query = $"SELECT TOP 1 * FROM doc WHERE doc.type = @type AND doc.name IN ({string.Join(", ", Enumerable.Range(0, queues.Length).Select((q, i) => $"@queue_{i}"))}) " +
+                IEnumerable<string> queueParams = Enumerable.Range(0, queues.Length).Select((q, i) => $"@queue_{i}");
+                string query = $"SELECT TOP 1 * FROM doc WHERE doc.type = @type AND doc.name IN ({string.Join(", ", queueParams)}) " +
                                "AND (NOT IS_DEFINED(doc.fetched_at) OR doc.fetched_at < @timeout) ORDER BY doc.created_on";
 
                 List<SqlParameter> parameters = new List<SqlParameter> { new SqlParameter("@type", Documents.DocumentTypes.Queue) };
@@ -59,14 +60,7 @@ namespace Hangfire.Azure.Queue
                         };
                         sql.Parameters.Add(new SqlParameter("@timeout", invisibilityTimeoutEpoch));
 
-                        FeedOptions feedOptions = new FeedOptions
-                        {
-                            MaxItemCount = 1,
-                            MaxDegreeOfParallelism = 1,
-                            MaxBufferedItemCount = 1
-                        };
-
-                        Documents.Queue data = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, sql, feedOptions)
+                        Documents.Queue data = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, sql)
                             .ToQueryResult()
                             .FirstOrDefault();
 
@@ -79,7 +73,7 @@ namespace Hangfire.Azure.Queue
                             Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentWithRetriesAsync(replaceUri, data, cancellationToken: cancellationToken);
                             task.Wait(cancellationToken);
 
-                            logger.Trace($"Found job {data.JobId} from the queue {data.Name}");
+                            logger.Trace($"Found job {data.JobId} from the queue : {data.Name}");
                             return new FetchedJob(storage, data);
                         }
                     }

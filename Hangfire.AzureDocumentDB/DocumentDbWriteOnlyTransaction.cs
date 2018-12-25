@@ -264,8 +264,7 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                FeedOptions feedOptions = new FeedOptions { MaxItemCount = 10, MaxBufferedItemCount = 100, MaxDegreeOfParallelism = -1 };
-                List<Set> sets = connection.Storage.Client.CreateDocumentQuery<Set>(connection.Storage.CollectionUri, feedOptions)
+                List<Set> sets = connection.Storage.Client.CreateDocumentQuery<Set>(connection.Storage.CollectionUri)
                     .Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
                     .ToQueryResult()
                     .Where(s => s.Value == value) // value may contain json string.. which interfere with query 
@@ -436,8 +435,7 @@ namespace Hangfire.Azure
             {
                 Data<Hash> data = new Data<Hash>();
 
-                FeedOptions feedOptions = new FeedOptions { MaxItemCount = 10, MaxBufferedItemCount = 100, MaxDegreeOfParallelism = -1 };
-                List<Hash> hashes = connection.Storage.Client.CreateDocumentQuery<Hash>(connection.Storage.CollectionUri, feedOptions)
+                List<Hash> hashes = connection.Storage.Client.CreateDocumentQuery<Hash>(connection.Storage.CollectionUri)
                     .Where(h => h.DocumentType == DocumentTypes.Hash && h.Key == key)
                     .ToQueryResult();
 
@@ -579,8 +577,7 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                FeedOptions feedOptions = new FeedOptions { MaxItemCount = 10, MaxBufferedItemCount = 100, MaxDegreeOfParallelism = -1 };
-                string[] lists = connection.Storage.Client.CreateDocumentQuery<List>(connection.Storage.CollectionUri, feedOptions)
+                string[] lists = connection.Storage.Client.CreateDocumentQuery<List>(connection.Storage.CollectionUri)
                      .Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
                      .OrderByDescending(l => l.CreatedOn)
                      .Select(l => l.Id)

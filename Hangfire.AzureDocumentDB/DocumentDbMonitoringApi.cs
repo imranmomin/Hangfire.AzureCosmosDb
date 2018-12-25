@@ -9,6 +9,7 @@ using Hangfire.Storage;
 using Microsoft.Azure.Documents;
 using Hangfire.Storage.Monitoring;
 using Microsoft.Azure.Documents.Client;
+using Microsoft.Azure.Documents.SystemFunctions;
 
 using Hangfire.Azure.Queue;
 using Hangfire.Azure.Helper;
@@ -55,14 +56,7 @@ namespace Hangfire.Azure
 
         public IList<ServerDto> Servers()
         {
-            FeedOptions feedOptions = new FeedOptions
-            {
-                MaxItemCount = 10,
-                MaxBufferedItemCount = -1,
-                MaxDegreeOfParallelism = -1
-            };
-
-            return storage.Client.CreateDocumentQuery<Documents.Server>(storage.CollectionUri, feedOptions)
+            return storage.Client.CreateDocumentQuery<Documents.Server>(storage.CollectionUri)
                 .Where(s => s.DocumentType == DocumentTypes.Server)
                 .OrderByDescending(s => s.CreatedOn)
                 .ToQueryResult()
@@ -90,14 +84,7 @@ namespace Hangfire.Azure
                 InvocationData invocationData = job.InvocationData;
                 invocationData.Arguments = job.Arguments;
 
-                FeedOptions feedOptions = new FeedOptions
-                {
-                    MaxItemCount = 10,
-                    MaxBufferedItemCount = 10,
-                    MaxDegreeOfParallelism = -1
-                };
-
-                List<StateHistoryDto> states = storage.Client.CreateDocumentQuery<State>(storage.CollectionUri, feedOptions)
+                List<StateHistoryDto> states = storage.Client.CreateDocumentQuery<State>(storage.CollectionUri)
                     .Where(s => s.DocumentType == DocumentTypes.State && s.JobId == jobId)
                     .OrderByDescending(s => s.CreatedOn)
                     .ToQueryResult()
@@ -132,14 +119,12 @@ namespace Hangfire.Azure
 
                     FeedOptions feedOptions = new FeedOptions
                     {
-                        MaxItemCount = 10,
-                        MaxBufferedItemCount = 100,
-                        MaxDegreeOfParallelism = -1
+                        MaxItemCount = 1000,
                     };
 
                     // get counts of jobs group-by on state
                     Dictionary<string, long> states = storage.Client.CreateDocumentQuery<Documents.Job>(storage.CollectionUri, feedOptions)
-                        .Where(j => j.DocumentType == DocumentTypes.Job && Microsoft.Azure.Documents.SystemFunctions.TypeCheckFunctionsExtensions.IsDefined(j.StateName))
+                        .Where(j => j.DocumentType == DocumentTypes.Job && j.StateName.IsDefined())
                         .Select(j => j.StateName)
                         .ToQueryResult()
                         .GroupBy(j => j)
@@ -305,13 +290,7 @@ namespace Hangfire.Azure
         private JobList<T> GetJobsOnState<T>(string stateName, int from, int count, Func<State, Common.Job, T> selector)
         {
             List<KeyValuePair<string, T>> jobs = new List<KeyValuePair<string, T>>();
-
-            FeedOptions feedOptions = new FeedOptions
-            {
-                MaxItemCount = 10,
-                MaxBufferedItemCount = 100,
-                MaxDegreeOfParallelism = -1
-            };
+            FeedOptions feedOptions = new FeedOptions { MaxItemCount = from + count };
 
             List<Documents.Job> filterJobs = storage.Client.CreateDocumentQuery<Documents.Job>(storage.CollectionUri, feedOptions)
                  .Where(j => j.DocumentType == DocumentTypes.Job && j.StateName == stateName)
@@ -355,17 +334,12 @@ namespace Hangfire.Azure
                 }
             };
 
-            FeedOptions feedOptions = new FeedOptions
-            {
-                MaxItemCount = 10,
-                MaxBufferedItemCount = 100,
-                MaxDegreeOfParallelism = -1
-            };
+            FeedOptions feedOptions = new FeedOptions { MaxItemCount = from + count };
 
             List<Documents.Queue> queues = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, sql, feedOptions)
-                .ToQueryResult()
-                .Skip(from).Take(count)
-                .ToList();
+                 .ToQueryResult()
+                 .Skip(from).Take(count)
+                 .ToList();
 
             queues.ForEach(queueItem =>
             {
@@ -480,17 +454,9 @@ namespace Hangfire.Azure
         private Dictionary<DateTime, long> GetTimelineStats(Dictionary<string, DateTime> keys)
         {
             Dictionary<DateTime, long> result = keys.ToDictionary(k => k.Value, v => default(long));
-
-            FeedOptions feedOptions = new FeedOptions
-            {
-                MaxItemCount = 10,
-                MaxBufferedItemCount = 100,
-                MaxDegreeOfParallelism = -1
-            };
-
             string[] filter = keys.Keys.ToArray();
 
-            Dictionary<string, int> data = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri, feedOptions)
+            Dictionary<string, int> data = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri)
                 .Where(c => c.Type == CounterTypes.Aggregate && c.DocumentType == DocumentTypes.Counter)
                 .Where(c => filter.Contains(c.Key))
                 .Select(c => new { c.Key, c.Value })

@@ -38,14 +38,7 @@ namespace Hangfire.Azure
             {
                 logger.Trace("Aggregating records in 'Counter' table.");
 
-                FeedOptions queryOptions = new FeedOptions
-                {
-                    MaxItemCount = 50,
-                    MaxBufferedItemCount = 50,
-                    MaxDegreeOfParallelism = -1
-                };
-
-                List<Counter> rawCounters = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri, queryOptions)
+                List<Counter> rawCounters = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri)
                     .Where(c => c.DocumentType == DocumentTypes.Counter && c.Type == CounterTypes.Raw)
                     .ToQueryResult();
 

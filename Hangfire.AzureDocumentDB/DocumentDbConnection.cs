@@ -23,8 +23,6 @@ namespace Hangfire.Azure
         public DocumentDbStorage Storage { get; }
         public PersistentJobQueueProviderCollection QueueProviders { get; }
 
-        private readonly FeedOptions queryOptions = new FeedOptions { MaxItemCount = 10, MaxBufferedItemCount = 100, MaxDegreeOfParallelism = -1 };
-
         public DocumentDbConnection(DocumentDbStorage storage)
         {
             Storage = storage;
@@ -216,7 +214,7 @@ namespace Hangfire.Azure
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            return Storage.Client.CreateDocumentQuery<Set>(Storage.CollectionUri, queryOptions)
+            return Storage.Client.CreateDocumentQuery<Set>(Storage.CollectionUri)
                 .Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
                 .OrderBy(s => s.Score)
                 .ToQueryResult()
@@ -269,7 +267,7 @@ namespace Hangfire.Azure
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            IEnumerable<string> sets = Storage.Client.CreateDocumentQuery<Set>(Storage.CollectionUri, queryOptions)
+            IEnumerable<string> sets = Storage.Client.CreateDocumentQuery<Set>(Storage.CollectionUri)
                 .Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
                 .Select(s => s.Value)
                 .ToQueryResult();
@@ -378,7 +376,7 @@ namespace Hangfire.Azure
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            return Storage.Client.CreateDocumentQuery<Hash>(Storage.CollectionUri, queryOptions)
+            return Storage.Client.CreateDocumentQuery<Hash>(Storage.CollectionUri)
                 .Where(h => h.DocumentType == DocumentTypes.Hash && h.Key == key)
                 .Select(h => new { h.Field, h.Value })
                 .ToQueryResult()
@@ -392,7 +390,7 @@ namespace Hangfire.Azure
 
             Data<Hash> data = new Data<Hash>();
 
-            List<Hash> hashes = Storage.Client.CreateDocumentQuery<Hash>(Storage.CollectionUri, queryOptions)
+            List<Hash> hashes = Storage.Client.CreateDocumentQuery<Hash>(Storage.CollectionUri)
                 .Where(h => h.DocumentType == DocumentTypes.Hash && h.Key == key)
                 .ToQueryResult();
 
@@ -503,7 +501,7 @@ namespace Hangfire.Azure
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            return Storage.Client.CreateDocumentQuery<List>(Storage.CollectionUri, queryOptions)
+            return Storage.Client.CreateDocumentQuery<List>(Storage.CollectionUri)
                 .Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
                 .OrderByDescending(l => l.CreatedOn)
                 .Select(l => l.Value)
@@ -514,7 +512,7 @@ namespace Hangfire.Azure
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            return Storage.Client.CreateDocumentQuery<List>(Storage.CollectionUri, queryOptions)
+            return Storage.Client.CreateDocumentQuery<List>(Storage.CollectionUri)
                 .Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
                 .OrderByDescending(l => l.CreatedOn)
                 .Select(l => l.Value)
