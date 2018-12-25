@@ -9,8 +9,10 @@ using Hangfire.Storage;
 using Microsoft.Azure.Documents;
 using Hangfire.Storage.Monitoring;
 using Microsoft.Azure.Documents.Client;
+using Microsoft.Azure.Documents.SystemFunctions;
 
 using Hangfire.Azure.Queue;
+using Hangfire.Azure.Helper;
 using Hangfire.Azure.Documents;
 
 namespace Hangfire.Azure
@@ -18,7 +20,10 @@ namespace Hangfire.Azure
     internal sealed class DocumentDbMonitoringApi : IMonitoringApi
     {
         private readonly DocumentDbStorage storage;
-        private readonly FeedOptions queryOptions = new FeedOptions { MaxItemCount = -1 };
+        private readonly object cacheLock = new object();
+        private static readonly TimeSpan cacheTimeout = TimeSpan.FromSeconds(2);
+        private static DateTime cacheUpdated;
+        private static StatisticsDto cacheStatisticsDto;
 
         public DocumentDbMonitoringApi(DocumentDbStorage storage) => this.storage = storage;
 
@@ -51,10 +56,10 @@ namespace Hangfire.Azure
 
         public IList<ServerDto> Servers()
         {
-            return storage.Client.CreateDocumentQuery<Documents.Server>(storage.CollectionUri, queryOptions)
+            return storage.Client.CreateDocumentQuery<Documents.Server>(storage.CollectionUri)
                 .Where(s => s.DocumentType == DocumentTypes.Server)
                 .OrderByDescending(s => s.CreatedOn)
-                .AsEnumerable()
+                .ToQueryResult()
                 .Select(server => new ServerDto
                 {
                     Name = server.ServerId,
@@ -70,18 +75,19 @@ namespace Hangfire.Azure
             if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
 
             Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, jobId);
-            Task<DocumentResponse<Documents.Job>> task = storage.Client.ReadDocumentAsync<Documents.Job>(uri);
-            Documents.Job job = task.Result;
+            Task<DocumentResponse<Documents.Job>> task = storage.Client.ReadDocumentWithRetriesAsync<Documents.Job>(uri);
+            task.Wait();
 
-            if (job != null)
+            if (task.Result.Document != null)
             {
+                Documents.Job job = task.Result;
                 InvocationData invocationData = job.InvocationData;
                 invocationData.Arguments = job.Arguments;
 
-                List<StateHistoryDto> states = storage.Client.CreateDocumentQuery<State>(storage.CollectionUri, queryOptions)
+                List<StateHistoryDto> states = storage.Client.CreateDocumentQuery<State>(storage.CollectionUri)
                     .Where(s => s.DocumentType == DocumentTypes.State && s.JobId == jobId)
                     .OrderByDescending(s => s.CreatedOn)
-                    .AsEnumerable()
+                    .ToQueryResult()
                     .Select(s => new StateHistoryDto
                     {
                         Data = s.Data,
@@ -105,87 +111,100 @@ namespace Hangfire.Azure
 
         public StatisticsDto GetStatistics()
         {
-            Dictionary<string, long> results = new Dictionary<string, long>();
-
-            // get counts of jobs groupby on state
-            Dictionary<string, long> states = storage.Client.CreateDocumentQuery<Documents.Job>(storage.CollectionUri, queryOptions)
-                .Where(j => j.DocumentType == DocumentTypes.Job)
-                .Select(j => j.StateName)
-                .AsEnumerable()
-                .Where(j => !string.IsNullOrEmpty(j))
-                .GroupBy(j => j)
-                .ToDictionary(g => g.Key, g => g.LongCount());
-
-            results = results.Concat(states).ToDictionary(k => k.Key, v => v.Value);
-
-            // get counts of servers
-            SqlQuerySpec sql = new SqlQuerySpec
+            lock (cacheLock)
             {
-                QueryText = "SELECT VALUE COUNT(1) FROM doc WHERE doc.type = @type",
-                Parameters = new SqlParameterCollection
+                if (cacheStatisticsDto == null || cacheUpdated.Add(cacheTimeout) < DateTime.UtcNow)
                 {
-                    new SqlParameter("@type", DocumentTypes.Server),
+                    Dictionary<string, long> results = new Dictionary<string, long>();
+
+                    FeedOptions feedOptions = new FeedOptions
+                    {
+                        MaxItemCount = 1000,
+                    };
+
+                    // get counts of jobs group-by on state
+                    Dictionary<string, long> states = storage.Client.CreateDocumentQuery<Documents.Job>(storage.CollectionUri, feedOptions)
+                        .Where(j => j.DocumentType == DocumentTypes.Job && j.StateName.IsDefined())
+                        .Select(j => j.StateName)
+                        .ToQueryResult()
+                        .GroupBy(j => j)
+                        .ToDictionary(g => g.Key, g => g.LongCount());
+
+                    results = results.Concat(states).ToDictionary(k => k.Key, v => v.Value);
+
+                    // get counts of servers
+                    SqlQuerySpec sql = new SqlQuerySpec
+                    {
+                        QueryText = "SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type",
+                        Parameters = new SqlParameterCollection
+                        {
+                            new SqlParameter("@type", DocumentTypes.Server)
+                        }
+                    };
+
+                    long servers = storage.Client.CreateDocumentQuery<long>(storage.CollectionUri, sql)
+                        .ToQueryResult()
+                        .FirstOrDefault();
+
+                    results.Add("Servers", servers);
+
+                    // get sum of stats:succeeded counters  raw / aggregate
+                    Dictionary<string, long> counters = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri, feedOptions)
+                        .Where(c => c.DocumentType == DocumentTypes.Counter && (c.Key == "stats:succeeded" || c.Key == "stats:deleted"))
+                        .Select(c => new { c.Key, c.Value })
+                        .ToQueryResult()
+                        .GroupBy(c => c.Key)
+                        .ToDictionary(g => g.Key, g => (long)g.Sum(c => c.Value));
+
+                    results = results.Concat(counters).ToDictionary(k => k.Key, v => v.Value);
+
+                    sql = new SqlQuerySpec
+                    {
+                        QueryText = "SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.key = @key",
+                        Parameters = new SqlParameterCollection
+                        {
+                            new SqlParameter("@key", "recurring-jobs"),
+                            new SqlParameter("@type", DocumentTypes.Set)
+                        }
+                    };
+
+                    long count = storage.Client.CreateDocumentQuery<long>(storage.CollectionUri, sql)
+                        .ToQueryResult()
+                        .FirstOrDefault();
+
+                    results.Add("recurring-jobs", count);
+
+                    long GetValueOrDefault(string key) => results.Where(r => r.Key == key).Select(r => r.Value).SingleOrDefault();
+
+                    // ReSharper disable once UseObjectOrCollectionInitializer
+                    cacheStatisticsDto = new StatisticsDto
+                    {
+                        Enqueued = GetValueOrDefault("Enqueued"),
+                        Failed = GetValueOrDefault("Failed"),
+                        Processing = GetValueOrDefault("Processing"),
+                        Scheduled = GetValueOrDefault("Scheduled"),
+                        Succeeded = GetValueOrDefault("stats:succeeded"),
+                        Deleted = GetValueOrDefault("stats:deleted"),
+                        Recurring = GetValueOrDefault("recurring-jobs"),
+                        Servers = GetValueOrDefault("Servers")
+                    };
+
+                    cacheStatisticsDto.Queues = storage.QueueProviders
+                        .SelectMany(x => x.GetJobQueueMonitoringApi().GetQueues())
+                        .Count();
+
+                    cacheUpdated = DateTime.UtcNow;
                 }
-            };
 
-            long servers = storage.Client.CreateDocumentQuery<long>(storage.CollectionUri, sql)
-                .AsEnumerable()
-                .FirstOrDefault();
-
-            results.Add("Servers", servers);
-
-            // get sum of stats:succeeded counters  raw / aggregate
-            Dictionary<string, long> counters = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri, queryOptions)
-                .Where(c => c.DocumentType == DocumentTypes.Counter && (c.Key == "stats:succeeded" || c.Key == "stats:deleted"))
-                .AsEnumerable()
-                .GroupBy(c => c.Key)
-                .ToDictionary(g => g.Key, g => (long)g.Sum(c => c.Value));
-
-            results = results.Concat(counters).ToDictionary(k => k.Key, v => v.Value);
-
-            sql = new SqlQuerySpec
-            {
-                QueryText = "SELECT VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.key = @key",
-                Parameters = new SqlParameterCollection
-                {
-                    new SqlParameter("@key", "recurring-jobs"),
-                    new SqlParameter("@type", DocumentTypes.Set),
-                }
-            };
-
-            long count = storage.Client.CreateDocumentQuery<long>(storage.CollectionUri, sql)
-                .AsEnumerable()
-                .FirstOrDefault();
-
-            results.Add("recurring-jobs", count);
-
-            long GetValueOrDefault(string key) => results.Where(r => r.Key == key).Select(r => r.Value).SingleOrDefault();
-
-            // ReSharper disable once UseObjectOrCollectionInitializer
-            StatisticsDto statistics = new StatisticsDto
-            {
-                Enqueued = GetValueOrDefault("Enqueued"),
-                Failed = GetValueOrDefault("Failed"),
-                Processing = GetValueOrDefault("Processing"),
-                Scheduled = GetValueOrDefault("Scheduled"),
-                Succeeded = GetValueOrDefault("stats:succeeded"),
-                Deleted = GetValueOrDefault("stats:deleted"),
-                Recurring = GetValueOrDefault("recurring-jobs"),
-                Servers = GetValueOrDefault("Servers"),
-            };
-
-            statistics.Queues = storage.QueueProviders
-                .SelectMany(x => x.GetJobQueueMonitoringApi().GetQueues())
-                .Count();
-
-            return statistics;
+                return cacheStatisticsDto;
+            }
         }
 
         #region Job List
 
         public JobList<EnqueuedJobDto> EnqueuedJobs(string queue, int from, int perPage)
         {
-            string queryText = "SELECT * FROM doc WHERE doc.type = @type AND doc.name = @name AND NOT is_defined(doc.fetched_at) ORDER BY doc.created_on";
+            string queryText = "SELECT * FROM doc WHERE doc.type = @type AND doc.name = @name AND NOT IS_DEFINED(doc.fetched_at) ORDER BY doc.created_on";
             return GetJobsOnQueue(queryText, queue, from, perPage, (state, job, fetchedAt) => new EnqueuedJobDto
             {
                 Job = job,
@@ -199,7 +218,7 @@ namespace Hangfire.Azure
 
         public JobList<FetchedJobDto> FetchedJobs(string queue, int from, int perPage)
         {
-            string queryText = "SELECT * FROM doc WHERE doc.type = @type AND doc.name = @name AND is_defined(doc.fetched_at) ORDER BY doc.created_on";
+            string queryText = "SELECT * FROM doc WHERE doc.type = @type AND doc.name = @name AND IS_DEFINED(doc.fetched_at) ORDER BY doc.created_on";
             return GetJobsOnQueue(queryText, queue, from, perPage, (state, job, fetchedAt) => new FetchedJobDto
             {
                 Job = job,
@@ -254,7 +273,7 @@ namespace Hangfire.Azure
                 FailedAt = JobHelper.DeserializeNullableDateTime(state.Data["FailedAt"]),
                 ExceptionDetails = state.Data["ExceptionDetails"],
                 ExceptionMessage = state.Data["ExceptionMessage"],
-                ExceptionType = state.Data["ExceptionType"],
+                ExceptionType = state.Data["ExceptionType"]
             });
         }
 
@@ -270,24 +289,25 @@ namespace Hangfire.Azure
 
         private JobList<T> GetJobsOnState<T>(string stateName, int from, int count, Func<State, Common.Job, T> selector)
         {
-            // TODO: move to stored procedure
             List<KeyValuePair<string, T>> jobs = new List<KeyValuePair<string, T>>();
+            FeedOptions feedOptions = new FeedOptions { MaxItemCount = from + count };
 
-            List<Documents.Job> filterJobs = storage.Client.CreateDocumentQuery<Documents.Job>(storage.CollectionUri, queryOptions)
-                .Where(j => j.DocumentType == DocumentTypes.Job && j.StateName == stateName)
-                .OrderByDescending(j => j.CreatedOn)
-                .AsEnumerable()
-                .Skip(from).Take(count)
-                .ToList();
+            List<Documents.Job> filterJobs = storage.Client.CreateDocumentQuery<Documents.Job>(storage.CollectionUri, feedOptions)
+                 .Where(j => j.DocumentType == DocumentTypes.Job && j.StateName == stateName)
+                 .OrderByDescending(j => j.CreatedOn)
+                 .ToQueryResult()
+                 .Skip(from).Take(count)
+                 .ToList();
 
             filterJobs.ForEach(job =>
             {
                 Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, job.StateId);
-                Task<DocumentResponse<State>> task = storage.Client.ReadDocumentAsync<State>(uri);
+                Task<DocumentResponse<State>> task = storage.Client.ReadDocumentWithRetriesAsync<State>(uri);
+                task.Wait();
 
-                State state = task.Result;
-                if (state != null)
+                if (task.Result.Document != null)
                 {
+                    State state = task.Result;
                     InvocationData invocationData = job.InvocationData;
                     invocationData.Arguments = job.Arguments;
 
@@ -314,26 +334,28 @@ namespace Hangfire.Azure
                 }
             };
 
-            List<Documents.Queue> queues = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, sql)
-                .AsEnumerable()
-                .OrderBy(q => q.CreatedOn)
-                .Skip(from).Take(count)
-                .ToList();
+            FeedOptions feedOptions = new FeedOptions { MaxItemCount = from + count };
+
+            List<Documents.Queue> queues = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, sql, feedOptions)
+                 .ToQueryResult()
+                 .Skip(from).Take(count)
+                 .ToList();
 
             queues.ForEach(queueItem =>
             {
                 Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, queueItem.JobId);
-                Task<DocumentResponse<Documents.Job>> task = storage.Client.ReadDocumentAsync<Documents.Job>(uri);
+                Task<DocumentResponse<Documents.Job>> task = storage.Client.ReadDocumentWithRetriesAsync<Documents.Job>(uri);
+                task.Wait();
 
-                Documents.Job job = task.Result;
-                if (job != null)
+                if (task.Result != null)
                 {
+                    Documents.Job job = task.Result;
                     InvocationData invocationData = job.InvocationData;
                     invocationData.Arguments = job.Arguments;
 
                     uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, job.StateId);
-                    Task<DocumentResponse<State>> stateTask = storage.Client.ReadDocumentAsync<State>(uri);
-                   
+                    Task<DocumentResponse<State>> stateTask = storage.Client.ReadDocumentWithRetriesAsync<State>(uri);
+
                     T data = selector(stateTask.Result, invocationData.Deserialize(), queueItem.FetchedAt);
                     jobs.Add(new KeyValuePair<string, T>(job.Id, data));
                 }
@@ -380,16 +402,16 @@ namespace Hangfire.Azure
         {
             SqlQuerySpec sql = new SqlQuerySpec
             {
-                QueryText = "SELECT VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.state_name = @state",
+                QueryText = "SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.state_name = @state",
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@state", state),
-                    new SqlParameter("@type", DocumentTypes.Job),
+                    new SqlParameter("@type", DocumentTypes.Job)
                 }
             };
 
             return storage.Client.CreateDocumentQuery<long>(storage.CollectionUri, sql)
-                  .AsEnumerable()
+                  .ToQueryResult()
                   .FirstOrDefault();
         }
 
@@ -432,17 +454,20 @@ namespace Hangfire.Azure
         private Dictionary<DateTime, long> GetTimelineStats(Dictionary<string, DateTime> keys)
         {
             Dictionary<DateTime, long> result = keys.ToDictionary(k => k.Value, v => default(long));
+            string[] filter = keys.Keys.ToArray();
 
-            Dictionary<string, int> data = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri, queryOptions)
-                .Where(c => c.Type == CounterTypes.Aggregrate && c.DocumentType == DocumentTypes.Counter)
-                .AsEnumerable()
-                .Where(c => keys.ContainsKey(c.Key))
-                .ToDictionary(k => k.Key, k => k.Value);
+            Dictionary<string, int> data = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri)
+                .Where(c => c.Type == CounterTypes.Aggregate && c.DocumentType == DocumentTypes.Counter)
+                .Where(c => filter.Contains(c.Key))
+                .Select(c => new { c.Key, c.Value })
+                .ToQueryResult()
+                .GroupBy(c => c.Key)
+                .ToDictionary(k => k.Key, k => k.Sum(c => c.Value));
 
             foreach (string key in keys.Keys)
             {
                 DateTime date = keys.Where(k => k.Key == key).Select(k => k.Value).First();
-                result[date] = data.ContainsKey(key) ? data[key] : 0;
+                result[date] = data.TryGetValue(key, out int value) ? value : 0;
             }
 
             return result;

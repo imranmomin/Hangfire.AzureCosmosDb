@@ -8,6 +8,9 @@ namespace Hangfire.Azure.Documents
         [JsonProperty("name")]
         public string Name { get; set; }
 
+        [JsonProperty(PropertyName = "ttl", NullValueHandling = NullValueHandling.Ignore)]
+        public int? TimeToLive { get; set; }
+
         public override DocumentTypes DocumentType => DocumentTypes.Lock;
     }
 }

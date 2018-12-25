@@ -9,24 +9,37 @@ using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 
 using Hangfire.Azure.Queue;
+using Hangfire.Azure.Helper;
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
 
 namespace Hangfire.Azure
 {
-    internal class DocumentDbWriteOnlyTransaction : IWriteOnlyTransaction
+    internal class DocumentDbWriteOnlyTransaction : JobStorageTransaction
     {
         private readonly DocumentDbConnection connection;
         private readonly List<Action> commands = new List<Action>();
+        private readonly Uri spPersistDocumentsUri;
+        private readonly Uri spExpireDocumentsUri;
+        private readonly Uri spDeleteDocumentsUri;
+        private readonly Uri spUpsertDocumentsUri;
 
-        public DocumentDbWriteOnlyTransaction(DocumentDbConnection connection) => this.connection = connection;
+        public DocumentDbWriteOnlyTransaction(DocumentDbConnection connection)
+        {
+            this.connection = connection;
+            spPersistDocumentsUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "persistDocuments");
+            spExpireDocumentsUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "expireDocuments");
+            spDeleteDocumentsUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "deleteDocuments");
+            spUpsertDocumentsUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "upsertDocuments");
+        }
+
         private void QueueCommand(Action command) => commands.Add(command);
-        public void Commit() => commands.ForEach(command => command());
-        public void Dispose() { }
+        public override void Commit() => commands.ForEach(command => command());
+        public override void Dispose() { }
 
         #region Queue
 
-        public void AddToQueue(string queue, string jobId)
+        public override void AddToQueue(string queue, string jobId)
         {
             if (string.IsNullOrEmpty(queue)) throw new ArgumentNullException(nameof(queue));
             if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
@@ -40,7 +53,7 @@ namespace Hangfire.Azure
 
         #region Counter
 
-        public void DecrementCounter(string key)
+        public override void DecrementCounter(string key)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
 
@@ -53,12 +66,12 @@ namespace Hangfire.Azure
                     Value = -1
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
 
-        public void DecrementCounter(string key, TimeSpan expireIn)
+        public override void DecrementCounter(string key, TimeSpan expireIn)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
             if (expireIn.Duration() != expireIn) throw new ArgumentException(@"The `expireIn` value must be positive.", nameof(expireIn));
@@ -73,12 +86,12 @@ namespace Hangfire.Azure
                     ExpireOn = DateTime.UtcNow.Add(expireIn)
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
 
-        public void IncrementCounter(string key)
+        public override void IncrementCounter(string key)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
 
@@ -91,12 +104,12 @@ namespace Hangfire.Azure
                     Value = 1
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
 
-        public void IncrementCounter(string key, TimeSpan expireIn)
+        public override void IncrementCounter(string key, TimeSpan expireIn)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
             if (expireIn.Duration() != expireIn) throw new ArgumentException(@"The `expireIn` value must be positive.", nameof(expireIn));
@@ -111,7 +124,7 @@ namespace Hangfire.Azure
                     ExpireOn = DateTime.UtcNow.Add(expireIn)
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
@@ -120,29 +133,47 @@ namespace Hangfire.Azure
 
         #region Job
 
-        public void ExpireJob(string jobId, TimeSpan expireIn)
+        public override void ExpireJob(string jobId, TimeSpan expireIn)
         {
             if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
             if (expireIn.Duration() != expireIn) throw new ArgumentException(@"The `expireIn` value must be positive.", nameof(expireIn));
 
             QueueCommand(() =>
             {
-                int epochTime = DateTime.UtcNow.Add(expireIn).ToEpoch();
-                Uri spExpireJobUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "expireJob");
-                Task<StoredProcedureResponse<bool>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<bool>(spExpireJobUri, jobId, epochTime);
-                task.Wait();
+                int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
+                string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Job} AND doc.id = '{jobId}'";
+                ProcedureResponse response;
+
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
+                    task.Wait();
+
+                    response = task.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
             });
         }
 
-        public void PersistJob(string jobId)
+        public override void PersistJob(string jobId)
         {
             if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
 
             QueueCommand(() =>
             {
-                Uri spPersistJobUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "persistJob");
-                Task<StoredProcedureResponse<bool>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<bool>(spPersistJobUri, jobId);
-                task.Wait();
+                string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Job} AND doc.id = '{jobId}'";
+                ProcedureResponse response;
+
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spPersistDocumentsUri, query);
+                    task.Wait();
+
+                    response = task.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
             });
         }
 
@@ -150,7 +181,7 @@ namespace Hangfire.Azure
 
         #region State
 
-        public void SetJobState(string jobId, IState state)
+        public override void SetJobState(string jobId, IState state)
         {
             if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -167,12 +198,12 @@ namespace Hangfire.Azure
                 };
 
                 Uri spSetJobStateUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "setJobState");
-                Task<StoredProcedureResponse<bool>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<bool>(spSetJobStateUri, jobId, data);
+                Task<StoredProcedureResponse<bool>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<bool>(spSetJobStateUri, jobId, data);
                 task.Wait();
             });
         }
 
-        public void AddJobState(string jobId, IState state)
+        public override void AddJobState(string jobId, IState state)
         {
             if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -188,7 +219,7 @@ namespace Hangfire.Azure
                     Data = state.SerializeData()
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
@@ -197,39 +228,183 @@ namespace Hangfire.Azure
 
         #region Set
 
-        public void RemoveFromSet(string key, string value)
+        public override void RemoveFromSet(string key, string value)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
             if (string.IsNullOrEmpty(value)) throw new ArgumentNullException(nameof(value));
 
             QueueCommand(() =>
             {
-                Uri spRemoveFromSetUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "removeFromSet");
-                Task<StoredProcedureResponse<bool>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<bool>(spRemoveFromSetUri, key, value);
-                task.Wait();
+                string[] sets = connection.Storage.Client.CreateDocumentQuery<List>(connection.Storage.CollectionUri)
+                    .Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
+                    .Select(s => new { s.Id, s.Value })
+                    .ToQueryResult()
+                    .Where(s => s.Value == value)
+                    .Select(s => s.Id)
+                    .ToArray();
+
+                if (sets.Length == 0) return;
+
+                string ids = string.Join(",", sets.Select(s => $"'{s}'"));
+                string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Set} AND doc.id IN ({ids})";
+                ProcedureResponse response;
+
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
+                    task.Wait();
+
+                    response = task.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
+
             });
         }
 
-        public void AddToSet(string key, string value) => AddToSet(key, value, 0.0);
+        public override void AddToSet(string key, string value) => AddToSet(key, value, 0.0);
 
-        public void AddToSet(string key, string value, double score)
+        public override void AddToSet(string key, string value, double score)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
             if (string.IsNullOrEmpty(value)) throw new ArgumentNullException(nameof(value));
 
             QueueCommand(() =>
             {
-                Set set = new Set
+                List<Set> sets = connection.Storage.Client.CreateDocumentQuery<Set>(connection.Storage.CollectionUri)
+                    .Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
+                    .ToQueryResult()
+                    .Where(s => s.Value == value) // value may contain json string.. which interfere with query 
+                    .ToList();
+
+                if (sets.Count == 0)
+                {
+                    sets.Add(new Set
+                    {
+                        Key = key,
+                        Value = value,
+                        Score = score,
+                        CreatedOn = DateTime.UtcNow
+                    });
+                }
+                else
+                {
+                    // set the sets score
+                    sets.ForEach(s => s.Score = score);
+                }
+
+                int affected = 0;
+                Data<Set> data = new Data<Set>(sets);
+
+                do
+                {
+                    // process only remaining items
+                    data.Items = data.Items.Skip(affected).ToList();
+
+                    Task<StoredProcedureResponse<int>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<int>(spUpsertDocumentsUri, data);
+                    task.Wait();
+
+                    // know how much was processed
+                    affected += task.Result;
+
+                } while (affected < data.Items.Count);
+            });
+        }
+
+        public override void PersistSet(string key)
+        {
+            if (key == null) throw new ArgumentNullException(nameof(key));
+
+            QueueCommand(() =>
+            {
+                string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Set} AND doc.key = '{key}'";
+                ProcedureResponse response;
+
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spPersistDocumentsUri, query);
+                    task.Wait();
+
+                    response = task.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
+            });
+        }
+
+        public override void ExpireSet(string key, TimeSpan expireIn)
+        {
+            if (key == null) throw new ArgumentNullException(nameof(key));
+
+            QueueCommand(() =>
+            {
+                string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Set} AND doc.key = '{key}'";
+                int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
+                ProcedureResponse response;
+
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
+                    task.Wait();
+
+                    response = task.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
+            });
+        }
+
+        public override void AddRangeToSet(string key, IList<string> items)
+        {
+            if (key == null) throw new ArgumentNullException(nameof(key));
+            if (items == null) throw new ArgumentNullException(nameof(items));
+
+            QueueCommand(() =>
+            {
+                List<Set> sets = items.Select(value => new Set
                 {
                     Key = key,
                     Value = value,
-                    Score = score,
+                    Score = 0.00,
                     CreatedOn = DateTime.UtcNow
-                };
+                }).ToList();
 
-                Uri spAddToSetUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "addToSet");
-                Task<StoredProcedureResponse<bool>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<bool>(spAddToSetUri, set);
-                task.Wait();
+                int affected = 0;
+                Data<Set> data = new Data<Set>(sets);
+
+                do
+                {
+                    // process only remaining items
+                    data.Items = data.Items.Skip(affected).ToList();
+
+                    Task<StoredProcedureResponse<int>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<int>(spUpsertDocumentsUri, data);
+                    task.Wait();
+
+                    // know how much was processed
+                    affected += task.Result;
+
+                } while (affected < data.Items.Count);
+            });
+        }
+
+        public override void RemoveSet(string key)
+        {
+            if (key == null) throw new ArgumentNullException(nameof(key));
+
+            QueueCommand(() =>
+            {
+                string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Set} AND doc.key == '{key}'";
+                ProcedureResponse response;
+
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
+                    task.Wait();
+
+                    response = task.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
             });
         }
 
@@ -237,25 +412,40 @@ namespace Hangfire.Azure
 
         #region  Hash
 
-        public void RemoveHash(string key)
+        public override void RemoveHash(string key)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
 
             QueueCommand(() =>
             {
-                Uri spRemoveHashUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "removeHash");
-                Task<StoredProcedureResponse<bool>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<bool>(spRemoveHashUri, key);
-                task.Wait();
+                string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Hash} AND doc.key == '{key}'";
+                ProcedureResponse response;
+
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
+                    task.Wait();
+
+                    response = task.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
             });
         }
 
-        public void SetRangeInHash(string key, IEnumerable<KeyValuePair<string, string>> keyValuePairs)
+        public override void SetRangeInHash(string key, IEnumerable<KeyValuePair<string, string>> keyValuePairs)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
             if (keyValuePairs == null) throw new ArgumentNullException(nameof(keyValuePairs));
 
             QueueCommand(() =>
             {
+                Data<Hash> data = new Data<Hash>();
+
+                List<Hash> hashes = connection.Storage.Client.CreateDocumentQuery<Hash>(connection.Storage.CollectionUri)
+                    .Where(h => h.DocumentType == DocumentTypes.Hash && h.Key == key)
+                    .ToQueryResult();
+
                 Hash[] sources = keyValuePairs.Select(k => new Hash
                 {
                     Key = key,
@@ -263,9 +453,77 @@ namespace Hangfire.Azure
                     Value = k.Value.TryParseToEpoch()
                 }).ToArray();
 
-                Uri spSetRangeHashUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "setRangeHash");
-                Task<StoredProcedureResponse<int>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<int>(spSetRangeHashUri, key, sources);
-                task.Wait();
+                foreach (Hash source in sources)
+                {
+                    Hash hash = hashes.SingleOrDefault(h => h.Field == source.Field);
+                    if (hash == null)
+                    {
+                        data.Items.Add(source);
+                    }
+                    else if (!string.Equals(hash.Value, source.Value, StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        hash.Value = source.Value;
+                        data.Items.Add(hash);
+                    }
+                }
+
+                int affected = 0;
+
+                do
+                {
+                    // process only remaining items
+                    data.Items = data.Items.Skip(affected).ToList();
+
+                    Task<StoredProcedureResponse<int>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<int>(spUpsertDocumentsUri, data);
+                    task.Wait();
+
+                    // know how much was processed
+                    affected += task.Result;
+
+                } while (affected < data.Items.Count);
+            });
+        }
+
+        public override void ExpireHash(string key, TimeSpan expireIn)
+        {
+            if (string.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
+
+            QueueCommand(() =>
+            {
+                string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Hash} AND doc.key = '{key}'";
+                int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
+                ProcedureResponse response;
+
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
+                    task.Wait();
+
+                    response = task.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
+            });
+        }
+
+        public override void PersistHash(string key)
+        {
+            if (string.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
+
+            QueueCommand(() =>
+            {
+                string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Hash} AND doc.key = '{key}'";
+                ProcedureResponse response;
+
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spPersistDocumentsUri, query);
+                    task.Wait();
+
+                    response = task.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
             });
         }
 
@@ -273,7 +531,7 @@ namespace Hangfire.Azure
 
         #region List
 
-        public void InsertToList(string key, string value)
+        public override void InsertToList(string key, string value)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
             if (string.IsNullOrEmpty(value)) throw new ArgumentNullException(nameof(value));
@@ -287,33 +545,120 @@ namespace Hangfire.Azure
                     CreatedOn = DateTime.UtcNow
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentAsync(connection.Storage.CollectionUri, data);
+                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
                 task.Wait();
             });
         }
 
-        public void RemoveFromList(string key, string value)
+        public override void RemoveFromList(string key, string value)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
             if (string.IsNullOrEmpty(value)) throw new ArgumentNullException(nameof(value));
 
             QueueCommand(() =>
             {
-                Uri spRemoveFromListUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "removeFromList");
-                Task<StoredProcedureResponse<bool>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<bool>(spRemoveFromListUri, key, value);
-                task.Wait();
+                string[] lists = connection.Storage.Client.CreateDocumentQuery<List>(connection.Storage.CollectionUri)
+                    .Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
+                    .Select(l => new { l.Id, l.Value })
+                    .ToQueryResult()
+                    .Where(l => l.Value == value)
+                    .Select(l => l.Id)
+                    .ToArray();
+
+                if (lists.Length == 0) return;
+
+                string ids = string.Join(",", lists.Select(l => $"'{l}'"));
+                string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.List} AND doc.id IN ({ids})";
+                ProcedureResponse response;
+
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
+                    task.Wait();
+
+                    response = task.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
+
             });
         }
 
-        public void TrimList(string key, int keepStartingFrom, int keepEndingAt)
+        public override void TrimList(string key, int keepStartingFrom, int keepEndingAt)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
 
             QueueCommand(() =>
             {
-                Uri spTrimListUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "trimList");
-                Task<StoredProcedureResponse<bool>> task = connection.Storage.Client.ExecuteStoredProcedureAsync<bool>(spTrimListUri, key, keepStartingFrom, keepEndingAt);
-                task.Wait();
+                string[] lists = connection.Storage.Client.CreateDocumentQuery<List>(connection.Storage.CollectionUri)
+                     .Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
+                     .OrderByDescending(l => l.CreatedOn)
+                     .Select(l => l.Id)
+                     .ToQueryResult()
+                     .Select((l, index) => new { Id = l, index })
+                     .Where(l => l.index < keepStartingFrom || l.index > keepEndingAt)
+                     .Select(l => l.Id)
+                     .ToArray();
+
+                if (lists.Length == 0) return;
+
+                string ids = string.Join(",", lists.Select(l => $"'{l}'"));
+                string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.List} AND doc.id IN ({ids})";
+                ProcedureResponse response;
+
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
+                    task.Wait();
+
+                    response = task.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
+
+            });
+        }
+
+        public override void ExpireList(string key, TimeSpan expireIn)
+        {
+            if (key == null) throw new ArgumentNullException(nameof(key));
+
+            QueueCommand(() =>
+            {
+                string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.List} AND doc.key = '{key}'";
+                int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
+                ProcedureResponse response;
+
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
+                    task.Wait();
+
+                    response = task.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
+            });
+        }
+
+        public override void PersistList(string key)
+        {
+            if (key == null) throw new ArgumentNullException(nameof(key));
+
+            QueueCommand(() =>
+            {
+                string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.List} AND doc.key = '{key}'";
+                ProcedureResponse response;
+
+                do
+                {
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spPersistDocumentsUri, query);
+                    task.Wait();
+
+                    response = task.Result;
+
+                    // if the continuation is true; run the procedure again
+                } while (response.Continuation);
             });
         }
 

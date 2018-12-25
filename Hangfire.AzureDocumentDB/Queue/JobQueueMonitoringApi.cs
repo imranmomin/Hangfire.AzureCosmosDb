@@ -4,6 +4,10 @@ using System.Collections.Generic;
 
 using Hangfire.Azure.Documents;
 using Microsoft.Azure.Documents;
+using Microsoft.Azure.Documents.Client;
+using Microsoft.Azure.Documents.SystemFunctions;
+
+using Hangfire.Azure.Helper;
 
 namespace Hangfire.Azure.Queue
 {
@@ -23,12 +27,16 @@ namespace Hangfire.Azure.Queue
             {
                 if (queuesCache.Count == 0 || cacheUpdated.Add(queuesCacheTimeout) < DateTime.UtcNow)
                 {
-                    IEnumerable<string> result = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri)
-                        .Where(q => q.DocumentType == DocumentTypes.Queue)
-                        .Select(q => q.Name)
-                        .AsEnumerable()
-                        .Distinct();
+                    SqlQuerySpec sql = new SqlQuerySpec
+                    {
+                        QueryText = "SELECT DISTINCT VALUE doc['name'] FROM doc WHERE doc.type = @type",
+                        Parameters = new SqlParameterCollection
+                        {
+                            new SqlParameter("@type", DocumentTypes.Queue)
+                        }
+                    };
 
+                    IEnumerable<string> result = storage.Client.CreateDocumentQuery<string>(storage.CollectionUri, sql).ToQueryResult();
                     queuesCache.Clear();
                     queuesCache.AddRange(result);
                     cacheUpdated = DateTime.UtcNow;
@@ -42,7 +50,7 @@ namespace Hangfire.Azure.Queue
         {
             SqlQuerySpec sql = new SqlQuerySpec
             {
-                QueryText = "SELECT VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.name = @name",
+                QueryText = "SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.name = @name",
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@name", queue),
@@ -51,61 +59,43 @@ namespace Hangfire.Azure.Queue
             };
 
             return storage.Client.CreateDocumentQuery<int>(storage.CollectionUri, sql)
-                .AsEnumerable()
+                .ToQueryResult()
                 .FirstOrDefault();
         }
 
         public IEnumerable<string> GetEnqueuedJobIds(string queue, int from, int perPage)
         {
-            SqlQuerySpec sql = new SqlQuerySpec
-            {
-                QueryText = "SELECT VALUE doc.job_id FROM doc WHERE doc.type = @type AND doc.name = @name AND NOT is_defined(doc.fetched_at) ORDER BY doc.created_on",
-                Parameters = new SqlParameterCollection
-                {
-                    new SqlParameter("@type", DocumentTypes.Queue),
-                    new SqlParameter("@name", queue)
-                }
-            };
+            FeedOptions feedOptions = new FeedOptions { MaxItemCount = from + perPage };
 
-            return storage.Client.CreateDocumentQuery<string>(storage.CollectionUri, sql)
-                .AsEnumerable()
-                .Skip(from + 1).Take(perPage + 1);
+            return storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, feedOptions)
+                .Where(q => q.DocumentType == DocumentTypes.Queue && q.Name == queue && q.FetchedAt.IsDefined() == false)
+                .OrderBy(q => q.CreatedOn)
+                .Select(q => q.JobId)
+                .ToQueryResult()
+                .Skip(from).Take(perPage);
         }
 
         public IEnumerable<string> GetFetchedJobIds(string queue, int from, int perPage)
         {
-            SqlQuerySpec sql = new SqlQuerySpec
-            {
-                QueryText = "SELECT VALUE doc.job_id FROM doc WHERE doc.type = @type AND doc.name = @name AND is_defined(doc.fetched_at) ORDER BY doc.created_on",
-                Parameters = new SqlParameterCollection
-                {
-                    new SqlParameter("@type", DocumentTypes.Queue),
-                    new SqlParameter("@name", queue)
-                }
-            };
+            FeedOptions feedOptions = new FeedOptions { MaxItemCount = from + perPage };
 
-            return storage.Client.CreateDocumentQuery<string>(storage.CollectionUri, sql)
-                .AsEnumerable()
-                .Skip(from + 1).Take(perPage + 1);
+            return storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, feedOptions)
+                .Where(q => q.DocumentType == DocumentTypes.Queue && q.Name == queue && q.FetchedAt.IsDefined())
+                .OrderBy(q => q.CreatedOn)
+                .Select(q => q.JobId)
+                .ToQueryResult()
+                .Skip(from).Take(perPage);
         }
 
         public (int? EnqueuedCount, int? FetchedCount) GetEnqueuedAndFetchedCount(string queue)
         {
-            SqlQuerySpec sql = new SqlQuerySpec
-            {
-                QueryText = "SELECT * FROM doc WHERE doc.type = @type AND doc.name = @name",
-                Parameters = new SqlParameterCollection
-                {
-                    new SqlParameter("@type", DocumentTypes.Queue),
-                    new SqlParameter("@name", queue)
-                }
-            };
-
-            (int EnqueuedCount, int FetchedCount) result = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, sql)
-                  .AsEnumerable()
-                  .GroupBy(q => q.Name)
-                  .Select(v => (EnqueuedCount: v.Sum(q => q.FetchedAt.HasValue ? 0 : 1), FetchedCount: v.Sum(q => q.FetchedAt.HasValue ? 1 : 0)))
-                  .FirstOrDefault();
+            (int EnqueuedCount, int FetchedCount) result = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri)
+                .Where(q => q.DocumentType == DocumentTypes.Queue && q.Name == queue)
+                .ToQueryResult()
+                .Select(q => new { q.Name, q.FetchedAt })
+                .GroupBy(q => q.Name)
+                .Select(v => (EnqueuedCount: v.Sum(q => q.FetchedAt.HasValue ? 0 : 1), FetchedCount: v.Sum(q => q.FetchedAt.HasValue ? 1 : 0)))
+                .FirstOrDefault();
 
             return result;
         }

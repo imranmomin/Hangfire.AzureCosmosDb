@@ -6,6 +6,7 @@ using Hangfire.Server;
 using Hangfire.Logging;
 using Microsoft.Azure.Documents.Client;
 
+using Hangfire.Azure.Helper;
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
 
@@ -15,35 +16,58 @@ namespace Hangfire.Azure
     internal class ExpirationManager : IServerComponent
 #pragma warning restore 618
     {
-        private static readonly ILog logger = LogProvider.For<ExpirationManager>();
-        private const string DISTRIBUTED_LOCK_KEY = "expirationmanager";
-        private static readonly TimeSpan defaultLockTimeout = TimeSpan.FromMinutes(5);
-        private static readonly DocumentTypes[] documents = { DocumentTypes.Lock, DocumentTypes.Job, DocumentTypes.List, DocumentTypes.Set, DocumentTypes.Hash, DocumentTypes.Counter };
+        private readonly ILog logger = LogProvider.For<ExpirationManager>();
+        private const string DISTRIBUTED_LOCK_KEY = "locks:expiration:manager";
+        private readonly TimeSpan defaultLockTimeout;
+        private readonly DocumentTypes[] documents = { DocumentTypes.Lock, DocumentTypes.Job, DocumentTypes.List, DocumentTypes.Set, DocumentTypes.Hash, DocumentTypes.Counter };
         private readonly DocumentDbStorage storage;
-        private readonly Uri spDeleteExpiredDocumentsUri;
+        private readonly Uri spDeleteDocumentsUri;
 
         public ExpirationManager(DocumentDbStorage storage)
         {
             this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
-            spDeleteExpiredDocumentsUri = UriFactory.CreateStoredProcedureUri(storage.Options.DatabaseName, storage.Options.CollectionName, "deleteExpiredDocuments");
+            defaultLockTimeout = TimeSpan.FromSeconds(30) + storage.Options.ExpirationCheckInterval;
+            spDeleteDocumentsUri = UriFactory.CreateStoredProcedureUri(storage.Options.DatabaseName, storage.Options.CollectionName, "deleteDocuments");
         }
 
         public void Execute(CancellationToken cancellationToken)
         {
-            foreach (DocumentTypes type in documents)
+            using (new DocumentDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage))
             {
-                logger.Debug($"Removing outdated records from the '{type}' document.");
+                int expireOn = DateTime.UtcNow.ToEpoch();
 
-                using (new DocumentDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage))
+                foreach (DocumentTypes type in documents)
                 {
-                    int expireOn = DateTime.UtcNow.ToEpoch();
-                    Task<StoredProcedureResponse<int>> procedureTask = storage.Client.ExecuteStoredProcedureAsync<int>(spDeleteExpiredDocumentsUri, (int)type, expireOn);
-                    Task task = procedureTask.ContinueWith(t => logger.Trace($"Outdated {t.Result.Response} records removed from the '{type}' document."), TaskContinuationOptions.OnlyOnRanToCompletion);
-                    task.Wait(cancellationToken);
-                }
+                    cancellationToken.ThrowIfCancellationRequested();
 
-                cancellationToken.WaitHandle.WaitOne(storage.Options.ExpirationCheckInterval);
+                    logger.Trace($"Removing outdated records from the '{type}' document.");
+
+                    string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)type} AND IS_DEFINED(doc.expire_on) AND doc.expire_on < {expireOn}";
+
+                    // remove only the aggregate counters when the type is Counter
+                    if (type == DocumentTypes.Counter)
+                    {
+                        query += $" AND doc.counter_type = {(int)CounterTypes.Aggregate}";
+                    }
+
+                    int deleted = 0;
+                    ProcedureResponse response;
+                    do
+                    {
+                        Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
+                        procedureTask.Wait(cancellationToken);
+
+                        response = procedureTask.Result;
+                        deleted += response.Affected;
+
+                        // if the continuation is true; run the procedure again
+                    } while (response.Continuation);
+
+                    logger.Trace($"Outdated {deleted} records removed from the '{type}' document.");
+                }
             }
+
+            cancellationToken.WaitHandle.WaitOne(storage.Options.ExpirationCheckInterval);
         }
     }
 }

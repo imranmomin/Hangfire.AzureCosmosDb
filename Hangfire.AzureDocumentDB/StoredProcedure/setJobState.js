@@ -1,45 +1,41 @@
-﻿// ReSharper disable UseOfImplicitGlobalInFunctionScope
-
-/**
- * Expires a job
- * @param {string} id - the job id
- * @param {Object} state - the state information for the job
- */
 function setJobState(id, state) {
-    var result = __.filter(function (doc) {
-        return doc.id === id && doc.type === 2;
-    }, function (err, docs) {
-        if (err) throw err;
-        if (docs.length === 0) throw new Error("No job found for id :" + id);
-        if (docs.length > 1) throw new Error("Found more than one job for id :" + id);
-
-        // create the state document
-        createState(state, function (document) {
-            var doc = docs[0];
-            doc.state_id = document.id;
-            doc.state_name = state.name;
-
-            var isAccepted = __.replaceDocument(doc._self, doc, function (error) {
-                if (error) throw error;
+    let context = getContext();
+    let collection = context.getCollection();
+    let response = getContext().getResponse();
+    let collectionLink = collection.getAltLink();
+    let documentLink = `${collectionLink}/docs/${id}`;
+    response.setBody(false);
+    let isAccepted = collection.readDocument(documentLink, (error, job) => {
+        if (error) {
+            throw error;
+        }
+        createState(state, (doc) => {
+            job.state_id = doc.id;
+            job.state_name = doc.name;
+            let options = { etag: job._etag };
+            let success = collection.replaceDocument(job._self, job, options, (err) => {
+                if (err) {
+                    throw err;
+                }
+                response.setBody(true);
             });
-
-            if (!isAccepted) throw new Error("Failed to set the state to job");
-            else getContext().getResponse().setBody(true);
-
+            if (!success) {
+                throw new Error("The call was not accepted");
+            }
         });
     });
-
-    if (!result.isAccepted) throw new Error("The call was not accepted");
-
-    /**
-     * Creates a new state
-     * @param {Object} state - information for the job 
-     * @param {function} callback - return the newly create state document
-     */
-    function createState(state, callback) {
-        __.createDocument(__.getSelfLink(), state, function (err, document) {
-            if (err) throw err;
+    function createState(doc, callback) {
+        let success = collection.createDocument(collectionLink, doc, (error, document) => {
+            if (error) {
+                throw error;
+            }
             callback(document);
         });
+        if (!success) {
+            throw new Error("The call was not accepted");
+        }
+    }
+    if (!isAccepted) {
+        throw new Error("The call was not accepted");
     }
 }

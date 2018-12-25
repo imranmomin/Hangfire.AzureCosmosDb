@@ -107,7 +107,7 @@ namespace Hangfire.Azure
             logger.Info("Using the following options for Azure DocumentDB job storage:");
             logger.Info($"     DocumentDB Url: {Client.ServiceEndpoint.AbsoluteUri}");
             logger.Info($"     Request Timeout: {Options.RequestTimeout}");
-            logger.Info($"     Counter Agggerate Interval: {Options.CountersAggregateInterval.TotalSeconds} seconds");
+            logger.Info($"     Counter Aggregate Interval: {Options.CountersAggregateInterval.TotalSeconds} seconds");
             logger.Info($"     Queue Poll Interval: {Options.QueuePollInterval.TotalSeconds} seconds");
             logger.Info($"     Expiration Check Interval: {Options.ExpirationCheckInterval.TotalSeconds} seconds");
         }

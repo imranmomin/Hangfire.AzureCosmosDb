@@ -1,67 +1,78 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-    <PropertyGroup>
-        <TargetFrameworks>net461;netstandard2.0</TargetFrameworks>
-        <ProductName>Hangfire.AzureDocumentDB</ProductName>
-        <Title>Hangfire.AzureDocumentDB</Title>
-        <Company>Hangfire.AzureDocumentDB</Company>
-        <Authors>Imran Momin</Authors>
-        <PackageLicenseUrl>https://github.com/imranmomin/Hangfire.AzureDocumentDB/blob/master/LICENSE</PackageLicenseUrl>
-        <PackageProjectUrl>https://github.com/imranmomin/Hangfire.AzureDocumentDB</PackageProjectUrl>
-        <Copyright>Copyright 2018</Copyright>
-        <PackageTags>Hangfire Azure DocumentDB</PackageTags>
-        <Description>This package adds support to Microsoft Azure DocumentDB for Hangfire</Description>
-        <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-        <PackageVersion>1.0.1</PackageVersion>
-        <Version>2.0.0</Version>
-        <FileVersion>2.0.0.0</FileVersion>
-        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-        <RootNamespace>Hangfire.Azure</RootNamespace>
-    </PropertyGroup>
-    <PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-        <DefineConstants>NETCORE;NETSTANDARD;NETSTANDARD2_0</DefineConstants>
-    </PropertyGroup>
-    <PropertyGroup Condition="'$(TargetFramework)' == 'net461'">
-        <DefineConstants>NET461;NETFULL</DefineConstants>
-    </PropertyGroup>
-    <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net461|AnyCPU'">
-        <DocumentationFile>bin\Release\net461\Hangfire.AzureDocumentDB.xml</DocumentationFile>
-    </PropertyGroup>
-    <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|netstandard2.0|AnyCPU'">
-        <DocumentationFile>bin\Release\netstandard2.0\Hangfire.AzureDocumentDB.xml</DocumentationFile>
-    </PropertyGroup>
-    <ItemGroup>
-        <PackageReference Include="Hangfire.Core" Version="1.6.17" />
-        <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />
-        <PackageReference Include="System.ValueTuple" Version="4.4.0" />
-    </ItemGroup>
-    <ItemGroup>
-        <EmbeddedResource Include="StoredProcedure\deleteExpiredDocuments.js" />
-    </ItemGroup>
-    <ItemGroup>
-        <EmbeddedResource Include="StoredProcedure\addToSet.js" />
-        <EmbeddedResource Include="StoredProcedure\expireJob.js" />
-        <EmbeddedResource Include="StoredProcedure\persistJob.js" />
-        <EmbeddedResource Include="StoredProcedure\trimList.js" />
-        <EmbeddedResource Include="StoredProcedure\removeFromList.js" />
-        <EmbeddedResource Include="StoredProcedure\removeFromSet.js" />
-        <EmbeddedResource Include="StoredProcedure\removeHash.js" />
-        <EmbeddedResource Include="StoredProcedure\setJobState.js" />
-        <EmbeddedResource Include="StoredProcedure\setRangeHash.js" />
-    </ItemGroup>
-    <ItemGroup>
-        <EmbeddedResource Include="StoredProcedure\announceServer.js" />
-        <EmbeddedResource Include="StoredProcedure\heartbeatServer.js" />
-        <EmbeddedResource Include="StoredProcedure\removedTimedOutServer.js" />
-        <EmbeddedResource Include="StoredProcedure\removeServer.js" />
-        <EmbeddedResource Include="StoredProcedure\setJobParameter.js" />
-    </ItemGroup>
-    <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-        <PackageReference Include="Microsoft.Azure.DocumentDB.Core" Version="1.9.1" />
-    </ItemGroup>
-    <ItemGroup Condition="'$(TargetFramework)' == 'net461'">
-        <PackageReference Include="Microsoft.Azure.DocumentDB" Version="1.21.1" />
-    </ItemGroup>
-    <ItemGroup>
-        <Folder Include="Properties\" />
-    </ItemGroup>
+  <PropertyGroup>
+    <TargetFrameworks>net461;netstandard2.0</TargetFrameworks>
+    <ProductName>Hangfire.AzureDocumentDB</ProductName>
+    <Title>Hangfire.AzureDocumentDB</Title>
+    <Company>Hangfire.AzureDocumentDB</Company>
+    <Authors>Imran Momin</Authors>
+    <PackageLicense>https://github.com/imranmomin/hangfire.azuredocumentdb/blob/master/LICENSE</PackageLicense>
+    <PackageProjectUrl>https://github.com/imranmomin/hangfire.azuredocumentdb</PackageProjectUrl>
+    <Copyright>Copyright 2018</Copyright>
+    <PackageTags>Hangfire Azure DocumentDB Cosmos</PackageTags>
+    <Description>This package adds support to Microsoft Azure DocumentDB for Hangfire</Description>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageVersion>1.0.1</PackageVersion>
+    <Version>2.0.0</Version>
+    <FileVersion>2.0.0.0</FileVersion>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <RootNamespace>Hangfire.Azure</RootNamespace>
+    <TypeScriptToolsVersion>Latest</TypeScriptToolsVersion>
+    <TypeScriptCompileBlocked>true</TypeScriptCompileBlocked>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <DefineConstants>NETCORE;NETSTANDARD;NETSTANDARD2_0</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net461'">
+    <DefineConstants>NET461;NETFULL</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net461|AnyCPU'">
+    <DocumentationFile>bin\Release\net461\Hangfire.AzureDocumentDB.xml</DocumentationFile>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|netstandard2.0|AnyCPU'">
+    <DocumentationFile>bin\Release\netstandard2.0\Hangfire.AzureDocumentDB.xml</DocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="node_modules\**" />
+    <None Remove="package-lock.json" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="StoredProcedure\heartbeatServer.js">
+      <DependentUpon>heartbeatServer.ts</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="StoredProcedure\setJobParameter.js">
+      <DependentUpon>setJobParameter.ts</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="StoredProcedure\setJobState.js">
+      <DependentUpon>setJobState.ts</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="StoredProcedure\persistDocuments.js">
+      <DependentUpon>persistDocuments.ts</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="StoredProcedure\expireDocuments.js">
+      <DependentUpon>expireDocuments.ts</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="StoredProcedure\deleteDocuments.js">
+      <DependentUpon>deleteDocuments.ts</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="StoredProcedure\upsertDocuments.js">
+      <DependentUpon>upsertDocuments.ts</DependentUpon>
+    </EmbeddedResource>
+    <None Include="StoredProcedure\document.js">
+      <DependentUpon>document.ts</DependentUpon>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Hangfire.Core" Version="1.6.21" />
+    <PackageReference Include="Newtonsoft.Json" Version="12.0.1" />
+    <PackageReference Include="System.ValueTuple" Version="4.5.0" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="Microsoft.Azure.DocumentDB.Core" Version="2.2.0" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net461'">
+    <PackageReference Include="Microsoft.Azure.DocumentDB" Version="2.2.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Properties\" />
+  </ItemGroup>
 </Project>
