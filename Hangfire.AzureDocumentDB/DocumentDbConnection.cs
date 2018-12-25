@@ -347,25 +347,11 @@ namespace Hangfire.Azure
                 throw new ArgumentException(@"invalid timeout", nameof(timeOut));
             }
 
-            int removed = 0;
-            ProcedureResponse response;
             int lastHeartbeat = DateTime.UtcNow.Add(timeOut.Negate()).ToEpoch();
-
             string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Server} AND IS_DEFINED(doc.last_heartbeat) " +
                            $"AND doc.last_heartbeat <= {lastHeartbeat}";
-            Uri spDeleteDocuments = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "deleteDocuments");
 
-            do
-            {
-                Task<StoredProcedureResponse<ProcedureResponse>> task = Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spDeleteDocuments, query);
-                task.Wait();
-
-                response = task.Result;
-                removed += response.Affected;
-
-            } while (response.Continuation);  // if the continuation is true; run the procedure again
-
-            return removed;
+            return Storage.Client.ExecuteDeleteDocuments(query);
         }
 
         #endregion
@@ -415,21 +401,7 @@ namespace Hangfire.Azure
                 }
             }
 
-            int affected = 0;
-            Uri spUpsertDocumentsUri = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "upsertDocuments");
-
-            do
-            {
-                // process only remaining items
-                data.Items = data.Items.Skip(affected).ToList();
-
-                Task<StoredProcedureResponse<int>> task = Storage.Client.ExecuteStoredProcedureWithRetriesAsync<int>(spUpsertDocumentsUri, data);
-                task.Wait();
-
-                // know how much was processed
-                affected += task.Result;
-
-            } while (affected < data.Items.Count);
+            Storage.Client.ExecuteUpsertDocuments(data);
         }
 
         public override long GetHashCount(string key)
