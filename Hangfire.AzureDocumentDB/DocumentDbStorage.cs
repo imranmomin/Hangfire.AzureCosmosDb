@@ -10,10 +10,11 @@ using Hangfire.Storage;
 using Hangfire.Logging;
 using Newtonsoft.Json;
 using Microsoft.Azure.Documents;
+using Newtonsoft.Json.Serialization;
 using Microsoft.Azure.Documents.Client;
 
 using Hangfire.Azure.Queue;
-using Newtonsoft.Json.Serialization;
+using Hangfire.Azure.Helper;
 
 namespace Hangfire.Azure
 {
@@ -69,6 +70,8 @@ namespace Hangfire.Azure
             Task task = Client.OpenAsync();
             Task continueTask = task.ContinueWith(t => Initialize(), TaskContinuationOptions.OnlyOnRanToCompletion);
             continueTask.Wait();
+
+            StoredprocedureHelper.Setup(database, collection);
 
             JobQueueProvider provider = new JobQueueProvider(this);
             QueueProviders = new PersistentJobQueueProviderCollection(provider);

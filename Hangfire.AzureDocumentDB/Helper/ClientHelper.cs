@@ -8,7 +8,7 @@ using Microsoft.Azure.Documents.Client;
 
 namespace Hangfire.Azure.Helper
 {
-    public static class ClientHelper
+    internal static class ClientHelper
     {
         /// <summary>
         /// Creates a document as an asynchronous operation in the Azure Cosmos DB service.
@@ -20,7 +20,7 @@ namespace Hangfire.Azure.Helper
         /// <param name="disableAutomaticIdGeneration">Disables the automatic id generation, will throw an exception if id is missing.</param>
         /// <param name="cancellationToken">(Optional) <see cref="T:System.Threading.CancellationToken" /> representing request cancellation.</param>
         /// <returns></returns>
-        public static Task<ResourceResponse<Document>> CreateDocumentWithRetriesAsync(this DocumentClient client, Uri documentCollectionUri, object document, RequestOptions options = null, bool disableAutomaticIdGeneration = false, CancellationToken cancellationToken = default(CancellationToken))
+        internal static Task<ResourceResponse<Document>> CreateDocumentWithRetriesAsync(this DocumentClient client, Uri documentCollectionUri, object document, RequestOptions options = null, bool disableAutomaticIdGeneration = false, CancellationToken cancellationToken = default(CancellationToken))
         {
             return Task.Run(async () => await client.ExecuteWithRetries(() => client.CreateDocumentAsync(documentCollectionUri, document, options, disableAutomaticIdGeneration, cancellationToken)), cancellationToken);
         }
@@ -34,7 +34,7 @@ namespace Hangfire.Azure.Helper
         /// <param name="options">The request options for the request.</param>
         /// <param name="cancellationToken">(Optional) <see cref="T:System.Threading.CancellationToken" /> representing request cancellation.</param>
         /// <returns></returns>
-        public static Task<DocumentResponse<T>> ReadDocumentWithRetriesAsync<T>(this DocumentClient client, Uri documentUri, RequestOptions options = null, CancellationToken cancellationToken = default(CancellationToken))
+        internal static Task<DocumentResponse<T>> ReadDocumentWithRetriesAsync<T>(this DocumentClient client, Uri documentUri, RequestOptions options = null, CancellationToken cancellationToken = default(CancellationToken))
         {
             return Task.Run(async () => await client.ExecuteWithRetries(() => client.ReadDocumentAsync<T>(documentUri, options, cancellationToken)), cancellationToken);
         }
@@ -48,7 +48,7 @@ namespace Hangfire.Azure.Helper
         /// <param name="options">The request options for the request.</param>
         /// <param name="disableAutomaticIdGeneration">Disables the automatic id generation, will throw an exception if id is missing.</param>
         /// <param name="cancellationToken">(Optional) <see cref="T:System.Threading.CancellationToken" /> representing request cancellation.</param>
-        public static Task<ResourceResponse<Document>> UpsertDocumentWithRetriesAsync(this DocumentClient client, Uri documentCollectionUri, object document, RequestOptions options = null, bool disableAutomaticIdGeneration = false, CancellationToken cancellationToken = default(CancellationToken))
+        internal static Task<ResourceResponse<Document>> UpsertDocumentWithRetriesAsync(this DocumentClient client, Uri documentCollectionUri, object document, RequestOptions options = null, bool disableAutomaticIdGeneration = false, CancellationToken cancellationToken = default(CancellationToken))
         {
             return Task.Run(async () => await client.ExecuteWithRetries(() => client.UpsertDocumentAsync(documentCollectionUri, document, options, disableAutomaticIdGeneration, cancellationToken)), cancellationToken);
         }
@@ -60,7 +60,7 @@ namespace Hangfire.Azure.Helper
         /// <param name="documentUri">the URI of the document to delete.</param>
         /// <param name="options">The request options for the request.</param>
         /// <param name="cancellationToken">(Optional) <see cref="T:System.Threading.CancellationToken" /> representing request cancellation.</param>
-        public static Task<ResourceResponse<Document>> DeleteDocumentWithRetriesAsync(this DocumentClient client, Uri documentUri, RequestOptions options = null, CancellationToken cancellationToken = default(CancellationToken))
+        internal static Task<ResourceResponse<Document>> DeleteDocumentWithRetriesAsync(this DocumentClient client, Uri documentUri, RequestOptions options = null, CancellationToken cancellationToken = default(CancellationToken))
         {
             return Task.Run(async () => await client.ExecuteWithRetries(() => client.DeleteDocumentAsync(documentUri, options, cancellationToken)), cancellationToken);
         }
@@ -74,7 +74,7 @@ namespace Hangfire.Azure.Helper
         /// <param name="options">The request options for the request.</param>
         /// <param name="cancellationToken">(Optional) <see cref="T:System.Threading.CancellationToken" /> representing request cancellation.</param>
         /// <returns></returns>
-        public static Task<ResourceResponse<Document>> ReplaceDocumentWithRetriesAsync(this DocumentClient client, Uri documentUri, object document, RequestOptions options = null, CancellationToken cancellationToken = default(CancellationToken))
+        internal static Task<ResourceResponse<Document>> ReplaceDocumentWithRetriesAsync(this DocumentClient client, Uri documentUri, object document, RequestOptions options = null, CancellationToken cancellationToken = default(CancellationToken))
         {
             return Task.Run(async () => await client.ExecuteWithRetries(() => client.ReplaceDocumentAsync(documentUri, document, options, cancellationToken)), cancellationToken);
         }
@@ -87,7 +87,7 @@ namespace Hangfire.Azure.Helper
         /// <param name="storedProcedureUri">the URI of the stored procedure to be executed.</param>
         /// <param name="procedureParams">the parameters for the stored procedure execution.</param>
         /// <returns></returns>
-        public static Task<StoredProcedureResponse<T>> ExecuteStoredProcedureWithRetriesAsync<T>(this DocumentClient client, Uri storedProcedureUri, params object[] procedureParams)
+        internal static Task<StoredProcedureResponse<T>> ExecuteStoredProcedureWithRetriesAsync<T>(this DocumentClient client, Uri storedProcedureUri, params object[] procedureParams)
         {
             return Task.Run(async () => await client.ExecuteWithRetries(() => client.ExecuteStoredProcedureAsync<T>(storedProcedureUri, procedureParams)));
         }
@@ -95,7 +95,7 @@ namespace Hangfire.Azure.Helper
         /// <summary>
         /// Execute the function with retries on throttle
         /// </summary>
-        public static async Task<FeedResponse<T>> ExecuteNextWithRetriesAsync<T>(this IDocumentQuery<T> query)
+        internal static async Task<FeedResponse<T>> ExecuteNextWithRetriesAsync<T>(this IDocumentQuery<T> query)
         {
             while (true)
             {
@@ -121,7 +121,7 @@ namespace Hangfire.Azure.Helper
         /// <summary>
         /// Execute the function with retries on throttle
         /// </summary>
-        public static async Task<T> ExecuteWithRetries<T>(this DocumentClient client, Func<Task<T>> function)
+        internal static async Task<T> ExecuteWithRetries<T>(this DocumentClient client, Func<Task<T>> function)
         {
             while (true)
             {
