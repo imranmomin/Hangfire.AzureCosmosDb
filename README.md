@@ -32,9 +32,11 @@ GlobalConfiguration.Configuration.UseStorage(storage);
 Hangfire.Azure.DocumentDbStorageOptions options = new Hangfire.Azure.DocumentDbStorageOptions
 {
     RequestTimeout = TimeSpan.FromSeconds(30),
-    ExpirationCheckInterval = TimeSpan.FromMinutes(15),
-    CountersAggregateInterval = TimeSpan.FromMinutes(1),
-    QueuePollInterval = TimeSpan.FromSeconds(2)
+    ExpirationCheckInterval = TimeSpan.FromMinutes(2),
+    CountersAggregateInterval = TimeSpan.FromMinutes(2),
+    QueuePollInterval = TimeSpan.FromSeconds(15),
+    ConnectionMode = ConnectionMode.Direct,
+    ConnectionProtocol = Protocol.Tcp
 };
 
 GlobalConfiguration.Configuration.UseAzureDocumentDbStorage("<url>", "<authSecret>", "<databaseName>", "<collectionName>", options);
