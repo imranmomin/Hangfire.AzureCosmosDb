@@ -42,8 +42,8 @@ namespace Hangfire.Azure
                     .Where(c => c.DocumentType == DocumentTypes.Counter && c.Type == CounterTypes.Raw)
                     .ToQueryResult();
 
-                Dictionary<string, (int Value, DateTime? ExpireOn)> counters = rawCounters.GroupBy(c => c.Key)
-                    .ToDictionary(k => k.Key, v => (Value: v.Sum(c => c.Value), ExpireOn: v.Max(c => c.ExpireOn)));
+                Dictionary<string, (int Value, DateTime? ExpireOn, List<Counter> Counters)> counters = rawCounters.GroupBy(c => c.Key)
+                    .ToDictionary(k => k.Key, v => (Value: v.Sum(c => c.Value), ExpireOn: v.Max(c => c.ExpireOn), Counters: v.ToList()));
 
                 foreach (string key in counters.Keys)
                 {
@@ -99,7 +99,7 @@ namespace Hangfire.Azure
                             {
                                 int deleted = 0;
                                 ProcedureResponse response;
-                                string ids = string.Join(",", rawCounters.Where(c => c.Key == key).Select(c => $"'{c.Id}'").ToArray());
+                                string ids = string.Join(",", data.Counters.Select(c => $"'{c.Id}'").ToArray());
                                 string sql = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Counter} AND doc.counter_type = {(int)CounterTypes.Raw} AND doc.id IN ({ids})";
 
                                 do

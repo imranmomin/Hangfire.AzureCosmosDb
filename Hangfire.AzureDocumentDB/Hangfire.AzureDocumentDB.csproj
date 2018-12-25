@@ -39,12 +39,6 @@
     <EmbeddedResource Include="StoredProcedure\heartbeatServer.js">
       <DependentUpon>heartbeatServer.ts</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="StoredProcedure\removeFromList.js">
-      <DependentUpon>removeFromList.ts</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="StoredProcedure\removeFromSet.js">
-      <DependentUpon>removeFromSet.ts</DependentUpon>
-    </EmbeddedResource>
     <EmbeddedResource Include="StoredProcedure\setJobParameter.js">
       <DependentUpon>setJobParameter.ts</DependentUpon>
     </EmbeddedResource>

@@ -235,23 +235,30 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                Set data = new Set
-                {
-                    Key = key,
-                    Value = value
-                };
+                string[] sets = connection.Storage.Client.CreateDocumentQuery<List>(connection.Storage.CollectionUri)
+                    .Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
+                    .Select(s => new { s.Id, s.Value })
+                    .ToQueryResult()
+                    .Where(s => s.Value == value)
+                    .Select(s => s.Id)
+                    .ToArray();
 
+                if (sets.Length == 0) return;
+
+                string ids = string.Join(",", sets.Select(s => $"'{s}'"));
+                string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Set} AND doc.id IN ({ids})";
                 ProcedureResponse response;
-                Uri spRemoveFromSetUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "removeFromSet");
 
                 do
                 {
-                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spRemoveFromSetUri, data);
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
                     task.Wait();
 
                     response = task.Result;
 
+                    // if the continuation is true; run the procedure again
                 } while (response.Continuation);
+
             });
         }
 
@@ -550,22 +557,28 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                List data = new List
-                {
-                    Key = key,
-                    Value = value
-                };
+                string[] lists = connection.Storage.Client.CreateDocumentQuery<List>(connection.Storage.CollectionUri)
+                    .Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
+                    .Select(l => new { l.Id, l.Value })
+                    .ToQueryResult()
+                    .Where(l => l.Value == value)
+                    .Select(l => l.Id)
+                    .ToArray();
 
+                if (lists.Length == 0) return;
+
+                string ids = string.Join(",", lists.Select(l => $"'{l}'"));
+                string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.List} AND doc.id IN ({ids})";
                 ProcedureResponse response;
 
                 do
                 {
-                    Uri spRemoveFromListUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "removeFromList");
-                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spRemoveFromListUri, data);
+                    Task<StoredProcedureResponse<ProcedureResponse>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
                     task.Wait();
 
                     response = task.Result;
 
+                    // if the continuation is true; run the procedure again
                 } while (response.Continuation);
 
             });
@@ -586,6 +599,8 @@ namespace Hangfire.Azure
                      .Where(l => l.index < keepStartingFrom || l.index > keepEndingAt)
                      .Select(l => l.Id)
                      .ToArray();
+
+                if (lists.Length == 0) return;
 
                 string ids = string.Join(",", lists.Select(l => $"'{l}'"));
                 string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.List} AND doc.id IN ({ids})";
