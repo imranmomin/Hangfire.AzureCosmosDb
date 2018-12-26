@@ -214,7 +214,9 @@ namespace Hangfire.Azure
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            return Storage.Client.CreateDocumentQuery<Set>(Storage.CollectionUri)
+            FeedOptions feedOptions = new FeedOptions { MaxItemCount = endingAt + 1 };
+
+            return Storage.Client.CreateDocumentQuery<Set>(Storage.CollectionUri, feedOptions)
                 .Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
                 .OrderBy(s => s.Score)
                 .ToQueryResult()
@@ -484,7 +486,9 @@ namespace Hangfire.Azure
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            return Storage.Client.CreateDocumentQuery<List>(Storage.CollectionUri)
+            FeedOptions feedOptions = new FeedOptions { MaxItemCount = endingAt + 1 };
+
+            return Storage.Client.CreateDocumentQuery<List>(Storage.CollectionUri, feedOptions)
                 .Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
                 .OrderByDescending(l => l.CreatedOn)
                 .Select(l => l.Value)
