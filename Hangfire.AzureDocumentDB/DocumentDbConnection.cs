@@ -215,15 +215,15 @@ namespace Hangfire.Azure
             if (key == null) throw new ArgumentNullException(nameof(key));
 
             FeedOptions feedOptions = new FeedOptions { MaxItemCount = endingAt + 1 };
+            endingAt += 1 - startingFrom;
 
             return Storage.Client.CreateDocumentQuery<Set>(Storage.CollectionUri, feedOptions)
                 .Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
-                .OrderBy(s => s.Score)
-                .ToQueryResult()
                 .OrderBy(s => s.CreatedOn)
-                .Select((s, i) => new { s.Value, Index = i })
-                .Where(s => s.Index >= startingFrom && s.Index <= endingAt)
                 .Select(s => s.Value)
+                .ToQueryResult()
+                .Skip(startingFrom)
+                .Take(endingAt)
                 .ToList();
         }
 
@@ -487,15 +487,15 @@ namespace Hangfire.Azure
             if (key == null) throw new ArgumentNullException(nameof(key));
 
             FeedOptions feedOptions = new FeedOptions { MaxItemCount = endingAt + 1 };
+            endingAt += 1 - startingFrom;
 
             return Storage.Client.CreateDocumentQuery<List>(Storage.CollectionUri, feedOptions)
                 .Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
                 .OrderByDescending(l => l.CreatedOn)
                 .Select(l => l.Value)
                 .ToQueryResult()
-                .Select((l, i) => new { Value = l, Index = i })
-                .Where(l => l.Index >= startingFrom && l.Index <= endingAt)
-                .Select(l => l.Value)
+                .Skip(startingFrom)
+                .Take(endingAt)
                 .ToList();
         }
 
