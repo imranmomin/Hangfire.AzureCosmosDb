@@ -91,10 +91,10 @@ namespace Hangfire.Azure.Queue
         {
             (int EnqueuedCount, int FetchedCount) result = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri)
                 .Where(q => q.DocumentType == DocumentTypes.Queue && q.Name == queue)
+                .Select(q => new { q.Name, EnqueuedCount = q.FetchedAt.IsDefined() ? 0 : 1, FetchedCount = q.FetchedAt.IsDefined() ? 1 : 0 })
                 .ToQueryResult()
-                .Select(q => new { q.Name, q.FetchedAt })
                 .GroupBy(q => q.Name)
-                .Select(v => (EnqueuedCount: v.Sum(q => q.FetchedAt.HasValue ? 0 : 1), FetchedCount: v.Sum(q => q.FetchedAt.HasValue ? 1 : 0)))
+                .Select(v => (EnqueuedCount: v.Sum(q => q.EnqueuedCount), FetchedCount: v.Sum(q => q.FetchedCount)))
                 .FirstOrDefault();
 
             return result;

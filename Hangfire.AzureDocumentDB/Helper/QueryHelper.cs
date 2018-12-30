@@ -7,9 +7,9 @@ using Microsoft.Azure.Documents.Client;
 
 namespace Hangfire.Azure.Helper
 {
-    public static class QueryHelper
+    internal static class QueryHelper
     {
-        public static List<T> ToQueryResult<T>(this IQueryable<T> source)
+        internal static List<T> ToQueryResult<T>(this IQueryable<T> source)
         {
             IDocumentQuery<T> query = source.AsDocumentQuery();
             List<T> results = new List<T>();

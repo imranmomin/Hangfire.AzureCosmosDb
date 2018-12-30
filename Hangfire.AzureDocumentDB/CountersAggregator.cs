@@ -23,13 +23,11 @@ namespace Hangfire.Azure
         private const string DISTRIBUTED_LOCK_KEY = "locks:counters:aggragator";
         private readonly TimeSpan defaultLockTimeout;
         private readonly DocumentDbStorage storage;
-        private readonly Uri spDeleteDocumentsUri;
 
         public CountersAggregator(DocumentDbStorage storage)
         {
             this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
             defaultLockTimeout = TimeSpan.FromSeconds(30) + storage.Options.CountersAggregateInterval;
-            spDeleteDocumentsUri = UriFactory.CreateStoredProcedureUri(storage.Options.DatabaseName, storage.Options.CollectionName, "deleteDocuments");
         }
 
         public void Execute(CancellationToken cancellationToken)
@@ -97,21 +95,10 @@ namespace Hangfire.Azure
                         {
                             if (t.Result.StatusCode == HttpStatusCode.Created || t.Result.StatusCode == HttpStatusCode.OK)
                             {
-                                int deleted = 0;
-                                ProcedureResponse response;
                                 string ids = string.Join(",", data.Counters.Select(c => $"'{c.Id}'").ToArray());
-                                string sql = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Counter} AND doc.counter_type = {(int)CounterTypes.Raw} AND doc.id IN ({ids})";
+                                string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Counter} AND doc.counter_type = {(int)CounterTypes.Raw} AND doc.id IN ({ids})";
 
-                                do
-                                {
-                                    Task<StoredProcedureResponse<ProcedureResponse>> procedureTask = storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spDeleteDocumentsUri, sql);
-                                    procedureTask.Wait(cancellationToken);
-
-                                    response = procedureTask.Result;
-                                    deleted += response.Affected;
-
-                                } while (response.Continuation); // if the continuation is true; run the procedure again
-
+                                int deleted = storage.Client.ExecuteDeleteDocuments(query);
 
                                 logger.Trace($"Total {deleted} records from the 'Counter:{aggregated.Key}' were aggregated.");
                             }

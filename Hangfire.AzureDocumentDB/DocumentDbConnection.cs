@@ -214,14 +214,16 @@ namespace Hangfire.Azure
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            return Storage.Client.CreateDocumentQuery<Set>(Storage.CollectionUri)
+            FeedOptions feedOptions = new FeedOptions { MaxItemCount = endingAt + 1 };
+            endingAt += 1 - startingFrom;
+
+            return Storage.Client.CreateDocumentQuery<Set>(Storage.CollectionUri, feedOptions)
                 .Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
-                .OrderBy(s => s.Score)
-                .ToQueryResult()
                 .OrderBy(s => s.CreatedOn)
-                .Select((s, i) => new { s.Value, Index = i })
-                .Where(s => s.Index >= startingFrom && s.Index <= endingAt)
                 .Select(s => s.Value)
+                .ToQueryResult()
+                .Skip(startingFrom)
+                .Take(endingAt)
                 .ToList();
         }
 
@@ -347,25 +349,11 @@ namespace Hangfire.Azure
                 throw new ArgumentException(@"invalid timeout", nameof(timeOut));
             }
 
-            int removed = 0;
-            ProcedureResponse response;
             int lastHeartbeat = DateTime.UtcNow.Add(timeOut.Negate()).ToEpoch();
-
             string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Server} AND IS_DEFINED(doc.last_heartbeat) " +
                            $"AND doc.last_heartbeat <= {lastHeartbeat}";
-            Uri spDeleteDocuments = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "deleteDocuments");
 
-            do
-            {
-                Task<StoredProcedureResponse<ProcedureResponse>> task = Storage.Client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spDeleteDocuments, query);
-                task.Wait();
-
-                response = task.Result;
-                removed += response.Affected;
-
-            } while (response.Continuation);  // if the continuation is true; run the procedure again
-
-            return removed;
+            return Storage.Client.ExecuteDeleteDocuments(query);
         }
 
         #endregion
@@ -415,21 +403,7 @@ namespace Hangfire.Azure
                 }
             }
 
-            int affected = 0;
-            Uri spUpsertDocumentsUri = UriFactory.CreateStoredProcedureUri(Storage.Options.DatabaseName, Storage.Options.CollectionName, "upsertDocuments");
-
-            do
-            {
-                // process only remaining items
-                data.Items = data.Items.Skip(affected).ToList();
-
-                Task<StoredProcedureResponse<int>> task = Storage.Client.ExecuteStoredProcedureWithRetriesAsync<int>(spUpsertDocumentsUri, data);
-                task.Wait();
-
-                // know how much was processed
-                affected += task.Result;
-
-            } while (affected < data.Items.Count);
+            Storage.Client.ExecuteUpsertDocuments(data);
         }
 
         public override long GetHashCount(string key)
@@ -512,14 +486,16 @@ namespace Hangfire.Azure
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            return Storage.Client.CreateDocumentQuery<List>(Storage.CollectionUri)
+            FeedOptions feedOptions = new FeedOptions { MaxItemCount = endingAt + 1 };
+            endingAt += 1 - startingFrom;
+
+            return Storage.Client.CreateDocumentQuery<List>(Storage.CollectionUri, feedOptions)
                 .Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
                 .OrderByDescending(l => l.CreatedOn)
                 .Select(l => l.Value)
                 .ToQueryResult()
-                .Select((l, i) => new { Value = l, Index = i })
-                .Where(l => l.Index >= startingFrom && l.Index <= endingAt)
-                .Select(l => l.Value)
+                .Skip(startingFrom)
+                .Take(endingAt)
                 .ToList();
         }
 
