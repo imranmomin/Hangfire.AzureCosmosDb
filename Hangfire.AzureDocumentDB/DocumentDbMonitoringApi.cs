@@ -9,7 +9,6 @@ using Hangfire.Storage;
 using Microsoft.Azure.Documents;
 using Hangfire.Storage.Monitoring;
 using Microsoft.Azure.Documents.Client;
-using Microsoft.Azure.Documents.SystemFunctions;
 
 using Hangfire.Azure.Queue;
 using Hangfire.Azure.Helper;
@@ -117,21 +116,13 @@ namespace Hangfire.Azure
                 {
                     Dictionary<string, long> results = new Dictionary<string, long>();
 
-                    FeedOptions feedOptions = new FeedOptions
+                    // get counts of jobs on state
+                    string[] keys = { EnqueuedState.StateName, FailedState.StateName, ProcessingState.StateName, ScheduledState.StateName };
+                    foreach (string state in keys)
                     {
-                        EnableCrossPartitionQuery = true,
-                        MaxItemCount = 1000,
-                    };
-
-                    // get counts of jobs group-by on state
-                    Dictionary<string, long> states = storage.Client.CreateDocumentQuery<Documents.Job>(storage.CollectionUri, feedOptions)
-                        .Where(j => j.DocumentType == DocumentTypes.Job && j.StateName.IsDefined())
-                        .Select(j => j.StateName)
-                        .ToQueryResult()
-                        .GroupBy(j => j)
-                        .ToDictionary(g => g.Key, g => g.LongCount());
-
-                    results = results.Concat(states).ToDictionary(k => k.Key, v => v.Value);
+                        long states = GetNumberOfJobsByStateName(state);
+                        results.Add(state.ToLower(), states);
+                    }
 
                     // get counts of servers
                     SqlQuerySpec sql = new SqlQuerySpec
@@ -147,17 +138,28 @@ namespace Hangfire.Azure
                         .ToQueryResult()
                         .FirstOrDefault();
 
-                    results.Add("Servers", servers);
+                    results.Add("servers", servers);
 
-                    // get sum of stats:succeeded counters  raw / aggregate
-                    Dictionary<string, long> counters = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri, feedOptions)
-                        .Where(c => c.DocumentType == DocumentTypes.Counter && (c.Key == "stats:succeeded" || c.Key == "stats:deleted"))
-                        .Select(c => new { c.Key, c.Value })
-                        .ToQueryResult()
-                        .GroupBy(c => c.Key)
-                        .ToDictionary(g => g.Key, g => (long)g.Sum(c => c.Value));
+                    // get sum of stats:succeeded / stats:deleted counters
+                    keys = new[] { "stats:succeeded", "stats:deleted" };
+                    foreach (string key in keys)
+                    {
+                        sql = new SqlQuerySpec
+                        {
+                            QueryText = "SELECT TOP 1 VALUE SUM(doc['value']) FROM doc WHERE doc.type = @type AND doc.key = @key",
+                            Parameters = new SqlParameterCollection
+                            {
+                                new SqlParameter("@key", key),
+                                new SqlParameter("@type", DocumentTypes.Counter)
+                            }
+                        };
 
-                    results = results.Concat(counters).ToDictionary(k => k.Key, v => v.Value);
+                        long counters = storage.Client.CreateDocumentQuery<long>(storage.CollectionUri, sql)
+                           .ToQueryResult()
+                           .FirstOrDefault();
+
+                        results.Add(key, counters);
+                    }
 
                     sql = new SqlQuerySpec
                     {
@@ -169,25 +171,25 @@ namespace Hangfire.Azure
                         }
                     };
 
-                    long count = storage.Client.CreateDocumentQuery<long>(storage.CollectionUri, sql)
+                    long jobs = storage.Client.CreateDocumentQuery<long>(storage.CollectionUri, sql)
                         .ToQueryResult()
                         .FirstOrDefault();
 
-                    results.Add("recurring-jobs", count);
+                    results.Add("recurring-jobs", jobs);
 
-                    long GetValueOrDefault(string key) => results.Where(r => r.Key == key).Select(r => r.Value).SingleOrDefault();
+                    long GetValueOrDefault(string key) => results.TryGetValue(key, out long value) ? value : default(long);
 
                     // ReSharper disable once UseObjectOrCollectionInitializer
                     cacheStatisticsDto = new StatisticsDto
                     {
-                        Enqueued = GetValueOrDefault("Enqueued"),
-                        Failed = GetValueOrDefault("Failed"),
-                        Processing = GetValueOrDefault("Processing"),
-                        Scheduled = GetValueOrDefault("Scheduled"),
+                        Enqueued = GetValueOrDefault("enqueued"),
+                        Failed = GetValueOrDefault("failed"),
+                        Processing = GetValueOrDefault("processing"),
+                        Scheduled = GetValueOrDefault("scheduled"),
                         Succeeded = GetValueOrDefault("stats:succeeded"),
                         Deleted = GetValueOrDefault("stats:deleted"),
                         Recurring = GetValueOrDefault("recurring-jobs"),
-                        Servers = GetValueOrDefault("Servers")
+                        Servers = GetValueOrDefault("servers"),
                     };
 
                     cacheStatisticsDto.Queues = storage.QueueProviders
@@ -409,7 +411,7 @@ namespace Hangfire.Azure
         {
             SqlQuerySpec sql = new SqlQuerySpec
             {
-                QueryText = "SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.state_name = @state",
+                QueryText = "SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type AND IS_DEFINED(doc.state_name) AND doc.state_name = @state",
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@state", state),
