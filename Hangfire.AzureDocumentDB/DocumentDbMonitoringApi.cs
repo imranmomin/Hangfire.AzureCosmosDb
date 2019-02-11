@@ -119,6 +119,7 @@ namespace Hangfire.Azure
 
                     FeedOptions feedOptions = new FeedOptions
                     {
+                        EnableCrossPartitionQuery = true,
                         MaxItemCount = 1000,
                     };
 
@@ -290,7 +291,10 @@ namespace Hangfire.Azure
         private JobList<T> GetJobsOnState<T>(string stateName, int from, int count, Func<State, Common.Job, T> selector)
         {
             List<KeyValuePair<string, T>> jobs = new List<KeyValuePair<string, T>>();
-            FeedOptions feedOptions = new FeedOptions { MaxItemCount = from + count };
+            FeedOptions feedOptions = new FeedOptions { 
+              EnableCrossPartitionQuery = true,
+              MaxItemCount = from + count 
+            };
 
             List<Documents.Job> filterJobs = storage.Client.CreateDocumentQuery<Documents.Job>(storage.CollectionUri, feedOptions)
                  .Where(j => j.DocumentType == DocumentTypes.Job && j.StateName == stateName)
@@ -334,7 +338,10 @@ namespace Hangfire.Azure
                 }
             };
 
-            FeedOptions feedOptions = new FeedOptions { MaxItemCount = from + count };
+            FeedOptions feedOptions = new FeedOptions { 
+              EnableCrossPartitionQuery = true,
+              MaxItemCount = from + count 
+            };
 
             List<Documents.Queue> queues = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, sql, feedOptions)
                  .ToQueryResult()

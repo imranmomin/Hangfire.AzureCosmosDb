@@ -214,7 +214,11 @@ namespace Hangfire.Azure
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            FeedOptions feedOptions = new FeedOptions { MaxItemCount = endingAt + 1 };
+            FeedOptions feedOptions = new FeedOptions { 
+              EnableCrossPartitionQuery = true,
+              MaxItemCount = endingAt + 1 
+            };
+
             endingAt += 1 - startingFrom;
 
             return Storage.Client.CreateDocumentQuery<Set>(Storage.CollectionUri, feedOptions)
@@ -486,7 +490,10 @@ namespace Hangfire.Azure
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            FeedOptions feedOptions = new FeedOptions { MaxItemCount = endingAt + 1 };
+            FeedOptions feedOptions = new FeedOptions { 
+              EnableCrossPartitionQuery = true,
+              MaxItemCount = endingAt + 1 
+            };
             endingAt += 1 - startingFrom;
 
             return Storage.Client.CreateDocumentQuery<List>(Storage.CollectionUri, feedOptions)

@@ -65,7 +65,10 @@ namespace Hangfire.Azure.Queue
 
         public IEnumerable<string> GetEnqueuedJobIds(string queue, int from, int perPage)
         {
-            FeedOptions feedOptions = new FeedOptions { MaxItemCount = from + perPage };
+            FeedOptions feedOptions = new FeedOptions { 
+                EnableCrossPartitionQuery = true,
+                MaxItemCount = from + perPage 
+            };
 
             return storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, feedOptions)
                 .Where(q => q.DocumentType == DocumentTypes.Queue && q.Name == queue && q.FetchedAt.IsDefined() == false)
@@ -77,7 +80,10 @@ namespace Hangfire.Azure.Queue
 
         public IEnumerable<string> GetFetchedJobIds(string queue, int from, int perPage)
         {
-            FeedOptions feedOptions = new FeedOptions { MaxItemCount = from + perPage };
+            FeedOptions feedOptions = new FeedOptions { 
+                EnableCrossPartitionQuery = true,
+                MaxItemCount = from + perPage 
+            };
 
             return storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, feedOptions)
                 .Where(q => q.DocumentType == DocumentTypes.Queue && q.Name == queue && q.FetchedAt.IsDefined())
