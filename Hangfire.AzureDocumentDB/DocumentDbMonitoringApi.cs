@@ -177,19 +177,19 @@ namespace Hangfire.Azure
 
                     results.Add("recurring-jobs", jobs);
 
-                    long GetValueOrDefault(string key) => results.TryGetValue(key, out long value) ? value : default(long);
+                    long getValueOrDefault(string key) => results.TryGetValue(key, out long value) ? value : default(long);
 
                     // ReSharper disable once UseObjectOrCollectionInitializer
                     cacheStatisticsDto = new StatisticsDto
                     {
-                        Enqueued = GetValueOrDefault("enqueued"),
-                        Failed = GetValueOrDefault("failed"),
-                        Processing = GetValueOrDefault("processing"),
-                        Scheduled = GetValueOrDefault("scheduled"),
-                        Succeeded = GetValueOrDefault("stats:succeeded"),
-                        Deleted = GetValueOrDefault("stats:deleted"),
-                        Recurring = GetValueOrDefault("recurring-jobs"),
-                        Servers = GetValueOrDefault("servers"),
+                        Enqueued = getValueOrDefault("enqueued"),
+                        Failed = getValueOrDefault("failed"),
+                        Processing = getValueOrDefault("processing"),
+                        Scheduled = getValueOrDefault("scheduled"),
+                        Succeeded = getValueOrDefault("stats:succeeded"),
+                        Deleted = getValueOrDefault("stats:deleted"),
+                        Recurring = getValueOrDefault("recurring-jobs"),
+                        Servers = getValueOrDefault("servers"),
                     };
 
                     cacheStatisticsDto.Queues = storage.QueueProviders
