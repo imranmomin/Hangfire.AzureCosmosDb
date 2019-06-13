@@ -37,7 +37,7 @@ namespace Hangfire.Azure.Queue
                 string query = $"SELECT TOP 1 * FROM doc WHERE doc.type = @type AND doc.name IN ({string.Join(", ", queueParams)}) " +
                                "AND (NOT IS_DEFINED(doc.fetched_at) OR doc.fetched_at < @timeout) ORDER BY doc.created_on";
 
-                List<SqlParameter> parameters = new List<SqlParameter> { new SqlParameter("@type", Documents.DocumentTypes.Queue) };
+                List<SqlParameter> parameters = new List<SqlParameter> { new SqlParameter("@type", (int)Documents.DocumentTypes.Queue) };
                 for (int index = 0; index < queues.Length; index++)
                 {
                     string queue = queues[index];
