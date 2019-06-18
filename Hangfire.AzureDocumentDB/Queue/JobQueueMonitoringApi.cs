@@ -32,7 +32,7 @@ namespace Hangfire.Azure.Queue
                         QueryText = "SELECT DISTINCT VALUE doc['name'] FROM doc WHERE doc.type = @type",
                         Parameters = new SqlParameterCollection
                         {
-                            new SqlParameter("@type", DocumentTypes.Queue)
+                            new SqlParameter("@type", (int)DocumentTypes.Queue)
                         }
                     };
 
@@ -54,7 +54,7 @@ namespace Hangfire.Azure.Queue
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@name", queue),
-                    new SqlParameter("@type", DocumentTypes.Queue)
+                    new SqlParameter("@type", (int)DocumentTypes.Queue)
                 }
             };
 
@@ -65,9 +65,10 @@ namespace Hangfire.Azure.Queue
 
         public IEnumerable<string> GetEnqueuedJobIds(string queue, int from, int perPage)
         {
-            FeedOptions feedOptions = new FeedOptions { 
+            FeedOptions feedOptions = new FeedOptions
+            {
                 EnableCrossPartitionQuery = true,
-                MaxItemCount = from + perPage 
+                MaxItemCount = from + perPage
             };
 
             return storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, feedOptions)
@@ -80,9 +81,10 @@ namespace Hangfire.Azure.Queue
 
         public IEnumerable<string> GetFetchedJobIds(string queue, int from, int perPage)
         {
-            FeedOptions feedOptions = new FeedOptions { 
+            FeedOptions feedOptions = new FeedOptions
+            {
                 EnableCrossPartitionQuery = true,
-                MaxItemCount = from + perPage 
+                MaxItemCount = from + perPage
             };
 
             return storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, feedOptions)
