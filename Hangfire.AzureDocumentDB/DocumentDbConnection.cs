@@ -199,7 +199,7 @@ namespace Hangfire.Azure
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
-                    new SqlParameter("@type", DocumentTypes.Set)
+                    new SqlParameter("@type", (int)DocumentTypes.Set)
                 }
             };
 
@@ -214,9 +214,10 @@ namespace Hangfire.Azure
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            FeedOptions feedOptions = new FeedOptions { 
-              EnableCrossPartitionQuery = true,
-              MaxItemCount = endingAt + 1 
+            FeedOptions feedOptions = new FeedOptions
+            {
+                EnableCrossPartitionQuery = true,
+                MaxItemCount = endingAt + 1
             };
 
             endingAt += 1 - startingFrom;
@@ -241,7 +242,7 @@ namespace Hangfire.Azure
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
-                    new SqlParameter("@type", DocumentTypes.Counter)
+                    new SqlParameter("@type", (int)DocumentTypes.Counter)
                 }
             };
 
@@ -260,7 +261,7 @@ namespace Hangfire.Azure
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
-                    new SqlParameter("@type", DocumentTypes.Set)
+                    new SqlParameter("@type",(int)DocumentTypes.Set)
                 }
             };
 
@@ -293,7 +294,7 @@ namespace Hangfire.Azure
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
-                    new SqlParameter("@type", DocumentTypes.Set),
+                    new SqlParameter("@type", (int)DocumentTypes.Set),
                     new SqlParameter("@from", (int)fromScore),
                     new SqlParameter("@to", (int)toScore)
                 }
@@ -420,7 +421,7 @@ namespace Hangfire.Azure
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
-                    new SqlParameter("@type", DocumentTypes.Hash)
+                    new SqlParameter("@type", (int)DocumentTypes.Hash)
                 }
             };
 
@@ -441,7 +442,7 @@ namespace Hangfire.Azure
                 {
                     new SqlParameter("@key", key),
                     new SqlParameter("@field", name),
-                    new SqlParameter("@type", DocumentTypes.Hash)
+                    new SqlParameter("@type", (int)DocumentTypes.Hash)
                 }
             };
 
@@ -460,7 +461,7 @@ namespace Hangfire.Azure
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
-                    new SqlParameter("@type", DocumentTypes.Hash)
+                    new SqlParameter("@type", (int)DocumentTypes.Hash)
                 }
             };
 
@@ -490,9 +491,10 @@ namespace Hangfire.Azure
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            FeedOptions feedOptions = new FeedOptions { 
-              EnableCrossPartitionQuery = true,
-              MaxItemCount = endingAt + 1 
+            FeedOptions feedOptions = new FeedOptions
+            {
+                EnableCrossPartitionQuery = true,
+                MaxItemCount = endingAt + 1
             };
             endingAt += 1 - startingFrom;
 
@@ -517,7 +519,7 @@ namespace Hangfire.Azure
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
-                    new SqlParameter("@type", DocumentTypes.List)
+                    new SqlParameter("@type", (int)DocumentTypes.List)
                 }
             };
 
@@ -538,7 +540,7 @@ namespace Hangfire.Azure
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@key", key),
-                    new SqlParameter("@type", DocumentTypes.List)
+                    new SqlParameter("@type",(int)DocumentTypes.List)
                 }
             };
 

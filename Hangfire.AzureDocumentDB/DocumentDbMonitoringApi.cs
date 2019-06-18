@@ -130,7 +130,7 @@ namespace Hangfire.Azure
                         QueryText = "SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type",
                         Parameters = new SqlParameterCollection
                         {
-                            new SqlParameter("@type", DocumentTypes.Server)
+                            new SqlParameter("@type", (int)DocumentTypes.Server)
                         }
                     };
 
@@ -150,7 +150,7 @@ namespace Hangfire.Azure
                             Parameters = new SqlParameterCollection
                             {
                                 new SqlParameter("@key", key),
-                                new SqlParameter("@type", DocumentTypes.Counter)
+                                new SqlParameter("@type", (int)DocumentTypes.Counter)
                             }
                         };
 
@@ -167,7 +167,7 @@ namespace Hangfire.Azure
                         Parameters = new SqlParameterCollection
                         {
                             new SqlParameter("@key", "recurring-jobs"),
-                            new SqlParameter("@type", DocumentTypes.Set)
+                            new SqlParameter("@type", (int)DocumentTypes.Set)
                         }
                     };
 
@@ -335,7 +335,7 @@ namespace Hangfire.Azure
                 QueryText = queryText,
                 Parameters = new SqlParameterCollection
                 {
-                    new SqlParameter("@type", DocumentTypes.Queue),
+                    new SqlParameter("@type", (int)DocumentTypes.Queue),
                     new SqlParameter("@name", queue)
                 }
             };
@@ -415,7 +415,7 @@ namespace Hangfire.Azure
                 Parameters = new SqlParameterCollection
                 {
                     new SqlParameter("@state", state),
-                    new SqlParameter("@type", DocumentTypes.Job)
+                    new SqlParameter("@type", (int)DocumentTypes.Job)
                 }
             };
 
