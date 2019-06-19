@@ -97,7 +97,7 @@ namespace Hangfire.Azure
 
                 return new JobDetailsDto
                 {
-                    Job = invocationData.Deserialize(),
+                    Job = invocationData.DeserializeJob(),
                     CreatedAt = job.CreatedOn,
                     ExpireAt = job.ExpireOn,
                     Properties = job.Parameters.ToDictionary(p => p.Name, p => p.Value),
@@ -207,22 +207,22 @@ namespace Hangfire.Azure
 
         public JobList<EnqueuedJobDto> EnqueuedJobs(string queue, int from, int perPage)
         {
-            string queryText = "SELECT * FROM doc WHERE doc.type = @type AND doc.name = @name AND NOT IS_DEFINED(doc.fetched_at) ORDER BY doc.created_on";
-            return GetJobsOnQueue(queryText, queue, from, perPage, (state, job, fetchedAt) => new EnqueuedJobDto
+            string queryText = $"SELECT * FROM doc WHERE doc.type = @type AND doc.name = @name AND NOT IS_DEFINED(doc.fetched_at) ORDER BY doc.created_on OFFSET {from} LIMIT {perPage}";
+            return GetJobsOnQueue(queryText, queue, (state, job, fetchedAt) => new EnqueuedJobDto
             {
                 Job = job,
                 State = state.Name,
                 InEnqueuedState = EnqueuedState.StateName.Equals(state.Name, StringComparison.OrdinalIgnoreCase),
                 EnqueuedAt = EnqueuedState.StateName.Equals(state.Name, StringComparison.OrdinalIgnoreCase)
-                    ? JobHelper.DeserializeNullableDateTime(state.Data["EnqueuedAt"])
-                    : null
+                   ? JobHelper.DeserializeNullableDateTime(state.Data["EnqueuedAt"])
+                   : null
             });
         }
 
         public JobList<FetchedJobDto> FetchedJobs(string queue, int from, int perPage)
         {
-            string queryText = "SELECT * FROM doc WHERE doc.type = @type AND doc.name = @name AND IS_DEFINED(doc.fetched_at) ORDER BY doc.created_on";
-            return GetJobsOnQueue(queryText, queue, from, perPage, (state, job, fetchedAt) => new FetchedJobDto
+            string queryText = $"SELECT * FROM doc WHERE doc.type = @type AND doc.name = @name AND IS_DEFINED(doc.fetched_at) ORDER BY doc.created_on OFFSET {from} LIMIT {perPage}";
+            return GetJobsOnQueue(queryText, queue, (state, job, fetchedAt) => new FetchedJobDto
             {
                 Job = job,
                 State = state.Name,
@@ -293,17 +293,16 @@ namespace Hangfire.Azure
         private JobList<T> GetJobsOnState<T>(string stateName, int from, int count, Func<State, Common.Job, T> selector)
         {
             List<KeyValuePair<string, T>> jobs = new List<KeyValuePair<string, T>>();
-            FeedOptions feedOptions = new FeedOptions { 
-              EnableCrossPartitionQuery = true,
-              MaxItemCount = from + count 
+            FeedOptions feedOptions = new FeedOptions
+            {
+                EnableCrossPartitionQuery = true
             };
 
             List<Documents.Job> filterJobs = storage.Client.CreateDocumentQuery<Documents.Job>(storage.CollectionUri, feedOptions)
-                 .Where(j => j.DocumentType == DocumentTypes.Job && j.StateName == stateName)
-                 .OrderByDescending(j => j.CreatedOn)
-                 .ToQueryResult()
-                 .Skip(from).Take(count)
-                 .ToList();
+                .Where(j => j.DocumentType == DocumentTypes.Job && j.StateName == stateName)
+                .OrderByDescending(j => j.CreatedOn)
+                .Skip(from).Take(count)
+                .ToQueryResult();
 
             filterJobs.ForEach(job =>
             {
@@ -317,7 +316,7 @@ namespace Hangfire.Azure
                     InvocationData invocationData = job.InvocationData;
                     invocationData.Arguments = job.Arguments;
 
-                    T data = selector(state, invocationData.Deserialize());
+                    T data = selector(state, invocationData.DeserializeJob());
                     jobs.Add(new KeyValuePair<string, T>(job.Id, data));
                 }
             });
@@ -325,7 +324,7 @@ namespace Hangfire.Azure
             return new JobList<T>(jobs);
         }
 
-        private JobList<T> GetJobsOnQueue<T>(string queryText, string queue, int from, int count, Func<State, Common.Job, DateTime?, T> selector)
+        private JobList<T> GetJobsOnQueue<T>(string queryText, string queue, Func<State, Common.Job, DateTime?, T> selector)
         {
             if (string.IsNullOrEmpty(queue)) throw new ArgumentNullException(nameof(queue));
             List<KeyValuePair<string, T>> jobs = new List<KeyValuePair<string, T>>();
@@ -340,14 +339,12 @@ namespace Hangfire.Azure
                 }
             };
 
-            FeedOptions feedOptions = new FeedOptions { 
-              EnableCrossPartitionQuery = true,
-              MaxItemCount = from + count 
+            FeedOptions feedOptions = new FeedOptions
+            {
+                EnableCrossPartitionQuery = true
             };
 
             List<Documents.Queue> queues = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, sql, feedOptions)
-                 .ToQueryResult()
-                 .Skip(from).Take(count)
                  .ToList();
 
             queues.ForEach(queueItem =>
@@ -365,7 +362,7 @@ namespace Hangfire.Azure
                     uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, job.StateId);
                     Task<DocumentResponse<State>> stateTask = storage.Client.ReadDocumentWithRetriesAsync<State>(uri);
 
-                    T data = selector(stateTask.Result, invocationData.Deserialize(), queueItem.FetchedAt);
+                    T data = selector(stateTask.Result, invocationData.DeserializeJob(), queueItem.FetchedAt);
                     jobs.Add(new KeyValuePair<string, T>(job.Id, data));
                 }
             });

@@ -39,7 +39,7 @@ namespace Hangfire.Azure
             if (job == null) throw new ArgumentNullException(nameof(job));
             if (parameters == null) throw new ArgumentNullException(nameof(parameters));
 
-            InvocationData invocationData = InvocationData.Serialize(job);
+            InvocationData invocationData = InvocationData.SerializeJob(job);
             Documents.Job entityJob = new Documents.Job
             {
                 InvocationData = invocationData,
@@ -102,7 +102,7 @@ namespace Hangfire.Azure
 
                 try
                 {
-                    job = invocationData.Deserialize();
+                    job = invocationData.DeserializeJob();
                 }
                 catch (JobLoadException ex)
                 {
@@ -216,20 +216,16 @@ namespace Hangfire.Azure
 
             FeedOptions feedOptions = new FeedOptions
             {
-                EnableCrossPartitionQuery = true,
-                MaxItemCount = endingAt + 1
+                EnableCrossPartitionQuery = true
             };
-
             endingAt += 1 - startingFrom;
 
             return Storage.Client.CreateDocumentQuery<Set>(Storage.CollectionUri, feedOptions)
                 .Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
                 .OrderBy(s => s.CreatedOn)
+                .Skip(startingFrom).Take(endingAt)
                 .Select(s => s.Value)
-                .ToQueryResult()
-                .Skip(startingFrom)
-                .Take(endingAt)
-                .ToList();
+                .ToQueryResult();
         }
 
         public override long GetCounter(string key)
@@ -493,19 +489,16 @@ namespace Hangfire.Azure
 
             FeedOptions feedOptions = new FeedOptions
             {
-                EnableCrossPartitionQuery = true,
-                MaxItemCount = endingAt + 1
+                EnableCrossPartitionQuery = true
             };
             endingAt += 1 - startingFrom;
 
             return Storage.Client.CreateDocumentQuery<List>(Storage.CollectionUri, feedOptions)
                 .Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
                 .OrderByDescending(l => l.CreatedOn)
+                .Skip(startingFrom).Take(endingAt)
                 .Select(l => l.Value)
-                .ToQueryResult()
-                .Skip(startingFrom)
-                .Take(endingAt)
-                .ToList();
+                .ToQueryResult();
         }
 
         public override TimeSpan GetListTtl(string key)

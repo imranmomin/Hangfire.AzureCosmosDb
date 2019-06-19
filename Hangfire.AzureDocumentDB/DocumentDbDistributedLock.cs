@@ -106,7 +106,7 @@ namespace Hangfire.Azure
                 System.Threading.Thread.Sleep(2000);
             }
 
-            logger.Trace($"Acquired lock for {resource} in {acquireStart.Elapsed.TotalSeconds} seconds");
+            logger.Trace($"Acquired lock for {resource} in {acquireStart.Elapsed.TotalMilliseconds:#.##} ms");
         }
 
     }
