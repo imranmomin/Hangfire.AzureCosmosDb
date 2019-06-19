@@ -39,7 +39,7 @@ namespace Hangfire.Azure
             if (job == null) throw new ArgumentNullException(nameof(job));
             if (parameters == null) throw new ArgumentNullException(nameof(parameters));
 
-            InvocationData invocationData = InvocationData.Serialize(job);
+            InvocationData invocationData = InvocationData.SerializeJob(job);
             Documents.Job entityJob = new Documents.Job
             {
                 InvocationData = invocationData,
@@ -102,7 +102,7 @@ namespace Hangfire.Azure
 
                 try
                 {
-                    job = invocationData.Deserialize();
+                    job = invocationData.DeserializeJob();
                 }
                 catch (JobLoadException ex)
                 {

@@ -97,7 +97,7 @@ namespace Hangfire.Azure
 
                 return new JobDetailsDto
                 {
-                    Job = invocationData.Deserialize(),
+                    Job = invocationData.DeserializeJob(),
                     CreatedAt = job.CreatedOn,
                     ExpireAt = job.ExpireOn,
                     Properties = job.Parameters.ToDictionary(p => p.Name, p => p.Value),
@@ -317,7 +317,7 @@ namespace Hangfire.Azure
                     InvocationData invocationData = job.InvocationData;
                     invocationData.Arguments = job.Arguments;
 
-                    T data = selector(state, invocationData.Deserialize());
+                    T data = selector(state, invocationData.DeserializeJob());
                     jobs.Add(new KeyValuePair<string, T>(job.Id, data));
                 }
             });
@@ -365,7 +365,7 @@ namespace Hangfire.Azure
                     uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, job.StateId);
                     Task<DocumentResponse<State>> stateTask = storage.Client.ReadDocumentWithRetriesAsync<State>(uri);
 
-                    T data = selector(stateTask.Result, invocationData.Deserialize(), queueItem.FetchedAt);
+                    T data = selector(stateTask.Result, invocationData.DeserializeJob(), queueItem.FetchedAt);
                     jobs.Add(new KeyValuePair<string, T>(job.Id, data));
                 }
             });
