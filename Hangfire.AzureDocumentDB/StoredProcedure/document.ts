@@ -1,62 +1,69 @@
 ﻿interface IData<T> {
-    items: Array<T>
+	items: Array<T>
 }
 
 interface IDocumentBase extends IDocumentMeta {
-    type: number;
-    expire_on: number;
+	type: number;
+	// ReSharper disable once InconsistentNaming
+	expire_on: number;
 }
 
 interface IProcedureResponse {
-    affected: number;
-    continuation: boolean;
+	affected: number;
+	continuation: boolean;
 }
 
 interface IServer extends IDocumentBase {
-    server_id: string;
-    workers: number;
-    queues: Array<string>;
-    last_heartbeat: number;
+	// ReSharper disable once InconsistentNaming
+	server_id: string;
+	workers: number;
+	queues: Array<string>;
+	// ReSharper disable once InconsistentNaming
+	last_heartbeat: number;
 }
 
 interface ISet extends IDocumentBase {
-    key: string;
-    value: string;
-    score?: number;
+	key: string;
+	value: string;
+	score?: number;
 }
 
 interface ICounter extends IDocumentBase {
-    key: string;
-    value: number;
-    counter_type: number;
+	key: string;
+	value: number;
+	// ReSharper disable once InconsistentNaming
+	counter_type: number;
 }
 
 interface IList extends IDocumentBase {
-    key: string;
-    value: string;
+	key: string;
+	value: string;
 }
 
 interface IHash extends IDocumentBase {
-    key: string;
-    field: string;
-    value: string;
+	key: string;
+	field: string;
+	value: string;
 }
 
 interface IJob extends IDocumentBase {
-    arguments: string;
-    state_id: string;
-    state_name: string;
-    parameters: Array<IParameter>;
+	arguments: string;
+	// ReSharper disable once InconsistentNaming
+	state_id: string;
+	// ReSharper disable once InconsistentNaming
+	state_name: string;
+	parameters: Array<IParameter>;
 }
 
 interface IParameter {
-    name: string;
-    value: string;
+	name: string;
+	value: string;
 }
 
 interface IState extends IDocumentBase {
-    job_id: string;
-    name: string;
-    reason: string;
-    data: { [key: string]: string };
+	// ReSharper disable once InconsistentNaming
+	job_id: string;
+	name: string;
+	reason: string;
+	data: { [key: string]: string };
 }
