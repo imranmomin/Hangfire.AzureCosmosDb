@@ -3,6 +3,7 @@ using System.Threading;
 
 using Hangfire.Server;
 using Hangfire.Logging;
+using Microsoft.Azure.Cosmos;
 
 using Hangfire.Azure.Helper;
 using Hangfire.Azure.Documents;
@@ -18,17 +19,17 @@ namespace Hangfire.Azure
         private const string DISTRIBUTED_LOCK_KEY = "locks:expiration:manager";
         private readonly TimeSpan defaultLockTimeout;
         private readonly DocumentTypes[] documents = { DocumentTypes.Lock, DocumentTypes.Job, DocumentTypes.List, DocumentTypes.Set, DocumentTypes.Hash, DocumentTypes.Counter };
-        private readonly DocumentDbStorage storage;
+        private readonly CosmosDbStorage storage;
 
-        public ExpirationManager(DocumentDbStorage storage)
+        public ExpirationManager(CosmosDbStorage storage)
         {
             this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
-            defaultLockTimeout = TimeSpan.FromSeconds(30) + storage.Options.ExpirationCheckInterval;
+            defaultLockTimeout = TimeSpan.FromSeconds(30) + storage.StorageOptions.ExpirationCheckInterval;
         }
 
         public void Execute(CancellationToken cancellationToken)
         {
-            using (new DocumentDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage))
+            using (new CosmosDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage))
             {
                 int expireOn = DateTime.UtcNow.ToEpoch();
 
@@ -46,13 +47,13 @@ namespace Hangfire.Azure
                         query += $" AND doc.counter_type = {(int)CounterTypes.Aggregate}";
                     }
 
-                    int deleted = storage.Client.ExecuteDeleteDocuments(query);
+                    int deleted = storage.Container.ExecuteDeleteDocuments(query,PartitionKey.None);
                     
                     logger.Trace($"Outdated {deleted} records removed from the '{type}' document.");
                 }
             }
 
-            cancellationToken.WaitHandle.WaitOne(storage.Options.ExpirationCheckInterval);
+            cancellationToken.WaitHandle.WaitOne(storage.StorageOptions.ExpirationCheckInterval);
         }
     }
 }

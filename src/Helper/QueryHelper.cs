@@ -2,26 +2,30 @@
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-using Microsoft.Azure.Documents.Linq;
-using Microsoft.Azure.Documents.Client;
+using Microsoft.Azure.Cosmos;
+using Microsoft.Azure.Cosmos.Linq;
 
 namespace Hangfire.Azure.Helper
 {
     internal static class QueryHelper
     {
-        internal static List<T> ToQueryResult<T>(this IQueryable<T> source)
+        internal static IEnumerable<T> ToQueryResult<T>(this FeedIterator<T> iterator)
         {
-            IDocumentQuery<T> query = source.AsDocumentQuery();
-            List<T> results = new List<T>();
-
-            while (query.HasMoreResults)
+            while (iterator.HasMoreResults)
             {
-                Task<FeedResponse<T>> task = Task.Run(async () => await query.ExecuteNextWithRetriesAsync());
+                Task<FeedResponse<T>> task = Task.Run(async () => await iterator.ReadNextAsync());
                 task.Wait();
-                results.AddRange(task.Result);
+                foreach (T item in task.Result)
+                {
+                    yield return item;
+                }
             }
+        }
 
-            return results;
+        internal static IEnumerable<T> ToQueryResult<T>(this IQueryable<T> queryable)
+        {
+            FeedIterator<T> iterator = queryable.ToFeedIterator();
+            return iterator.ToQueryResult();
         }
     }
 }

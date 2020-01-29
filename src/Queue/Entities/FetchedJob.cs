@@ -5,10 +5,9 @@ using System.Threading.Tasks;
 
 using Hangfire.Logging;
 using Hangfire.Storage;
-using Microsoft.Azure.Documents;
-using Microsoft.Azure.Documents.Client;
 
 using Hangfire.Azure.Helper;
+using Microsoft.Azure.Cosmos;
 
 // ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Queue
@@ -18,13 +17,13 @@ namespace Hangfire.Azure.Queue
         private readonly ILog logger = LogProvider.GetLogger(typeof(FetchedJob));
         private readonly object syncRoot = new object();
         private readonly Timer timer;
-        private readonly DocumentDbStorage storage;
+        private readonly CosmosDbStorage storage;
         private readonly Documents.Queue data;
         private bool disposed;
         private bool removedFromQueue;
         private bool reQueued;
 
-        public FetchedJob(DocumentDbStorage storage, Documents.Queue data)
+        public FetchedJob(CosmosDbStorage storage, Documents.Queue data)
         {
             this.storage = storage;
             this.data = data;
@@ -57,8 +56,7 @@ namespace Hangfire.Azure.Queue
             {
                 try
                 {
-                    Uri deleteUri = new Uri(data.SelfLink, UriKind.Relative);
-                    Task<ResourceResponse<Document>> task = storage.Client.DeleteDocumentWithRetriesAsync(deleteUri);
+                    Task<ItemResponse<Documents.Queue>> task = storage.Container.DeleteItemWithRetriesAsync<Documents.Queue>(data.Id, PartitionKey.None);
                     task.Wait();
                 }
                 finally
@@ -78,17 +76,15 @@ namespace Hangfire.Azure.Queue
 
                 try
                 {
-                    Uri replaceUri = new Uri(data.SelfLink, UriKind.Relative);
-                    Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentWithRetriesAsync(replaceUri, data);
+                    Task<ItemResponse<Documents.Queue>> task = storage.Container.ReplaceItemWithRetriesAsync(data, data.Id);
                     task.Wait();
                 }
-                catch (DocumentClientException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+                catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
                 {
                     data.Id = Guid.NewGuid().ToString();
                     data.SelfLink = null;
 
-                    Uri collectionUri = UriFactory.CreateDocumentCollectionUri(storage.Options.DatabaseName, storage.Options.CollectionName);
-                    Task<ResourceResponse<Document>> task = storage.Client.CreateDocumentWithRetriesAsync(collectionUri, data);
+                    Task<ItemResponse<Documents.Queue>> task = storage.Container.CreateItemWithRetriesAsync(data, PartitionKey.None);
                     task.Wait();
                 }
                 finally
@@ -109,8 +105,7 @@ namespace Hangfire.Azure.Queue
                     Documents.Queue queue = (Documents.Queue)obj;
                     queue.FetchedAt = DateTime.UtcNow;
 
-                    Uri replaceUri = new Uri(queue.SelfLink, UriKind.Relative);
-                    Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentWithRetriesAsync(replaceUri, queue);
+                    Task<ItemResponse<Documents.Queue>> task = storage.Container.ReplaceItemWithRetriesAsync(queue, queue.Id);
                     task.Wait();
 
                     logger.Trace($"Keep-alive query for job: {queue.Id} sent");

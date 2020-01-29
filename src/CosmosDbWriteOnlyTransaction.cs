@@ -1,26 +1,24 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Collections.Generic;
-
-using Hangfire.States;
-using Hangfire.Storage;
-using Microsoft.Azure.Documents;
-using Microsoft.Azure.Documents.Client;
-
-using Hangfire.Azure.Queue;
-using Hangfire.Azure.Helper;
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
+using Hangfire.Azure.Helper;
+using Hangfire.Azure.Queue;
+using Hangfire.States;
+using Hangfire.Storage;
+using Microsoft.Azure.Cosmos;
+using Microsoft.Azure.Cosmos.Scripts;
 
 namespace Hangfire.Azure
 {
-    internal class DocumentDbWriteOnlyTransaction : JobStorageTransaction
+    internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
     {
-        private readonly DocumentDbConnection connection;
+        private readonly CosmosDbConnection connection;
         private readonly List<Action> commands = new List<Action>();
 
-        public DocumentDbWriteOnlyTransaction(DocumentDbConnection connection) => this.connection = connection;
+        public CosmosDbWriteOnlyTransaction(CosmosDbConnection connection) => this.connection = connection;
 
         private void QueueCommand(Action command) => commands.Add(command);
         public override void Commit() => commands.ForEach(command => command());
@@ -55,7 +53,7 @@ namespace Hangfire.Azure
                     Value = -1
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
+                Task<ItemResponse<Counter>> task = connection.Storage.Container.CreateItemAsync(data);
                 task.Wait();
             });
         }
@@ -75,7 +73,7 @@ namespace Hangfire.Azure
                     ExpireOn = DateTime.UtcNow.Add(expireIn)
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
+                Task<ItemResponse<Counter>> task = connection.Storage.Container.CreateItemAsync(data);
                 task.Wait();
             });
         }
@@ -93,7 +91,7 @@ namespace Hangfire.Azure
                     Value = 1
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
+                Task<ItemResponse<Counter>> task = connection.Storage.Container.CreateItemAsync(data);
                 task.Wait();
             });
         }
@@ -113,7 +111,7 @@ namespace Hangfire.Azure
                     ExpireOn = DateTime.UtcNow.Add(expireIn)
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
+                Task<ItemResponse<Counter>> task = connection.Storage.Container.CreateItemAsync(data);
                 task.Wait();
             });
         }
@@ -131,7 +129,7 @@ namespace Hangfire.Azure
             {
                 int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
                 string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Job} AND doc.id = '{jobId}'";
-                connection.Storage.Client.ExecuteExpireDocuments(query, epoch);
+                connection.Storage.Container.ExecuteExpireDocuments(query, epoch, PartitionKey.None);
             });
         }
 
@@ -142,7 +140,7 @@ namespace Hangfire.Azure
             QueueCommand(() =>
             {
                 string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Job} AND doc.id = '{jobId}'";
-                connection.Storage.Client.ExecutePersistDocuments(query);
+                connection.Storage.Container.ExecutePersistDocuments(query, PartitionKey.None);
             });
         }
 
@@ -166,8 +164,7 @@ namespace Hangfire.Azure
                     Data = state.SerializeData()
                 };
 
-                Uri spSetJobStateUri = UriFactory.CreateStoredProcedureUri(connection.Storage.Options.DatabaseName, connection.Storage.Options.CollectionName, "setJobState");
-                Task<StoredProcedureResponse<bool>> task = connection.Storage.Client.ExecuteStoredProcedureWithRetriesAsync<bool>(spSetJobStateUri, jobId, data);
+                Task<StoredProcedureExecuteResponse<bool>> task = connection.Storage.Container.Scripts.ExecuteStoredProcedureAsync<StoredProcedureExecuteResponse<bool>>("setJobState", PartitionKey.None, (dynamic)jobId, (dynamic)data);
                 task.Wait();
             });
         }
@@ -188,7 +185,7 @@ namespace Hangfire.Azure
                     Data = state.SerializeData()
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
+                Task<ItemResponse<State>> task = connection.Storage.Container.CreateItemAsync(data);
                 task.Wait();
             });
         }
@@ -204,11 +201,12 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                string[] sets = connection.Storage.Client.CreateDocumentQuery<List>(connection.Storage.CollectionUri)
+
+                string[] sets = connection.Storage.Container.GetItemLinqQueryable<List>()
                     .Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
                     .Select(s => new { s.Id, s.Value })
                     .ToQueryResult()
-                    .Where(s => s.Value == value)
+                    .Where(s => s.Value == value) // value may contain json string.. which interfere with query 
                     .Select(s => s.Id)
                     .ToArray();
 
@@ -216,7 +214,7 @@ namespace Hangfire.Azure
 
                 string ids = string.Join(",", sets.Select(s => $"'{s}'"));
                 string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Set} AND doc.id IN ({ids})";
-                connection.Storage.Client.ExecuteDeleteDocuments(query);
+                connection.Storage.Container.ExecuteDeleteDocuments(query, PartitionKey.None);
             });
         }
 
@@ -229,7 +227,7 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                List<Set> sets = connection.Storage.Client.CreateDocumentQuery<Set>(connection.Storage.CollectionUri)
+                List<Set> sets = connection.Storage.Container.GetItemLinqQueryable<Set>()
                     .Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
                     .ToQueryResult()
                     .Where(s => s.Value == value) // value may contain json string.. which interfere with query 
@@ -252,7 +250,7 @@ namespace Hangfire.Azure
                 }
 
                 Data<Set> data = new Data<Set>(sets);
-                connection.Storage.Client.ExecuteUpsertDocuments(data);
+                connection.Storage.Container.ExecuteUpsertDocuments(data, PartitionKey.None);
             });
         }
 
@@ -263,7 +261,7 @@ namespace Hangfire.Azure
             QueueCommand(() =>
             {
                 string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Set} AND doc.key = '{key}'";
-                connection.Storage.Client.ExecutePersistDocuments(query);
+                connection.Storage.Container.ExecutePersistDocuments(query, PartitionKey.None);
             });
         }
 
@@ -275,7 +273,7 @@ namespace Hangfire.Azure
             {
                 string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Set} AND doc.key = '{key}'";
                 int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
-                connection.Storage.Client.ExecuteExpireDocuments(query, epoch);
+                connection.Storage.Container.ExecuteExpireDocuments(query, epoch, PartitionKey.None);
             });
         }
 
@@ -295,7 +293,7 @@ namespace Hangfire.Azure
                 }).ToList();
 
                 Data<Set> data = new Data<Set>(sets);
-                connection.Storage.Client.ExecuteUpsertDocuments(data);
+                connection.Storage.Container.ExecuteUpsertDocuments(data, PartitionKey.None);
             });
         }
 
@@ -306,7 +304,7 @@ namespace Hangfire.Azure
             QueueCommand(() =>
             {
                 string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Set} AND doc.key = '{key}'";
-                connection.Storage.Client.ExecuteDeleteDocuments(query);
+                connection.Storage.Container.ExecuteDeleteDocuments(query, PartitionKey.None);
             });
         }
 
@@ -321,7 +319,7 @@ namespace Hangfire.Azure
             QueueCommand(() =>
             {
                 string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Hash} AND doc.key = '{key}'";
-                connection.Storage.Client.ExecuteDeleteDocuments(query);
+                connection.Storage.Container.ExecuteDeleteDocuments(query, PartitionKey.None);
             });
         }
 
@@ -334,9 +332,10 @@ namespace Hangfire.Azure
             {
                 Data<Hash> data = new Data<Hash>();
 
-                List<Hash> hashes = connection.Storage.Client.CreateDocumentQuery<Hash>(connection.Storage.CollectionUri)
+                List<Hash> hashes = connection.Storage.Container.GetItemLinqQueryable<Hash>()
                     .Where(h => h.DocumentType == DocumentTypes.Hash && h.Key == key)
-                    .ToQueryResult();
+                    .ToQueryResult()
+                    .ToList();
 
                 Hash[] sources = keyValuePairs.Select(k => new Hash
                 {
@@ -359,7 +358,7 @@ namespace Hangfire.Azure
                     }
                 }
 
-                connection.Storage.Client.ExecuteUpsertDocuments(data);
+                connection.Storage.Container.ExecuteUpsertDocuments(data, PartitionKey.None);
             });
         }
 
@@ -371,7 +370,7 @@ namespace Hangfire.Azure
             {
                 string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Hash} AND doc.key = '{key}'";
                 int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
-                connection.Storage.Client.ExecuteExpireDocuments(query, epoch);
+                connection.Storage.Container.ExecuteExpireDocuments(query, epoch, PartitionKey.None);
             });
         }
 
@@ -382,7 +381,7 @@ namespace Hangfire.Azure
             QueueCommand(() =>
             {
                 string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Hash} AND doc.key = '{key}'";
-                connection.Storage.Client.ExecutePersistDocuments(query);
+                connection.Storage.Container.ExecutePersistDocuments(query, PartitionKey.None);
             });
         }
 
@@ -404,7 +403,7 @@ namespace Hangfire.Azure
                     CreatedOn = DateTime.UtcNow
                 };
 
-                Task<ResourceResponse<Document>> task = connection.Storage.Client.CreateDocumentWithRetriesAsync(connection.Storage.CollectionUri, data);
+                Task<ItemResponse<List>> task = connection.Storage.Container.CreateItemAsync(data);
                 task.Wait();
             });
         }
@@ -416,7 +415,7 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                string[] lists = connection.Storage.Client.CreateDocumentQuery<List>(connection.Storage.CollectionUri)
+                string[] lists = connection.Storage.Container.GetItemLinqQueryable<List>()
                     .Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
                     .Select(l => new { l.Id, l.Value })
                     .ToQueryResult()
@@ -428,7 +427,7 @@ namespace Hangfire.Azure
 
                 string ids = string.Join(",", lists.Select(l => $"'{l}'"));
                 string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.List} AND doc.id IN ({ids})";
-                connection.Storage.Client.ExecuteDeleteDocuments(query);
+                connection.Storage.Container.ExecuteDeleteDocuments(query, PartitionKey.None);
             });
         }
 
@@ -438,7 +437,7 @@ namespace Hangfire.Azure
 
             QueueCommand(() =>
             {
-                string[] lists = connection.Storage.Client.CreateDocumentQuery<List>(connection.Storage.CollectionUri)
+                string[] lists = connection.Storage.Container.GetItemLinqQueryable<List>()
                      .Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
                      .OrderByDescending(l => l.CreatedOn)
                      .Select(l => l.Id)
@@ -452,7 +451,7 @@ namespace Hangfire.Azure
 
                 string ids = string.Join(",", lists.Select(l => $"'{l}'"));
                 string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.List} AND doc.id IN ({ids})";
-                connection.Storage.Client.ExecuteDeleteDocuments(query);
+                connection.Storage.Container.ExecuteDeleteDocuments(query, PartitionKey.None);
             });
         }
 
@@ -464,7 +463,7 @@ namespace Hangfire.Azure
             {
                 string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.List} AND doc.key = '{key}'";
                 int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
-                connection.Storage.Client.ExecuteExpireDocuments(query, epoch);
+                connection.Storage.Container.ExecuteExpireDocuments(query, epoch, PartitionKey.None);
             });
         }
 
@@ -475,7 +474,7 @@ namespace Hangfire.Azure
             QueueCommand(() =>
             {
                 string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.List} AND doc.key = '{key}'";
-                connection.Storage.Client.ExecutePersistDocuments(query);
+                connection.Storage.Container.ExecutePersistDocuments(query, PartitionKey.None);
             });
         }
 

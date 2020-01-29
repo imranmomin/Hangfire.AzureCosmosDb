@@ -3,22 +3,20 @@ using System.Net;
 using System.Threading.Tasks;
 
 using Hangfire.Logging;
-using Microsoft.Azure.Documents;
-using Microsoft.Azure.Documents.Client;
-
 using Hangfire.Azure.Helper;
 using Hangfire.Azure.Documents;
+using Microsoft.Azure.Cosmos;
 
 namespace Hangfire.Azure
 {
-    internal class DocumentDbDistributedLock : IDisposable
+    internal class CosmosDbDistributedLock : IDisposable
     {
-        private readonly ILog logger = LogProvider.For<DocumentDbDistributedLock>();
+        private readonly ILog logger = LogProvider.For<CosmosDbDistributedLock>();
         private readonly string resource;
-        private readonly DocumentDbStorage storage;
+        private readonly CosmosDbStorage storage;
         private string resourceId;
 
-        public DocumentDbDistributedLock(string resource, TimeSpan timeout, DocumentDbStorage storage)
+        public CosmosDbDistributedLock(string resource, TimeSpan timeout, CosmosDbStorage storage)
         {
             this.resource = resource;
             this.storage = storage;
@@ -29,8 +27,7 @@ namespace Hangfire.Azure
         {
             if (!string.IsNullOrEmpty(resourceId))
             {
-                Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, resourceId);
-                Task task = storage.Client.DeleteDocumentWithRetriesAsync(uri).ContinueWith(t =>
+                Task task = storage.Container.DeleteItemWithRetriesAsync<Lock>(resourceId, PartitionKey.None).ContinueWith(t =>
                 {
                     resourceId = string.Empty;
                     logger.Trace($"Lock released for {resource}");
@@ -47,7 +44,6 @@ namespace Hangfire.Azure
             acquireStart.Start();
 
             string id = $"{resource}:{DocumentTypes.Lock}".GenerateHash();
-            Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, id);
 
             while (string.IsNullOrEmpty(resourceId))
             {
@@ -56,16 +52,16 @@ namespace Hangfire.Azure
 
                 try
                 {
-                    Task<DocumentResponse<Lock>> readTask = storage.Client.ReadDocumentWithRetriesAsync<Lock>(uri);
+                    Task<ItemResponse<Lock>> readTask = storage.Container.ReadItemWithRetriesAsync<Lock>(id, PartitionKey.None);
                     readTask.Wait();
 
-                    if (readTask.Result.Document != null)
+                    if (readTask.Result.Resource != null)
                     {
-                        Lock @lock = readTask.Result.Document;
+                        Lock @lock = readTask.Result.Resource;
                         @lock.ExpireOn = DateTime.UtcNow.Add(timeout);
                         @lock.TimeToLive = (int)ttl.TotalSeconds;
 
-                        Task<ResourceResponse<Document>> updateTask = storage.Client.UpsertDocumentWithRetriesAsync(storage.CollectionUri, @lock);
+                        Task<ItemResponse<Lock>> updateTask = storage.Container.UpsertItemWithRetriesAsync(@lock, PartitionKey.None);
                         updateTask.Wait();
 
                         if (updateTask.Result.StatusCode == HttpStatusCode.OK)
@@ -75,7 +71,7 @@ namespace Hangfire.Azure
                         }
                     }
                 }
-                catch (AggregateException ex) when (ex.InnerException is DocumentClientException clientException && clientException.StatusCode == HttpStatusCode.NotFound)
+                catch (AggregateException ex) when (ex.InnerException is CosmosException exception && exception.StatusCode == HttpStatusCode.NotFound)
                 {
                     Lock @lock = new Lock
                     {
@@ -85,7 +81,7 @@ namespace Hangfire.Azure
                         TimeToLive = (int)ttl.TotalSeconds
                     };
 
-                    Task<ResourceResponse<Document>> createTask = storage.Client.UpsertDocumentWithRetriesAsync(storage.CollectionUri, @lock);
+                    Task<ItemResponse<Lock>> createTask = storage.Container.UpsertItemWithRetriesAsync(@lock, PartitionKey.None);
                     createTask.Wait();
 
                     if (createTask.Result.StatusCode == HttpStatusCode.OK || createTask.Result.StatusCode == HttpStatusCode.Created)
@@ -98,7 +94,7 @@ namespace Hangfire.Azure
                 // check the timeout
                 if (acquireStart.ElapsedMilliseconds > timeout.TotalMilliseconds)
                 {
-                    throw new DocumentDbDistributedLockException($"Could not place a lock on the resource '{resource}': Lock timeout.");
+                    throw new CosmosDBDistributedLockException($"Could not place a lock on the resource '{resource}': Lock timeout.");
                 }
 
                 // sleep for 2000 millisecond

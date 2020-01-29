@@ -6,27 +6,26 @@ using System.Collections.Generic;
 
 using Hangfire.Logging;
 using Hangfire.Storage;
-using Microsoft.Azure.Documents;
-using Microsoft.Azure.Documents.Client;
 
 using Hangfire.Azure.Helper;
 using Hangfire.Azure.Documents.Helper;
+using Microsoft.Azure.Cosmos;
 
 namespace Hangfire.Azure.Queue
 {
     internal class JobQueue : IPersistentJobQueue
     {
         private readonly ILog logger = LogProvider.For<JobQueue>();
-        private readonly DocumentDbStorage storage;
+        private readonly CosmosDbStorage storage;
         private const string DISTRIBUTED_LOCK_KEY = "locks:job:dequeue";
         private readonly TimeSpan defaultLockTimeout;
         private readonly TimeSpan invisibilityTimeout = TimeSpan.FromMinutes(15);
         private readonly object syncLock = new object();
 
-        public JobQueue(DocumentDbStorage storage)
+        public JobQueue(CosmosDbStorage storage)
         {
             this.storage = storage;
-            defaultLockTimeout = TimeSpan.FromSeconds(30) + storage.Options.QueuePollInterval;
+            defaultLockTimeout = TimeSpan.FromSeconds(30) + storage.StorageOptions.QueuePollInterval;
         }
 
         public IFetchedJob Dequeue(string[] queues, CancellationToken cancellationToken)
@@ -37,11 +36,13 @@ namespace Hangfire.Azure.Queue
                 string query = $"SELECT TOP 1 * FROM doc WHERE doc.type = @type AND doc.name IN ({string.Join(", ", queueParams)}) " +
                                "AND (NOT IS_DEFINED(doc.fetched_at) OR doc.fetched_at < @timeout) ORDER BY doc.created_on";
 
-                List<SqlParameter> parameters = new List<SqlParameter> { new SqlParameter("@type", (int)Documents.DocumentTypes.Queue) };
+                QueryDefinition sql = new QueryDefinition(query)
+                    .WithParameter("@type", (int)Documents.DocumentTypes.Queue);
+
                 for (int index = 0; index < queues.Length; index++)
                 {
                     string queue = queues[index];
-                    parameters.Add(new SqlParameter($"@queue_{index}", queue));
+                    sql.WithParameter($"@queue_{index}", queue);
                 }
 
                 while (true)
@@ -49,18 +50,12 @@ namespace Hangfire.Azure.Queue
                     cancellationToken.ThrowIfCancellationRequested();
                     logger.Trace("Looking for any jobs from the queue");
 
-                    using (new DocumentDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage))
+                    using (new CosmosDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage))
                     {
                         int invisibilityTimeoutEpoch = DateTime.UtcNow.Add(invisibilityTimeout.Negate()).ToEpoch();
+                        sql.WithParameter("@timeout", invisibilityTimeoutEpoch);
 
-                        SqlQuerySpec sql = new SqlQuerySpec
-                        {
-                            QueryText = query,
-                            Parameters = new SqlParameterCollection(parameters)
-                        };
-                        sql.Parameters.Add(new SqlParameter("@timeout", invisibilityTimeoutEpoch));
-
-                        Documents.Queue data = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, sql)
+                        Documents.Queue data = storage.Container.GetItemQueryIterator<Documents.Queue>(sql)
                             .ToQueryResult()
                             .FirstOrDefault();
 
@@ -68,9 +63,7 @@ namespace Hangfire.Azure.Queue
                         {
                             // mark the document
                             data.FetchedAt = DateTime.UtcNow;
-
-                            Uri replaceUri = new Uri(data.SelfLink, UriKind.Relative);
-                            Task<ResourceResponse<Document>> task = storage.Client.ReplaceDocumentWithRetriesAsync(replaceUri, data, cancellationToken: cancellationToken);
+                            Task<ItemResponse<Documents.Queue>> task = storage.Container.ReplaceItemWithRetriesAsync(data, data.Id, cancellationToken: cancellationToken);
                             task.Wait(cancellationToken);
 
                             logger.Trace($"Found job {data.JobId} from the queue : {data.Name}");
@@ -78,8 +71,8 @@ namespace Hangfire.Azure.Queue
                         }
                     }
 
-                    logger.Trace($"Unable to find any jobs in the queue. Will check the queue for jobs in {storage.Options.QueuePollInterval.TotalSeconds} seconds");
-                    cancellationToken.WaitHandle.WaitOne(storage.Options.QueuePollInterval);
+                    logger.Trace($"Unable to find any jobs in the queue. Will check the queue for jobs in {storage.StorageOptions.QueuePollInterval.TotalSeconds} seconds");
+                    cancellationToken.WaitHandle.WaitOne(storage.StorageOptions.QueuePollInterval);
                 }
             }
         }
@@ -93,7 +86,7 @@ namespace Hangfire.Azure.Queue
                 CreatedOn = DateTime.UtcNow
             };
 
-            Task<ResourceResponse<Document>> task = storage.Client.CreateDocumentWithRetriesAsync(storage.CollectionUri, data);
+            Task<ItemResponse<Documents.Queue>> task = storage.Container.CreateItemWithRetriesAsync(data, PartitionKey.None);
             task.Wait();
         }
     }

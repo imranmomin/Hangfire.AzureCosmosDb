@@ -252,3 +252,6 @@ paket-files/
 *.sln.iml
 
 /test
+
+# NPM Package Lock
+package-lock.json

@@ -1,25 +1,23 @@
 ﻿using System.IO;
 using System.Text;
-using Microsoft.Azure.Cosmos;
+
 using Newtonsoft.Json;
+using Microsoft.Azure.Cosmos;
 
 namespace Hangfire.Azure
 {
     public class CosmosJsonSerializer : CosmosSerializer
     {
-        private static readonly Encoding DefaultEncoding = new UTF8Encoding(false, true);
-        private readonly JsonSerializer Serializer;
-        private readonly JsonSerializerSettings serializerSettings;
+        private static readonly Encoding defaultEncoding = new UTF8Encoding(false, true);
+        private readonly JsonSerializer serializer;
 
-        public CosmosJsonSerializer()
-            : this(new JsonSerializerSettings())
+        public CosmosJsonSerializer() : this(new JsonSerializerSettings())
         {
         }
 
         public CosmosJsonSerializer(JsonSerializerSettings serializerSettings)
         {
-            this.serializerSettings = serializerSettings;
-            Serializer = JsonSerializer.Create(this.serializerSettings);
+            serializer = JsonSerializer.Create(serializerSettings);
         }
 
         public override T FromStream<T>(Stream stream)
@@ -35,7 +33,7 @@ namespace Hangfire.Azure
                 {
                     using (JsonTextReader jsonTextReader = new JsonTextReader(sr))
                     {
-                        return Serializer.Deserialize<T>(jsonTextReader);
+                        return serializer.Deserialize<T>(jsonTextReader);
                     }
                 }
             }
@@ -44,12 +42,12 @@ namespace Hangfire.Azure
         public override Stream ToStream<T>(T input)
         {
             MemoryStream streamPayload = new MemoryStream();
-            using (StreamWriter streamWriter = new StreamWriter(streamPayload, encoding: DefaultEncoding, bufferSize: 1024, leaveOpen: true))
+            using (StreamWriter streamWriter = new StreamWriter(streamPayload, defaultEncoding, 1024, true))
             {
                 using (JsonWriter writer = new JsonTextWriter(streamWriter))
                 {
                     writer.Formatting = Formatting.None;
-                    Serializer.Serialize(writer, input);
+                    serializer.Serialize(writer, input);
                     writer.Flush();
                     streamWriter.Flush();
                 }

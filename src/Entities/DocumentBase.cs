@@ -1,8 +1,8 @@
 ﻿using System;
-using Newtonsoft.Json;
 using System.Collections.Generic;
 
-using Microsoft.Azure.Documents;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 // ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents

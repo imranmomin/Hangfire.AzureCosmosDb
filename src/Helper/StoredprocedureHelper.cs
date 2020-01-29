@@ -1,49 +1,35 @@
-﻿using System;
-using System.Linq;
+﻿using System.Linq;
 using System.Threading.Tasks;
 
-using Microsoft.Azure.Documents.Client;
-
+using Microsoft.Azure.Cosmos;
 using Hangfire.Azure.Documents;
+using Microsoft.Azure.Cosmos.Scripts;
 
 namespace Hangfire.Azure.Helper
 {
     internal static class StoredprocedureHelper
     {
-        private static Uri spPersistDocumentsUri;
-        private static Uri spExpireDocumentsUri;
-        private static Uri spDeleteDocumentsUri;
-        private static Uri spUpsertDocumentsUri;
-
-        internal static void Setup(string databaseName, string collectionName)
-        {
-            spPersistDocumentsUri = UriFactory.CreateStoredProcedureUri(databaseName, collectionName, "persistDocuments");
-            spExpireDocumentsUri = UriFactory.CreateStoredProcedureUri(databaseName, collectionName, "expireDocuments");
-            spDeleteDocumentsUri = UriFactory.CreateStoredProcedureUri(databaseName, collectionName, "deleteDocuments");
-            spUpsertDocumentsUri = UriFactory.CreateStoredProcedureUri(databaseName, collectionName, "upsertDocuments");
-        }
-
-        internal static int ExecuteUpsertDocuments<T>(this DocumentClient client, Data<T> data)
+        internal static int ExecuteUpsertDocuments<T>(this Container container, Data<T> data, PartitionKey partitionKey)
         {
             int affected = 0;
             Data<T> records = new Data<T>(data.Items);
             do
             {
                 records.Items = data.Items.Skip(affected).ToList();
-                Task<StoredProcedureResponse<int>> task = client.ExecuteStoredProcedureWithRetriesAsync<int>(spUpsertDocumentsUri, records);
+                Task<StoredProcedureExecuteResponse<int>> task = container.Scripts.ExecuteStoredProcedureAsync<int>("upsertDocuments", partitionKey, (dynamic)records);
                 task.Wait();
-                affected += task.Result;
+                affected += task.Result.Resource;
             } while (affected < data.Items.Count);
             return affected;
         }
 
-        internal static int ExecuteDeleteDocuments(this DocumentClient client, string query)
+        internal static int ExecuteDeleteDocuments(this Container container, string query, PartitionKey partitionKey)
         {
             int affected = 0;
             ProcedureResponse response;
             do
             {
-                Task<StoredProcedureResponse<ProcedureResponse>> task = client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spDeleteDocumentsUri, query);
+                Task<StoredProcedureExecuteResponse<ProcedureResponse>> task = container.Scripts.ExecuteStoredProcedureAsync<ProcedureResponse>("deleteDocuments", partitionKey, (dynamic)query);
                 task.Wait();
                 response = task.Result;
                 affected += response.Affected;
@@ -51,23 +37,23 @@ namespace Hangfire.Azure.Helper
             return affected;
         }
 
-        internal static void ExecutePersistDocuments(this DocumentClient client, string query)
+        internal static void ExecutePersistDocuments(this Container container, string query, PartitionKey partitionKey)
         {
             ProcedureResponse response;
             do
             {
-                Task<StoredProcedureResponse<ProcedureResponse>> task = client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spPersistDocumentsUri, query);
+                Task<StoredProcedureExecuteResponse<ProcedureResponse>> task = container.Scripts.ExecuteStoredProcedureAsync<ProcedureResponse>("persistDocuments", partitionKey, (dynamic)query);
                 task.Wait();
                 response = task.Result;
             } while (response.Continuation);
         }
 
-        internal static void ExecuteExpireDocuments(this DocumentClient client, string query, int epoch)
+        internal static void ExecuteExpireDocuments(this Container container, string query, int epoch, PartitionKey partitionKey)
         {
             ProcedureResponse response;
             do
             {
-                Task<StoredProcedureResponse<ProcedureResponse>> task = client.ExecuteStoredProcedureWithRetriesAsync<ProcedureResponse>(spExpireDocumentsUri, query, epoch);
+                Task<StoredProcedureExecuteResponse<ProcedureResponse>> task = container.Scripts.ExecuteStoredProcedureAsync<ProcedureResponse>("expireDocuments", partitionKey, (dynamic)query, (dynamic)epoch);
                 task.Wait();
                 response = task.Result;
             } while (response.Continuation);

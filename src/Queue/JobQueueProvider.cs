@@ -5,7 +5,7 @@
         private readonly JobQueue queue;
         private readonly JobQueueMonitoringApi monitoringQueue;
 
-        public JobQueueProvider(DocumentDbStorage storage)
+        public JobQueueProvider(CosmosDbStorage storage)
         {
             queue = new JobQueue(storage);
             monitoringQueue = new JobQueueMonitoringApi(storage);

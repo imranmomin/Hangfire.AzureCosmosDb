@@ -11,7 +11,7 @@ namespace Hangfire.Azure.Documents
         [JsonProperty("value")]
         public int Value { get; set; }
 
-        [JsonProperty("counter_type")]
+        [JsonProperty("counterType")]
         public CounterTypes Type { get; set; }
 
         public override DocumentTypes DocumentType => DocumentTypes.Counter;

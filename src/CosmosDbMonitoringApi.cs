@@ -6,25 +6,25 @@ using System.Collections.Generic;
 using Hangfire.Common;
 using Hangfire.States;
 using Hangfire.Storage;
-using Microsoft.Azure.Documents;
 using Hangfire.Storage.Monitoring;
-using Microsoft.Azure.Documents.Client;
 
 using Hangfire.Azure.Queue;
 using Hangfire.Azure.Helper;
 using Hangfire.Azure.Documents;
 
+using Microsoft.Azure.Cosmos;
+
 namespace Hangfire.Azure
 {
-    internal sealed class DocumentDbMonitoringApi : IMonitoringApi
+    internal sealed class CosmosDbMonitoringApi : IMonitoringApi
     {
-        private readonly DocumentDbStorage storage;
+        private readonly CosmosDbStorage storage;
         private readonly object cacheLock = new object();
         private static readonly TimeSpan cacheTimeout = TimeSpan.FromSeconds(2);
         private static DateTime cacheUpdated;
         private static StatisticsDto cacheStatisticsDto;
 
-        public DocumentDbMonitoringApi(DocumentDbStorage storage) => this.storage = storage;
+        public CosmosDbMonitoringApi(CosmosDbStorage storage) => this.storage = storage;
 
         public IList<QueueWithTopEnqueuedJobsDto> Queues()
         {
@@ -55,10 +55,9 @@ namespace Hangfire.Azure
 
         public IList<ServerDto> Servers()
         {
-            return storage.Client.CreateDocumentQuery<Documents.Server>(storage.CollectionUri)
+            return storage.Container.GetItemLinqQueryable<Documents.Server>()
                 .Where(s => s.DocumentType == DocumentTypes.Server)
                 .OrderByDescending(s => s.CreatedOn)
-                .ToQueryResult()
                 .Select(server => new ServerDto
                 {
                     Name = server.ServerId,
@@ -66,34 +65,36 @@ namespace Hangfire.Azure
                     Queues = server.Queues,
                     StartedAt = server.CreatedOn,
                     WorkersCount = server.Workers
-                }).ToList();
+                })
+                .ToQueryResult()
+                .ToList();
         }
 
         public JobDetailsDto JobDetails(string jobId)
         {
             if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
 
-            Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, jobId);
-            Task<DocumentResponse<Documents.Job>> task = storage.Client.ReadDocumentWithRetriesAsync<Documents.Job>(uri);
+            Task<ItemResponse<Documents.Job>> task = storage.Container.ReadItemAsync<Documents.Job>(jobId, PartitionKey.None);
             task.Wait();
 
-            if (task.Result.Document != null)
+            if (task.Result.Resource != null)
             {
                 Documents.Job job = task.Result;
                 InvocationData invocationData = job.InvocationData;
                 invocationData.Arguments = job.Arguments;
 
-                List<StateHistoryDto> states = storage.Client.CreateDocumentQuery<State>(storage.CollectionUri)
+                List<StateHistoryDto> states = storage.Container.GetItemLinqQueryable<State>()
                     .Where(s => s.DocumentType == DocumentTypes.State && s.JobId == jobId)
                     .OrderByDescending(s => s.CreatedOn)
-                    .ToQueryResult()
                     .Select(s => new StateHistoryDto
                     {
                         Data = s.Data,
                         CreatedAt = s.CreatedOn,
                         Reason = s.Reason,
                         StateName = s.Name
-                    }).ToList();
+                    })
+                    .ToQueryResult()
+                    .ToList();
 
                 return new JobDetailsDto
                 {
@@ -117,61 +118,50 @@ namespace Hangfire.Azure
                     Dictionary<string, long> results = new Dictionary<string, long>();
 
                     // get counts of jobs on state
-                    string[] keys = { EnqueuedState.StateName, FailedState.StateName, ProcessingState.StateName, ScheduledState.StateName };
-                    foreach (string state in keys)
+                    QueryDefinition sql = new QueryDefinition("SELECT doc.state_name, COUNT(1) AS StateCount FROM doc WHERE doc.type = @type AND IS_DEFINED(doc.state_name) AND doc.state_name IN @state GROUP BY doc.state_name")
+                        .WithParameter("@type", (int)DocumentTypes.Job)
+                        .WithParameter("@state", new[] { EnqueuedState.StateName, FailedState.StateName, ProcessingState.StateName, ScheduledState.StateName });
+
+                    List<(string state, int stateCount)> states = storage.Container.GetItemQueryIterator<(string state, int stateCount)>(sql)
+                         .ToQueryResult()
+                         .ToList();
+
+                    foreach ((string state, int stateCount) state in states)
                     {
-                        long states = GetNumberOfJobsByStateName(state);
-                        results.Add(state.ToLower(), states);
+                        results.Add(state.state, state.stateCount);
                     }
 
-                    // get counts of servers
-                    SqlQuerySpec sql = new SqlQuerySpec
-                    {
-                        QueryText = "SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type",
-                        Parameters = new SqlParameterCollection
-                        {
-                            new SqlParameter("@type", (int)DocumentTypes.Server)
-                        }
-                    };
 
-                    long servers = storage.Client.CreateDocumentQuery<long>(storage.CollectionUri, sql)
+                    // get counts of servers
+                    sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type")
+                       .WithParameter("@type", (int)DocumentTypes.Server);
+
+                    long servers = storage.Container.GetItemQueryIterator<long>(sql)
                         .ToQueryResult()
                         .FirstOrDefault();
 
                     results.Add("servers", servers);
 
                     // get sum of stats:succeeded / stats:deleted counters
-                    keys = new[] { "stats:succeeded", "stats:deleted" };
-                    foreach (string key in keys)
+                    sql = new QueryDefinition("SELECT doc.key, SUM(doc['value']) AS TOTAL FROM doc WHERE doc.type = @type AND doc.key IN @key GROUP BY doc.key")
+                        .WithParameter("@key", new[] { "stats:succeeded", "stats:deleted" })
+                        .WithParameter("@type", (int)DocumentTypes.Counter);
+
+                    List<(string key, int total)> counters = storage.Container.GetItemQueryIterator<(string key, int total)>(sql)
+                        .ToQueryResult()
+                        .ToList();
+
+                    foreach ((string key, int total) counter in counters)
                     {
-                        sql = new SqlQuerySpec
-                        {
-                            QueryText = "SELECT TOP 1 VALUE SUM(doc['value']) FROM doc WHERE doc.type = @type AND doc.key = @key",
-                            Parameters = new SqlParameterCollection
-                            {
-                                new SqlParameter("@key", key),
-                                new SqlParameter("@type", (int)DocumentTypes.Counter)
-                            }
-                        };
-
-                        long counters = storage.Client.CreateDocumentQuery<long>(storage.CollectionUri, sql)
-                           .ToQueryResult()
-                           .FirstOrDefault();
-
-                        results.Add(key, counters);
+                        results.Add(counter.key, counter.total);
                     }
 
-                    sql = new SqlQuerySpec
-                    {
-                        QueryText = "SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.key = @key",
-                        Parameters = new SqlParameterCollection
-                        {
-                            new SqlParameter("@key", "recurring-jobs"),
-                            new SqlParameter("@type", (int)DocumentTypes.Set)
-                        }
-                    };
 
-                    long jobs = storage.Client.CreateDocumentQuery<long>(storage.CollectionUri, sql)
+                    sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.key = @key")
+                        .WithParameter("@key", "recurring-jobs")
+                        .WithParameter("@type", (int)DocumentTypes.Set);
+
+                    long jobs = storage.Container.GetItemQueryIterator<long>(sql)
                         .ToQueryResult()
                         .FirstOrDefault();
 
@@ -293,32 +283,28 @@ namespace Hangfire.Azure
         private JobList<T> GetJobsOnState<T>(string stateName, int from, int count, Func<State, Common.Job, T> selector)
         {
             List<KeyValuePair<string, T>> jobs = new List<KeyValuePair<string, T>>();
-            FeedOptions feedOptions = new FeedOptions
-            {
-                EnableCrossPartitionQuery = true
-            };
 
-            List<Documents.Job> filterJobs = storage.Client.CreateDocumentQuery<Documents.Job>(storage.CollectionUri, feedOptions)
+            List<Documents.Job> filterJobs = storage.Container.GetItemLinqQueryable<Documents.Job>()
                 .Where(j => j.DocumentType == DocumentTypes.Job && j.StateName == stateName)
                 .OrderByDescending(j => j.CreatedOn)
                 .Skip(from).Take(count)
-                .ToQueryResult();
+                .ToQueryResult()
+                .ToList();
+
+            string[] ids = filterJobs.Select(x => x.StateId).ToArray();
+            List<State> states = storage.Container.GetItemLinqQueryable<State>()
+                .Where(x => ids.Contains(x.Id))
+                .ToQueryResult()
+                .ToList();
 
             filterJobs.ForEach(job =>
             {
-                Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, job.StateId);
-                Task<DocumentResponse<State>> task = storage.Client.ReadDocumentWithRetriesAsync<State>(uri);
-                task.Wait();
+                State state = states.Find(x => x.Id == job.StateId);
+                InvocationData invocationData = job.InvocationData;
+                invocationData.Arguments = job.Arguments;
 
-                if (task.Result.Document != null)
-                {
-                    State state = task.Result;
-                    InvocationData invocationData = job.InvocationData;
-                    invocationData.Arguments = job.Arguments;
-
-                    T data = selector(state, invocationData.DeserializeJob());
-                    jobs.Add(new KeyValuePair<string, T>(job.Id, data));
-                }
+                T data = selector(state, invocationData.DeserializeJob());
+                jobs.Add(new KeyValuePair<string, T>(job.Id, data));
             });
 
             return new JobList<T>(jobs);
@@ -329,42 +315,36 @@ namespace Hangfire.Azure
             if (string.IsNullOrEmpty(queue)) throw new ArgumentNullException(nameof(queue));
             List<KeyValuePair<string, T>> jobs = new List<KeyValuePair<string, T>>();
 
-            SqlQuerySpec sql = new SqlQuerySpec
-            {
-                QueryText = queryText,
-                Parameters = new SqlParameterCollection
-                {
-                    new SqlParameter("@type", (int)DocumentTypes.Queue),
-                    new SqlParameter("@name", queue)
-                }
-            };
+            QueryDefinition sql = new QueryDefinition(queryText)
+                .WithParameter("@type", (int)DocumentTypes.Queue)
+                .WithParameter("@name", queue);
 
-            FeedOptions feedOptions = new FeedOptions
-            {
-                EnableCrossPartitionQuery = true
-            };
+            List<Documents.Queue> queues = storage.Container.GetItemQueryIterator<Documents.Queue>(sql)
+                .ToQueryResult()
+                .ToList();
 
-            List<Documents.Queue> queues = storage.Client.CreateDocumentQuery<Documents.Queue>(storage.CollectionUri, sql, feedOptions)
-                 .ToList();
+            string[] ids = queues.Select(x => x.JobId).ToArray();
+            List<Documents.Job> filterJobs = storage.Container.GetItemLinqQueryable<Documents.Job>()
+                .Where(x => ids.Contains(x.Id))
+                .ToQueryResult()
+                .ToList();
+
+            ids = filterJobs.Select(x => x.StateId).ToArray();
+            List<State> states = storage.Container.GetItemLinqQueryable<State>()
+                .Where(x => ids.Contains(x.Id))
+                .ToQueryResult()
+                .ToList();
 
             queues.ForEach(queueItem =>
             {
-                Uri uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, queueItem.JobId);
-                Task<DocumentResponse<Documents.Job>> task = storage.Client.ReadDocumentWithRetriesAsync<Documents.Job>(uri);
-                task.Wait();
+                Documents.Job job = filterJobs.Find(x => x.Id == queueItem.JobId);
+                InvocationData invocationData = job.InvocationData;
+                invocationData.Arguments = job.Arguments;
 
-                if (task.Result != null)
-                {
-                    Documents.Job job = task.Result;
-                    InvocationData invocationData = job.InvocationData;
-                    invocationData.Arguments = job.Arguments;
+                State state = states.Find(x => x.Id == job.StateId);
 
-                    uri = UriFactory.CreateDocumentUri(storage.Options.DatabaseName, storage.Options.CollectionName, job.StateId);
-                    Task<DocumentResponse<State>> stateTask = storage.Client.ReadDocumentWithRetriesAsync<State>(uri);
-
-                    T data = selector(stateTask.Result, invocationData.DeserializeJob(), queueItem.FetchedAt);
-                    jobs.Add(new KeyValuePair<string, T>(job.Id, data));
-                }
+                T data = selector(state, invocationData.DeserializeJob(), queueItem.FetchedAt);
+                jobs.Add(new KeyValuePair<string, T>(job.Id, data));
             });
 
             return new JobList<T>(jobs);
@@ -406,17 +386,11 @@ namespace Hangfire.Azure
 
         private long GetNumberOfJobsByStateName(string state)
         {
-            SqlQuerySpec sql = new SqlQuerySpec
-            {
-                QueryText = "SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type AND IS_DEFINED(doc.state_name) AND doc.state_name = @state",
-                Parameters = new SqlParameterCollection
-                {
-                    new SqlParameter("@state", state),
-                    new SqlParameter("@type", (int)DocumentTypes.Job)
-                }
-            };
+            QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type AND IS_DEFINED(doc.state_name) AND doc.state_name = @state")
+                .WithParameter("@type", (int)DocumentTypes.Job)
+                .WithParameter("@state", state);
 
-            return storage.Client.CreateDocumentQuery<long>(storage.CollectionUri, sql)
+            return storage.Container.GetItemQueryIterator<long>(sql)
                   .ToQueryResult()
                   .FirstOrDefault();
         }
@@ -462,18 +436,20 @@ namespace Hangfire.Azure
             Dictionary<DateTime, long> result = keys.ToDictionary(k => k.Value, v => default(long));
             string[] filter = keys.Keys.ToArray();
 
-            Dictionary<string, int> data = storage.Client.CreateDocumentQuery<Counter>(storage.CollectionUri)
-                .Where(c => c.Type == CounterTypes.Aggregate && c.DocumentType == DocumentTypes.Counter)
-                .Where(c => filter.Contains(c.Key))
-                .Select(c => new { c.Key, c.Value })
-                .ToQueryResult()
-                .GroupBy(c => c.Key)
-                .ToDictionary(k => k.Key, k => k.Sum(c => c.Value));
+            QueryDefinition sql = new QueryDefinition("SELECT doc.key, SUM(doc['value']) AS Total FROM doc WHERE doc.type = @type AND doc.counterType = @counterType AND doc.key IN @keys GROUP BY doc.key")
+                .WithParameter("@counterType", (int)CounterTypes.Aggregate)
+                .WithParameter("@type", (int)DocumentTypes.Counter)
+                .WithParameter("@keys", filter);
 
+            List<(string key, int total)> data = storage.Container.GetItemQueryIterator<(string key, int total)>(sql)
+                .ToQueryResult()
+                .ToList();
+            
             foreach (string key in keys.Keys)
             {
                 DateTime date = keys.Where(k => k.Key == key).Select(k => k.Value).First();
-                result[date] = data.TryGetValue(key, out int value) ? value : 0;
+                (string key, int total) item = data.SingleOrDefault(x => x.key == key);
+                result[date] = item.total;
             }
 
             return result;
