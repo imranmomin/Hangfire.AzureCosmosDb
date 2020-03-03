@@ -16,7 +16,7 @@ namespace Hangfire.Azure.Helper
             do
             {
                 records.Items = data.Items.Skip(affected).ToList();
-                Task<StoredProcedureExecuteResponse<int>> task = container.Scripts.ExecuteStoredProcedureAsync<int>("upsertDocuments", partitionKey, (dynamic)records);
+                Task<StoredProcedureExecuteResponse<int>> task = container.Scripts.ExecuteStoredProcedureAsync<int>("upsertDocuments", partitionKey, new dynamic[] { records });
                 task.Wait();
                 affected += task.Result.Resource;
             } while (affected < data.Items.Count);
@@ -29,7 +29,7 @@ namespace Hangfire.Azure.Helper
             ProcedureResponse response;
             do
             {
-                Task<StoredProcedureExecuteResponse<ProcedureResponse>> task = container.Scripts.ExecuteStoredProcedureAsync<ProcedureResponse>("deleteDocuments", partitionKey, (dynamic)query);
+                Task<StoredProcedureExecuteResponse<ProcedureResponse>> task = container.Scripts.ExecuteStoredProcedureAsync<ProcedureResponse>("deleteDocuments", partitionKey, new dynamic[] { query });
                 task.Wait();
                 response = task.Result;
                 affected += response.Affected;
@@ -42,7 +42,7 @@ namespace Hangfire.Azure.Helper
             ProcedureResponse response;
             do
             {
-                Task<StoredProcedureExecuteResponse<ProcedureResponse>> task = container.Scripts.ExecuteStoredProcedureAsync<ProcedureResponse>("persistDocuments", partitionKey, (dynamic)query);
+                Task<StoredProcedureExecuteResponse<ProcedureResponse>> task = container.Scripts.ExecuteStoredProcedureAsync<ProcedureResponse>("persistDocuments", partitionKey, new dynamic[] { query });
                 task.Wait();
                 response = task.Result;
             } while (response.Continuation);
@@ -53,7 +53,7 @@ namespace Hangfire.Azure.Helper
             ProcedureResponse response;
             do
             {
-                Task<StoredProcedureExecuteResponse<ProcedureResponse>> task = container.Scripts.ExecuteStoredProcedureAsync<ProcedureResponse>("expireDocuments", partitionKey, (dynamic)query, (dynamic)epoch);
+                Task<StoredProcedureExecuteResponse<ProcedureResponse>> task = container.Scripts.ExecuteStoredProcedureAsync<ProcedureResponse>("expireDocuments", partitionKey, new dynamic[] { query, epoch });
                 task.Wait();
                 response = task.Result;
             } while (response.Continuation);
