@@ -30,7 +30,7 @@ namespace Hangfire.Azure
 
         private CosmosClient Client { get; }
 
-        internal Container Container { get; private set; } 
+        internal Container Container { get; private set; }
 
         private readonly string database;
         private readonly string collection;
@@ -61,7 +61,7 @@ namespace Hangfire.Azure
 
             JobQueueProvider provider = new JobQueueProvider(this);
             QueueProviders = new PersistentJobQueueProviderCollection(provider);
-            
+
             options = options ?? new CosmosClientOptions();
             options.Serializer = new CosmosJsonSerializer(settings);
             Client = new CosmosClient(url, authSecret, options);

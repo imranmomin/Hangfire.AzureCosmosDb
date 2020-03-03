@@ -444,7 +444,7 @@ namespace Hangfire.Azure
             List<(string key, int total)> data = storage.Container.GetItemQueryIterator<(string key, int total)>(sql)
                 .ToQueryResult()
                 .ToList();
-            
+
             foreach (string key in keys.Keys)
             {
                 DateTime date = keys.Where(k => k.Key == key).Select(k => k.Value).First();
