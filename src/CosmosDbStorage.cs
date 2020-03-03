@@ -57,12 +57,12 @@ namespace Hangfire.Azure
         {
             this.database = database;
             this.collection = collection;
-            StorageOptions = storageOptions ?? new CosmosDbStorageOptions();
+            StorageOptions ??= new CosmosDbStorageOptions();
 
             JobQueueProvider provider = new JobQueueProvider(this);
             QueueProviders = new PersistentJobQueueProviderCollection(provider);
 
-            options = options ?? new CosmosClientOptions();
+            options ??= new CosmosClientOptions();
             options.Serializer = new CosmosJsonSerializer(settings);
             Client = new CosmosClient(url, authSecret, options);
             Initialize();
@@ -125,7 +125,7 @@ namespace Hangfire.Azure
             {
                 logger.Info($"Creating document collection : {collection}");
                 Database resultDatabase = t.Result.Database;
-                return resultDatabase.CreateContainerAsync(new ContainerProperties { Id = collection });
+                return resultDatabase.CreateContainerIfNotExistsAsync(collection, "/type");
             }, TaskContinuationOptions.OnlyOnRanToCompletion).Unwrap();
 
             // create stored procedures 
@@ -148,7 +148,17 @@ namespace Hangfire.Azure
                                 .Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries)
                                 .Last()
                         };
-                        Container.Scripts.ReplaceStoredProcedureAsync(sp).Wait();
+
+                        Task<Microsoft.Azure.Cosmos.Scripts.StoredProcedureResponse> spTask = Container.Scripts.ReplaceStoredProcedureAsync(sp);
+                        spTask.ContinueWith(x =>
+                        {
+                            if (x.Status == TaskStatus.Faulted && x.Exception.InnerException is CosmosException ex && ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+                            {
+                                return Container.Scripts.CreateStoredProcedureAsync(sp);
+                            }
+
+                            return Task.FromResult(x.Result);
+                        }).Unwrap().Wait();
                     }
                     stream?.Close();
                 }
