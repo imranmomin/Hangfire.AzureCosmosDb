@@ -27,7 +27,7 @@ namespace Hangfire.Azure
         {
             if (!string.IsNullOrEmpty(resourceId))
             {
-                Task task = storage.Container.DeleteItemWithRetriesAsync<Lock>(resourceId, PartitionKey.None).ContinueWith(t =>
+                Task task = storage.Container.DeleteItemWithRetriesAsync<Lock>(resourceId, new PartitionKey((int)DocumentTypes.Lock)).ContinueWith(t =>
                 {
                     resourceId = string.Empty;
                     logger.Trace($"Lock released for {resource}");
@@ -52,7 +52,7 @@ namespace Hangfire.Azure
 
                 try
                 {
-                    Task<ItemResponse<Lock>> readTask = storage.Container.ReadItemWithRetriesAsync<Lock>(id, PartitionKey.None);
+                    Task<ItemResponse<Lock>> readTask = storage.Container.ReadItemWithRetriesAsync<Lock>(id, new PartitionKey((int)DocumentTypes.Lock));
                     readTask.Wait();
 
                     if (readTask.Result.Resource != null)
@@ -61,7 +61,7 @@ namespace Hangfire.Azure
                         @lock.ExpireOn = DateTime.UtcNow.Add(timeout);
                         @lock.TimeToLive = (int)ttl.TotalSeconds;
 
-                        Task<ItemResponse<Lock>> updateTask = storage.Container.UpsertItemWithRetriesAsync(@lock, PartitionKey.None);
+                        Task<ItemResponse<Lock>> updateTask = storage.Container.UpsertItemWithRetriesAsync(@lock, new PartitionKey((int)DocumentTypes.Lock));
                         updateTask.Wait();
 
                         if (updateTask.Result.StatusCode == HttpStatusCode.OK)
@@ -81,7 +81,7 @@ namespace Hangfire.Azure
                         TimeToLive = (int)ttl.TotalSeconds
                     };
 
-                    Task<ItemResponse<Lock>> createTask = storage.Container.UpsertItemWithRetriesAsync(@lock, PartitionKey.None);
+                    Task<ItemResponse<Lock>> createTask = storage.Container.UpsertItemWithRetriesAsync(@lock, new PartitionKey((int)DocumentTypes.Lock));
                     createTask.Wait();
 
                     if (createTask.Result.StatusCode == HttpStatusCode.OK || createTask.Result.StatusCode == HttpStatusCode.Created)

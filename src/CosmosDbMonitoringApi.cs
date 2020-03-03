@@ -55,9 +55,10 @@ namespace Hangfire.Azure
 
         public IList<ServerDto> Servers()
         {
-            return storage.Container.GetItemLinqQueryable<Documents.Server>()
+            return storage.Container.GetItemLinqQueryable<Documents.Server>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Server) })
                 .Where(s => s.DocumentType == DocumentTypes.Server)
                 .OrderByDescending(s => s.CreatedOn)
+                .ToQueryResult()
                 .Select(server => new ServerDto
                 {
                     Name = server.ServerId,
@@ -66,7 +67,6 @@ namespace Hangfire.Azure
                     StartedAt = server.CreatedOn,
                     WorkersCount = server.Workers
                 })
-                .ToQueryResult()
                 .ToList();
         }
 
@@ -74,7 +74,7 @@ namespace Hangfire.Azure
         {
             if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
 
-            Task<ItemResponse<Documents.Job>> task = storage.Container.ReadItemAsync<Documents.Job>(jobId, PartitionKey.None);
+            Task<ItemResponse<Documents.Job>> task = storage.Container.ReadItemAsync<Documents.Job>(jobId, new PartitionKey((int)DocumentTypes.Job));
             task.Wait();
 
             if (task.Result.Resource != null)
@@ -118,11 +118,11 @@ namespace Hangfire.Azure
                     Dictionary<string, long> results = new Dictionary<string, long>();
 
                     // get counts of jobs on state
-                    QueryDefinition sql = new QueryDefinition("SELECT doc.state_name, COUNT(1) AS StateCount FROM doc WHERE doc.type = @type AND IS_DEFINED(doc.state_name) AND doc.state_name IN @state GROUP BY doc.state_name")
+                    QueryDefinition sql = new QueryDefinition("SELECT doc.state_name, COUNT(1) AS StateCount FROM doc WHERE doc.type = @type AND IS_DEFINED(doc.state_name) AND doc.state_name IN (@state) GROUP BY doc.state_name")
                         .WithParameter("@type", (int)DocumentTypes.Job)
                         .WithParameter("@state", new[] { EnqueuedState.StateName, FailedState.StateName, ProcessingState.StateName, ScheduledState.StateName });
 
-                    List<(string state, int stateCount)> states = storage.Container.GetItemQueryIterator<(string state, int stateCount)>(sql)
+                    List<(string state, int stateCount)> states = storage.Container.GetItemQueryIterator<(string state, int stateCount)>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Job) })
                          .ToQueryResult()
                          .ToList();
 
@@ -130,8 +130,7 @@ namespace Hangfire.Azure
                     {
                         results.Add(state.state, state.stateCount);
                     }
-
-
+                    
                     // get counts of servers
                     sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type")
                        .WithParameter("@type", (int)DocumentTypes.Server);
@@ -143,7 +142,7 @@ namespace Hangfire.Azure
                     results.Add("servers", servers);
 
                     // get sum of stats:succeeded / stats:deleted counters
-                    sql = new QueryDefinition("SELECT doc.key, SUM(doc['value']) AS TOTAL FROM doc WHERE doc.type = @type AND doc.key IN @key GROUP BY doc.key")
+                    sql = new QueryDefinition("SELECT doc.key, SUM(doc['value']) AS TOTAL FROM doc WHERE doc.type = @type AND doc.key IN (@key) GROUP BY doc.key")
                         .WithParameter("@key", new[] { "stats:succeeded", "stats:deleted" })
                         .WithParameter("@type", (int)DocumentTypes.Counter);
 
@@ -167,7 +166,7 @@ namespace Hangfire.Azure
 
                     results.Add("recurring-jobs", jobs);
 
-                    long getValueOrDefault(string key) => results.TryGetValue(key, out long value) ? value : default(long);
+                    long getValueOrDefault(string key) => results.TryGetValue(key, out long value) ? value : default;
 
                     // ReSharper disable once UseObjectOrCollectionInitializer
                     cacheStatisticsDto = new StatisticsDto
@@ -436,7 +435,7 @@ namespace Hangfire.Azure
             Dictionary<DateTime, long> result = keys.ToDictionary(k => k.Value, v => default(long));
             string[] filter = keys.Keys.ToArray();
 
-            QueryDefinition sql = new QueryDefinition("SELECT doc.key, SUM(doc['value']) AS Total FROM doc WHERE doc.type = @type AND doc.counterType = @counterType AND doc.key IN @keys GROUP BY doc.key")
+            QueryDefinition sql = new QueryDefinition("SELECT doc.key, SUM(doc['value']) AS Total FROM doc WHERE doc.type = @type AND doc.counterType = @counterType AND doc.key IN (@keys) GROUP BY doc.key")
                 .WithParameter("@counterType", (int)CounterTypes.Aggregate)
                 .WithParameter("@type", (int)DocumentTypes.Counter)
                 .WithParameter("@keys", filter);

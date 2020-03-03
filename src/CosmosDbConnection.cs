@@ -287,7 +287,7 @@ namespace Hangfire.Azure
                 CreatedOn = DateTime.UtcNow,
                 LastHeartbeat = DateTime.UtcNow
             };
-            Task<ItemResponse<Documents.Server>> task = Storage.Container.UpsertItemWithRetriesAsync(server, PartitionKey.None);
+            Task<ItemResponse<Documents.Server>> task = Storage.Container.UpsertItemWithRetriesAsync(server, new PartitionKey((int)DocumentTypes.Server));
             task.Wait();
         }
 
@@ -296,7 +296,7 @@ namespace Hangfire.Azure
             if (serverId == null) throw new ArgumentNullException(nameof(serverId));
             string id = $"{serverId}:{DocumentTypes.Server}".GenerateHash();
 
-            Task<StoredProcedureExecuteResponse<bool>> task = Storage.Container.Scripts.ExecuteStoredProcedureAsync<bool>("heartbeatServer", PartitionKey.None, (dynamic)id, (dynamic)DateTime.UtcNow.ToEpoch());
+            Task<StoredProcedureExecuteResponse<bool>> task = Storage.Container.Scripts.ExecuteStoredProcedureAsync<bool>("heartbeatServer", new PartitionKey((int)DocumentTypes.Server), new dynamic[] { id, DateTime.UtcNow.ToEpoch() });
             task.Wait();
         }
 
@@ -305,7 +305,7 @@ namespace Hangfire.Azure
             if (serverId == null) throw new ArgumentNullException(nameof(serverId));
             string id = $"{serverId}:{DocumentTypes.Server}".GenerateHash();
 
-            Task<ItemResponse<Documents.Server>> task = Storage.Container.DeleteItemWithRetriesAsync<Documents.Server>(id, PartitionKey.None);
+            Task<ItemResponse<Documents.Server>> task = Storage.Container.DeleteItemWithRetriesAsync<Documents.Server>(id, new PartitionKey((int)DocumentTypes.Server));
             task.Wait();
         }
 
@@ -319,7 +319,7 @@ namespace Hangfire.Azure
             int lastHeartbeat = DateTime.UtcNow.Add(timeOut.Negate()).ToEpoch();
             string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Server} AND IS_DEFINED(doc.last_heartbeat) AND doc.last_heartbeat <= {lastHeartbeat}";
 
-            return Storage.Container.ExecuteDeleteDocuments(query, PartitionKey.None);
+            return Storage.Container.ExecuteDeleteDocuments(query, new PartitionKey((int)DocumentTypes.Server));
         }
 
         #endregion

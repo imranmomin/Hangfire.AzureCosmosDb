@@ -47,7 +47,7 @@ namespace Hangfire.Azure
                         query += $" AND doc.counter_type = {(int)CounterTypes.Aggregate}";
                     }
 
-                    int deleted = storage.Container.ExecuteDeleteDocuments(query, PartitionKey.None);
+                    int deleted = storage.Container.ExecuteDeleteDocuments(query, new PartitionKey((int)type));
 
                     logger.Trace($"Outdated {deleted} records removed from the '{type}' document.");
                 }
