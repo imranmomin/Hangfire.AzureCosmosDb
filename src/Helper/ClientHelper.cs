@@ -17,7 +17,7 @@ namespace Hangfire.Azure.Helper
         /// <param name="requestOptions"></param>
         /// <param name="cancellationToken">(Optional) <see cref="T:System.Threading.CancellationToken" /> representing request cancellation.</param>
         /// <returns></returns>
-        internal static Task<ItemResponse<T>> CreateItemWithRetriesAsync<T>(this Container container, T document, PartitionKey? partitionKey = null, ItemRequestOptions requestOptions = null, CancellationToken cancellationToken = default)
+        internal static Task<ItemResponse<T>> CreateItemWithRetriesAsync<T>(this Container container, T document, PartitionKey partitionKey, ItemRequestOptions requestOptions = null, CancellationToken cancellationToken = default)
         {
             return Task.Run(async () => await ExecuteWithRetries(() => container.CreateItemAsync(document, partitionKey, requestOptions, cancellationToken)), cancellationToken);
         }
@@ -45,7 +45,7 @@ namespace Hangfire.Azure.Helper
         /// <param name="requestOptions"></param>
         /// <param name="cancellationToken">(Optional) <see cref="T:System.Threading.CancellationToken" /> representing request cancellation.</param>
         /// <param name="partitionKey"></param>
-        internal static Task<ItemResponse<T>> UpsertItemWithRetriesAsync<T>(this Container container, T document, PartitionKey? partitionKey = null, ItemRequestOptions requestOptions = null, CancellationToken cancellationToken = default)
+        internal static Task<ItemResponse<T>> UpsertItemWithRetriesAsync<T>(this Container container, T document, PartitionKey partitionKey, ItemRequestOptions requestOptions = null, CancellationToken cancellationToken = default)
         {
             return Task.Run(async () => await ExecuteWithRetries(() => container.UpsertItemAsync(document, partitionKey, requestOptions, cancellationToken)), cancellationToken);
         }
@@ -73,7 +73,7 @@ namespace Hangfire.Azure.Helper
         /// <param name="id"></param>
         /// <param name="partitionKey"></param>
         /// <returns></returns>
-        internal static Task<ItemResponse<T>> ReplaceItemWithRetriesAsync<T>(this Container container, T document, string id, PartitionKey? partitionKey = null, ItemRequestOptions requestOptions = null, CancellationToken cancellationToken = default)
+        internal static Task<ItemResponse<T>> ReplaceItemWithRetriesAsync<T>(this Container container, T document, string id, PartitionKey partitionKey, ItemRequestOptions requestOptions = null, CancellationToken cancellationToken = default)
         {
             return Task.Run(async () => await ExecuteWithRetries(() => container.ReplaceItemAsync(document, id, partitionKey, requestOptions, cancellationToken)), cancellationToken);
         }

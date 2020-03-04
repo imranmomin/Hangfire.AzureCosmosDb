@@ -55,7 +55,7 @@ namespace Hangfire.Azure
                 }).ToArray()
             };
 
-            Task<ItemResponse<Documents.Job>> task = Storage.Container.CreateItemWithRetriesAsync(entityJob);
+            Task<ItemResponse<Documents.Job>> task = Storage.Container.CreateItemWithRetriesAsync(entityJob, new PartitionKey((int)DocumentTypes.Job));
             task.Wait();
 
             if (task.Result.StatusCode == HttpStatusCode.Created || task.Result.StatusCode == HttpStatusCode.OK)
@@ -88,7 +88,7 @@ namespace Hangfire.Azure
         {
             if (jobId == null) throw new ArgumentNullException(nameof(jobId));
 
-            Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, PartitionKey.None);
+            Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, new PartitionKey((int)DocumentTypes.Job));
             task.Wait();
 
             if (task.Result.Resource != null)
@@ -125,7 +125,7 @@ namespace Hangfire.Azure
         {
             if (jobId == null) throw new ArgumentNullException(nameof(jobId));
 
-            Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, PartitionKey.None);
+            Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, new PartitionKey((int)DocumentTypes.Job));
             task.Wait();
 
             if (task.Result.Resource != null)
@@ -133,7 +133,7 @@ namespace Hangfire.Azure
                 Documents.Job job = task.Result;
 
                 // get the state document
-                Task<ItemResponse<State>> stateTask = Storage.Container.ReadItemWithRetriesAsync<State>(job.StateId, PartitionKey.None);
+                Task<ItemResponse<State>> stateTask = Storage.Container.ReadItemWithRetriesAsync<State>(job.StateId, new PartitionKey((int)DocumentTypes.State));
                 stateTask.Wait();
 
                 if (stateTask.Result.Resource != null)
@@ -160,7 +160,7 @@ namespace Hangfire.Azure
             if (id == null) throw new ArgumentNullException(nameof(id));
             if (name == null) throw new ArgumentNullException(nameof(name));
 
-            Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(id, PartitionKey.None);
+            Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(id, new PartitionKey((int)DocumentTypes.Job));
             Documents.Job data = task.Result;
 
             return data?.Parameters.Where(p => p.Name == name).Select(p => p.Value).FirstOrDefault();
@@ -177,7 +177,7 @@ namespace Hangfire.Azure
                 Name = name
             };
 
-            Task<StoredProcedureExecuteResponse<bool>> task = Storage.Container.Scripts.ExecuteStoredProcedureAsync<bool>("setJobParameter", PartitionKey.None, (dynamic)id, (dynamic)parameter);
+            Task<StoredProcedureExecuteResponse<bool>> task = Storage.Container.Scripts.ExecuteStoredProcedureAsync<bool>("setJobParameter", new PartitionKey((int)DocumentTypes.Job), new dynamic[] { id, parameter });
             task.Wait();
         }
 
@@ -193,7 +193,7 @@ namespace Hangfire.Azure
                 .WithParameter("@key", key)
                 .WithParameter("@type", (int)DocumentTypes.Set);
 
-            int? expireOn = Storage.Container.GetItemQueryIterator<int?>(sql)
+            int? expireOn = Storage.Container.GetItemQueryIterator<int?>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Set) })
                 .ToQueryResult()
                 .FirstOrDefault();
 
@@ -206,7 +206,7 @@ namespace Hangfire.Azure
 
             endingAt += 1 - startingFrom;
 
-            return Storage.Container.GetItemLinqQueryable<Set>()
+            return Storage.Container.GetItemLinqQueryable<Set>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Set) })
                 .Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
                 .OrderBy(s => s.CreatedOn)
                 .Skip(startingFrom).Take(endingAt)
@@ -223,7 +223,7 @@ namespace Hangfire.Azure
                 .WithParameter("@key", key)
                 .WithParameter("@type", (int)DocumentTypes.Counter);
 
-            return Storage.Container.GetItemQueryIterator<long>(sql)
+            return Storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Counter) })
                 .ToQueryResult()
                 .FirstOrDefault();
         }
@@ -236,7 +236,7 @@ namespace Hangfire.Azure
                 .WithParameter("@key", key)
                 .WithParameter("@type", (int)DocumentTypes.Set);
 
-            return Storage.Container.GetItemQueryIterator<long>(sql)
+            return Storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Set) })
                 .ToQueryResult()
                 .FirstOrDefault();
         }
@@ -245,7 +245,7 @@ namespace Hangfire.Azure
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            IEnumerable<string> sets = Storage.Container.GetItemLinqQueryable<Set>()
+            IEnumerable<string> sets = Storage.Container.GetItemLinqQueryable<Set>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Set) })
                 .Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
                 .Select(s => s.Value)
                 .ToQueryResult();
@@ -264,7 +264,7 @@ namespace Hangfire.Azure
                 .WithParameter("@from", (int)fromScore)
                 .WithParameter("@to", (int)toScore);
 
-            return Storage.Container.GetItemQueryIterator<string>(sql)
+            return Storage.Container.GetItemQueryIterator<string>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Set) })
                 .ToQueryResult()
                 .FirstOrDefault();
         }
@@ -330,7 +330,7 @@ namespace Hangfire.Azure
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            return Storage.Container.GetItemLinqQueryable<Hash>()
+            return Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Hash) })
                 .Where(h => h.DocumentType == DocumentTypes.Hash && h.Key == key)
                 .Select(h => new { h.Field, h.Value })
                 .ToQueryResult()
@@ -344,7 +344,8 @@ namespace Hangfire.Azure
 
             Data<Hash> data = new Data<Hash>();
 
-            List<Hash> hashes = Storage.Container.GetItemLinqQueryable<Hash>()
+            PartitionKey partitionKey = new PartitionKey((int)DocumentTypes.Hash);
+            List<Hash> hashes = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
                 .Where(h => h.DocumentType == DocumentTypes.Hash && h.Key == key)
                 .ToQueryResult()
                 .ToList();
@@ -370,7 +371,7 @@ namespace Hangfire.Azure
                 }
             }
 
-            Storage.Container.ExecuteUpsertDocuments(data, PartitionKey.None);
+            Storage.Container.ExecuteUpsertDocuments(data, partitionKey);
         }
 
         public override long GetHashCount(string key)
@@ -381,7 +382,7 @@ namespace Hangfire.Azure
                     .WithParameter("@key", key)
                     .WithParameter("@type", (int)DocumentTypes.Hash);
 
-            return Storage.Container.GetItemQueryIterator<long>(sql)
+            return Storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Hash) })
                 .ToQueryResult()
                 .FirstOrDefault();
         }
@@ -396,7 +397,7 @@ namespace Hangfire.Azure
                 .WithParameter("@field", name)
                 .WithParameter("@type", (int)DocumentTypes.Hash);
 
-            return Storage.Container.GetItemQueryIterator<string>(sql)
+            return Storage.Container.GetItemQueryIterator<string>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Hash) })
                 .ToQueryResult()
                 .FirstOrDefault();
         }
@@ -409,7 +410,7 @@ namespace Hangfire.Azure
                 .WithParameter("@key", key)
                 .WithParameter("@type", (int)DocumentTypes.Hash);
 
-            int? expireOn = Storage.Container.GetItemQueryIterator<int?>(sql)
+            int? expireOn = Storage.Container.GetItemQueryIterator<int?>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Hash) })
                 .ToQueryResult()
                 .FirstOrDefault();
 
@@ -424,7 +425,7 @@ namespace Hangfire.Azure
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            return Storage.Container.GetItemLinqQueryable<List>()
+            return Storage.Container.GetItemLinqQueryable<List>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.List) })
                 .Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
                 .OrderByDescending(l => l.CreatedOn)
                 .Select(l => l.Value)
@@ -438,7 +439,7 @@ namespace Hangfire.Azure
 
             endingAt += 1 - startingFrom;
 
-            return Storage.Container.GetItemLinqQueryable<List>()
+            return Storage.Container.GetItemLinqQueryable<List>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.List) })
                 .Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
                 .OrderByDescending(l => l.CreatedOn)
                 .Skip(startingFrom).Take(endingAt)
@@ -455,7 +456,7 @@ namespace Hangfire.Azure
                 .WithParameter("@key", key)
                 .WithParameter("@type", (int)DocumentTypes.List);
 
-            int? expireOn = Storage.Container.GetItemQueryIterator<int?>(sql)
+            int? expireOn = Storage.Container.GetItemQueryIterator<int?>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.List) })
                 .ToQueryResult()
                 .FirstOrDefault();
 
@@ -470,7 +471,7 @@ namespace Hangfire.Azure
                 .WithParameter("@key", key)
                 .WithParameter("@type", (int)DocumentTypes.List);
 
-            return Storage.Container.GetItemQueryIterator<long>(sql)
+            return Storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.List) })
                 .ToQueryResult()
                 .FirstOrDefault();
         }

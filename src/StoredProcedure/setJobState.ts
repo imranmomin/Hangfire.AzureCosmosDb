@@ -17,44 +17,23 @@ function setJobState(id: string, state: IState) {
         if (error) {
             throw error;
         }
+               
+        job.state_id = state.id;
+        job.state_name = state.name;
+        let options: IReplaceOptions = { etag: job._etag };
 
-        // now create the state document
-        // on callback replace the job documented with state_id, state_name
-        createState(state, (doc: IState): void => {
-            job.state_id = doc.id;
-            job.state_name = doc.name;
-            let options: IReplaceOptions = { etag: job._etag };
-
-            let success: boolean = collection.replaceDocument(job._self, job, options, (err: IRequestCallbackError) => {
-                if (err) {
-                    throw err;
-                }
-                response.setBody(true);
-            });
-
-            if (!success) {
-                throw new Error("The call was not accepted");
+        let success: boolean = collection.replaceDocument(job._self, job, options, (err: IRequestCallbackError) => {
+            if (err) {
+                throw err;
             }
-        });
-    });
-
-    /**
-     * Creates a new state
-     * @param {Object} doc - information for the job 
-     * @param {function} callback - return the newly create state document
-     */
-    function createState(doc: IState, callback: (doc: IState) => void) {
-        let success: boolean = collection.createDocument(collectionLink, doc, (error: IRequestCallbackError, document: IState) => {
-            if (error) {
-                throw error;
-            }
-            callback(document);
+            response.setBody(true);
         });
 
         if (!success) {
             throw new Error("The call was not accepted");
         }
-    }
+    });
+
 
     if (!isAccepted) {
         throw new Error("The call was not accepted");

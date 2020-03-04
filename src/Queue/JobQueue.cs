@@ -6,10 +6,11 @@ using System.Collections.Generic;
 
 using Hangfire.Logging;
 using Hangfire.Storage;
+using Microsoft.Azure.Cosmos;
 
 using Hangfire.Azure.Helper;
+using Hangfire.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
-using Microsoft.Azure.Cosmos;
 
 namespace Hangfire.Azure.Queue
 {
@@ -21,6 +22,7 @@ namespace Hangfire.Azure.Queue
         private readonly TimeSpan defaultLockTimeout;
         private readonly TimeSpan invisibilityTimeout = TimeSpan.FromMinutes(15);
         private readonly object syncLock = new object();
+        private readonly PartitionKey partitionKey = new PartitionKey((int)DocumentTypes.Queue);
 
         public JobQueue(CosmosDbStorage storage)
         {
@@ -37,7 +39,7 @@ namespace Hangfire.Azure.Queue
                                "AND (NOT IS_DEFINED(doc.fetched_at) OR doc.fetched_at < @timeout) ORDER BY doc.created_on";
 
                 QueryDefinition sql = new QueryDefinition(query)
-                    .WithParameter("@type", (int)Documents.DocumentTypes.Queue);
+                    .WithParameter("@type", (int)DocumentTypes.Queue);
 
                 for (int index = 0; index < queues.Length; index++)
                 {
@@ -55,7 +57,7 @@ namespace Hangfire.Azure.Queue
                         int invisibilityTimeoutEpoch = DateTime.UtcNow.Add(invisibilityTimeout.Negate()).ToEpoch();
                         sql.WithParameter("@timeout", invisibilityTimeoutEpoch);
 
-                        Documents.Queue data = storage.Container.GetItemQueryIterator<Documents.Queue>(sql)
+                        Documents.Queue data = storage.Container.GetItemQueryIterator<Documents.Queue>(sql, requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
                             .ToQueryResult()
                             .FirstOrDefault();
 
@@ -63,7 +65,7 @@ namespace Hangfire.Azure.Queue
                         {
                             // mark the document
                             data.FetchedAt = DateTime.UtcNow;
-                            Task<ItemResponse<Documents.Queue>> task = storage.Container.ReplaceItemWithRetriesAsync(data, data.Id, cancellationToken: cancellationToken);
+                            Task<ItemResponse<Documents.Queue>> task = storage.Container.ReplaceItemWithRetriesAsync(data, data.Id, partitionKey, cancellationToken: cancellationToken);
                             task.Wait(cancellationToken);
 
                             logger.Trace($"Found job {data.JobId} from the queue : {data.Name}");
@@ -86,7 +88,7 @@ namespace Hangfire.Azure.Queue
                 CreatedOn = DateTime.UtcNow
             };
 
-            Task<ItemResponse<Documents.Queue>> task = storage.Container.CreateItemWithRetriesAsync(data, PartitionKey.None);
+            Task<ItemResponse<Documents.Queue>> task = storage.Container.CreateItemWithRetriesAsync(data, partitionKey);
             task.Wait();
         }
     }

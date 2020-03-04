@@ -14,6 +14,7 @@ namespace Hangfire.Azure
         private readonly ILog logger = LogProvider.For<CosmosDbDistributedLock>();
         private readonly string resource;
         private readonly CosmosDbStorage storage;
+        private readonly PartitionKey partitionKey = new PartitionKey((int)DocumentTypes.Lock);
         private string resourceId;
 
         public CosmosDbDistributedLock(string resource, TimeSpan timeout, CosmosDbStorage storage)
@@ -27,7 +28,7 @@ namespace Hangfire.Azure
         {
             if (!string.IsNullOrEmpty(resourceId))
             {
-                Task task = storage.Container.DeleteItemWithRetriesAsync<Lock>(resourceId, new PartitionKey((int)DocumentTypes.Lock)).ContinueWith(t =>
+                Task task = storage.Container.DeleteItemWithRetriesAsync<Lock>(resourceId, partitionKey).ContinueWith(t =>
                 {
                     resourceId = string.Empty;
                     logger.Trace($"Lock released for {resource}");
@@ -52,7 +53,7 @@ namespace Hangfire.Azure
 
                 try
                 {
-                    Task<ItemResponse<Lock>> readTask = storage.Container.ReadItemWithRetriesAsync<Lock>(id, new PartitionKey((int)DocumentTypes.Lock));
+                    Task<ItemResponse<Lock>> readTask = storage.Container.ReadItemWithRetriesAsync<Lock>(id, partitionKey);
                     readTask.Wait();
 
                     if (readTask.Result.Resource != null)
@@ -61,7 +62,7 @@ namespace Hangfire.Azure
                         @lock.ExpireOn = DateTime.UtcNow.Add(timeout);
                         @lock.TimeToLive = (int)ttl.TotalSeconds;
 
-                        Task<ItemResponse<Lock>> updateTask = storage.Container.UpsertItemWithRetriesAsync(@lock, new PartitionKey((int)DocumentTypes.Lock));
+                        Task<ItemResponse<Lock>> updateTask = storage.Container.UpsertItemWithRetriesAsync(@lock, partitionKey);
                         updateTask.Wait();
 
                         if (updateTask.Result.StatusCode == HttpStatusCode.OK)
@@ -81,7 +82,7 @@ namespace Hangfire.Azure
                         TimeToLive = (int)ttl.TotalSeconds
                     };
 
-                    Task<ItemResponse<Lock>> createTask = storage.Container.UpsertItemWithRetriesAsync(@lock, new PartitionKey((int)DocumentTypes.Lock));
+                    Task<ItemResponse<Lock>> createTask = storage.Container.UpsertItemWithRetriesAsync(@lock, partitionKey);
                     createTask.Wait();
 
                     if (createTask.Result.StatusCode == HttpStatusCode.OK || createTask.Result.StatusCode == HttpStatusCode.Created)

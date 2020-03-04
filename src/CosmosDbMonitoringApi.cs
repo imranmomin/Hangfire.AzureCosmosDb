@@ -13,6 +13,7 @@ using Hangfire.Azure.Helper;
 using Hangfire.Azure.Documents;
 
 using Microsoft.Azure.Cosmos;
+using Newtonsoft.Json.Linq;
 
 namespace Hangfire.Azure
 {
@@ -83,9 +84,10 @@ namespace Hangfire.Azure
                 InvocationData invocationData = job.InvocationData;
                 invocationData.Arguments = job.Arguments;
 
-                List<StateHistoryDto> states = storage.Container.GetItemLinqQueryable<State>()
+                List<StateHistoryDto> states = storage.Container.GetItemLinqQueryable<State>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.State) })
                     .Where(s => s.DocumentType == DocumentTypes.State && s.JobId == jobId)
                     .OrderByDescending(s => s.CreatedOn)
+                    .ToQueryResult()
                     .Select(s => new StateHistoryDto
                     {
                         Data = s.Data,
@@ -93,7 +95,6 @@ namespace Hangfire.Azure
                         Reason = s.Reason,
                         StateName = s.Name
                     })
-                    .ToQueryResult()
                     .ToList();
 
                 return new JobDetailsDto
@@ -118,36 +119,38 @@ namespace Hangfire.Azure
                     Dictionary<string, long> results = new Dictionary<string, long>();
 
                     // get counts of jobs on state
-                    QueryDefinition sql = new QueryDefinition("SELECT doc.state_name, COUNT(1) AS StateCount FROM doc WHERE doc.type = @type AND IS_DEFINED(doc.state_name) AND doc.state_name IN (@state) GROUP BY doc.state_name")
-                        .WithParameter("@type", (int)DocumentTypes.Job)
-                        .WithParameter("@state", new[] { EnqueuedState.StateName, FailedState.StateName, ProcessingState.StateName, ScheduledState.StateName });
+                    string[] stateNames = new[] { EnqueuedState.StateName, FailedState.StateName, ProcessingState.StateName, ScheduledState.StateName, SucceededState.StateName, AwaitingState.StateName }.Select(x => $"'{x}'").ToArray();
+                    QueryDefinition sql = new QueryDefinition($"SELECT doc.state_name AS state, COUNT(1) AS stateCount FROM doc WHERE doc.type = @type AND IS_DEFINED(doc.state_name) AND doc.state_name IN ({string.Join(',', stateNames)}) GROUP BY doc.state_name")
+                        .WithParameter("@type", (int)DocumentTypes.Job);
 
-                    List<(string state, int stateCount)> states = storage.Container.GetItemQueryIterator<(string state, int stateCount)>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Job) })
+                    List<(string state, int stateCount)> states = storage.Container.GetItemQueryIterator<JObject>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Job) })
                          .ToQueryResult()
+                         .Select(x => (x.Value<string>("state").ToLower(), x.Value<int>("stateCount")))
                          .ToList();
 
                     foreach ((string state, int stateCount) state in states)
                     {
                         results.Add(state.state, state.stateCount);
                     }
-                    
+
                     // get counts of servers
                     sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type")
                        .WithParameter("@type", (int)DocumentTypes.Server);
 
-                    long servers = storage.Container.GetItemQueryIterator<long>(sql)
+                    long servers = storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Server) })
                         .ToQueryResult()
                         .FirstOrDefault();
 
                     results.Add("servers", servers);
 
                     // get sum of stats:succeeded / stats:deleted counters
-                    sql = new QueryDefinition("SELECT doc.key, SUM(doc['value']) AS TOTAL FROM doc WHERE doc.type = @type AND doc.key IN (@key) GROUP BY doc.key")
-                        .WithParameter("@key", new[] { "stats:succeeded", "stats:deleted" })
+                    string[] keys = new[] { "'stats:succeeded'", "'stats:deleted'" };
+                    sql = new QueryDefinition($"SELECT doc.key, SUM(doc['value']) AS total FROM doc WHERE doc.type = @type AND doc.key IN ({string.Join(',', keys)}) GROUP BY doc.key")
                         .WithParameter("@type", (int)DocumentTypes.Counter);
 
-                    List<(string key, int total)> counters = storage.Container.GetItemQueryIterator<(string key, int total)>(sql)
+                    List<(string key, int total)> counters = storage.Container.GetItemQueryIterator<JObject>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Counter) })
                         .ToQueryResult()
+                        .Select(x => (x.Value<string>("key"), x.Value<int>("total")))
                         .ToList();
 
                     foreach ((string key, int total) counter in counters)
@@ -155,12 +158,11 @@ namespace Hangfire.Azure
                         results.Add(counter.key, counter.total);
                     }
 
-
                     sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.key = @key")
                         .WithParameter("@key", "recurring-jobs")
                         .WithParameter("@type", (int)DocumentTypes.Set);
 
-                    long jobs = storage.Container.GetItemQueryIterator<long>(sql)
+                    long jobs = storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Set) })
                         .ToQueryResult()
                         .FirstOrDefault();
 
@@ -283,7 +285,7 @@ namespace Hangfire.Azure
         {
             List<KeyValuePair<string, T>> jobs = new List<KeyValuePair<string, T>>();
 
-            List<Documents.Job> filterJobs = storage.Container.GetItemLinqQueryable<Documents.Job>()
+            List<Documents.Job> filterJobs = storage.Container.GetItemLinqQueryable<Documents.Job>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Job) })
                 .Where(j => j.DocumentType == DocumentTypes.Job && j.StateName == stateName)
                 .OrderByDescending(j => j.CreatedOn)
                 .Skip(from).Take(count)
@@ -291,7 +293,7 @@ namespace Hangfire.Azure
                 .ToList();
 
             string[] ids = filterJobs.Select(x => x.StateId).ToArray();
-            List<State> states = storage.Container.GetItemLinqQueryable<State>()
+            List<State> states = storage.Container.GetItemLinqQueryable<State>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.State) })
                 .Where(x => ids.Contains(x.Id))
                 .ToQueryResult()
                 .ToList();
@@ -318,18 +320,18 @@ namespace Hangfire.Azure
                 .WithParameter("@type", (int)DocumentTypes.Queue)
                 .WithParameter("@name", queue);
 
-            List<Documents.Queue> queues = storage.Container.GetItemQueryIterator<Documents.Queue>(sql)
+            List<Documents.Queue> queues = storage.Container.GetItemQueryIterator<Documents.Queue>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Queue) })
                 .ToQueryResult()
                 .ToList();
 
             string[] ids = queues.Select(x => x.JobId).ToArray();
-            List<Documents.Job> filterJobs = storage.Container.GetItemLinqQueryable<Documents.Job>()
+            List<Documents.Job> filterJobs = storage.Container.GetItemLinqQueryable<Documents.Job>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Job) })
                 .Where(x => ids.Contains(x.Id))
                 .ToQueryResult()
                 .ToList();
 
             ids = filterJobs.Select(x => x.StateId).ToArray();
-            List<State> states = storage.Container.GetItemLinqQueryable<State>()
+            List<State> states = storage.Container.GetItemLinqQueryable<State>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.State) })
                 .Where(x => ids.Contains(x.Id))
                 .ToQueryResult()
                 .ToList();
@@ -389,7 +391,7 @@ namespace Hangfire.Azure
                 .WithParameter("@type", (int)DocumentTypes.Job)
                 .WithParameter("@state", state);
 
-            return storage.Container.GetItemQueryIterator<long>(sql)
+            return storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Job) })
                   .ToQueryResult()
                   .FirstOrDefault();
         }
@@ -433,15 +435,14 @@ namespace Hangfire.Azure
         private Dictionary<DateTime, long> GetTimelineStats(Dictionary<string, DateTime> keys)
         {
             Dictionary<DateTime, long> result = keys.ToDictionary(k => k.Value, v => default(long));
-            string[] filter = keys.Keys.ToArray();
+            string[] filter = keys.Keys.Select(x => $"'{x}'").ToArray();
 
-            QueryDefinition sql = new QueryDefinition("SELECT doc.key, SUM(doc['value']) AS Total FROM doc WHERE doc.type = @type AND doc.counterType = @counterType AND doc.key IN (@keys) GROUP BY doc.key")
-                .WithParameter("@counterType", (int)CounterTypes.Aggregate)
-                .WithParameter("@type", (int)DocumentTypes.Counter)
-                .WithParameter("@keys", filter);
+            QueryDefinition sql = new QueryDefinition($"SELECT doc.key, SUM(doc['value']) AS total FROM doc WHERE doc.type = @type AND doc.key IN ({string.Join(',', filter)}) GROUP BY doc.key")
+                .WithParameter("@type", (int)DocumentTypes.Counter);
 
-            List<(string key, int total)> data = storage.Container.GetItemQueryIterator<(string key, int total)>(sql)
+            List<(string key, int total)> data = storage.Container.GetItemQueryIterator<JObject>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Counter) })
                 .ToQueryResult()
+                .Select(x => (x.Value<string>("key"), x.Value<int>("total")))
                 .ToList();
 
             foreach (string key in keys.Keys)

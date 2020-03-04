@@ -20,6 +20,7 @@ namespace Hangfire.Azure
         private const string DISTRIBUTED_LOCK_KEY = "locks:counters:aggragator";
         private readonly TimeSpan defaultLockTimeout;
         private readonly CosmosDbStorage storage;
+        private readonly PartitionKey partitionKey = new PartitionKey((int)DocumentTypes.Counter);
 
         public CountersAggregator(CosmosDbStorage storage)
         {
@@ -33,11 +34,11 @@ namespace Hangfire.Azure
             {
                 logger.Trace("Aggregating records in 'Counter' table.");
 
-                QueryDefinition sql = new QueryDefinition("SELECT * FROM doc WHERE doc.type = @type AND doc.counter_type = @counterType")
+                QueryDefinition sql = new QueryDefinition("SELECT * FROM doc WHERE doc.type = @type AND doc.counterType = @counterType")
                     .WithParameter("@type", (int)DocumentTypes.Counter)
                     .WithParameter("@counterType", (int)CounterTypes.Raw);
 
-                IEnumerable<Counter> rawCounters = storage.Container.GetItemQueryIterator<Counter>(sql).ToQueryResult();
+                IEnumerable<Counter> rawCounters = storage.Container.GetItemQueryIterator<Counter>(sql, requestOptions: new QueryRequestOptions { PartitionKey = partitionKey }).ToQueryResult();
 
                 Dictionary<string, (int Value, DateTime? ExpireOn, List<Counter> Counters)> counters = rawCounters.GroupBy(c => c.Key)
                     .ToDictionary(k => k.Key, v => (Value: v.Sum(c => c.Value), ExpireOn: v.Max(c => c.ExpireOn), Counters: v.ToList()));
@@ -53,7 +54,7 @@ namespace Hangfire.Azure
 
                         try
                         {
-                            Task<ItemResponse<Counter>> readTask = storage.Container.ReadItemAsync<Counter>(id, PartitionKey.None, cancellationToken: cancellationToken);
+                            Task<ItemResponse<Counter>> readTask = storage.Container.ReadItemAsync<Counter>(id, partitionKey, cancellationToken: cancellationToken);
                             readTask.Wait(cancellationToken);
 
                             if (readTask.Result.StatusCode == HttpStatusCode.OK)
@@ -88,14 +89,14 @@ namespace Hangfire.Azure
                             }
                         }
 
-                        Task<ItemResponse<Counter>> task = storage.Container.UpsertItemAsync(aggregated, cancellationToken: cancellationToken);
+                        Task<ItemResponse<Counter>> task = storage.Container.UpsertItemAsync(aggregated, partitionKey, cancellationToken: cancellationToken);
                         Task continueTask = task.ContinueWith(t =>
                         {
                             if (t.Result.StatusCode == HttpStatusCode.Created || t.Result.StatusCode == HttpStatusCode.OK)
                             {
                                 string ids = string.Join(",", data.Counters.Select(c => $"'{c.Id}'").ToArray());
-                                string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Counter} AND doc.counter_type = {(int)CounterTypes.Raw} AND doc.id IN ({ids})";
-                                int deleted = storage.Container.ExecuteDeleteDocuments(query, PartitionKey.None);
+                                string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Counter} AND doc.counterType = {(int)CounterTypes.Raw} AND doc.id IN ({ids})";
+                                int deleted = storage.Container.ExecuteDeleteDocuments(query, partitionKey, cancellationToken);
                                 logger.Trace($"Total {deleted} records from the 'Counter:{aggregated.Key}' were aggregated.");
                             }
                         }, cancellationToken, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Current);

@@ -17,6 +17,7 @@ namespace Hangfire.Azure.Queue
         private DateTime cacheUpdated;
         private readonly object cacheLock = new object();
         private static readonly TimeSpan queuesCacheTimeout = TimeSpan.FromSeconds(5);
+        private readonly PartitionKey partitionKey = new PartitionKey((int)DocumentTypes.Queue);
 
         public JobQueueMonitoringApi(CosmosDbStorage storage) => this.storage = storage;
 
@@ -30,7 +31,8 @@ namespace Hangfire.Azure.Queue
                             .WithParameter("@type", (int)DocumentTypes.Queue);
 
 
-                    IEnumerable<string> result = storage.Container.GetItemQueryIterator<string>(sql).ToQueryResult();
+                    
+                    IEnumerable<string> result = storage.Container.GetItemQueryIterator<string>(sql, requestOptions: new QueryRequestOptions { PartitionKey = partitionKey }).ToQueryResult();
                     queuesCache.Clear();
                     queuesCache.AddRange(result);
                     cacheUpdated = DateTime.UtcNow;
@@ -47,14 +49,14 @@ namespace Hangfire.Azure.Queue
                     .WithParameter("@name", queue)
                     .WithParameter("@type", (int)DocumentTypes.Queue);
 
-            return storage.Container.GetItemQueryIterator<int>(sql)
+            return storage.Container.GetItemQueryIterator<int>(sql, requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
                 .ToQueryResult()
                 .FirstOrDefault();
         }
 
         public IEnumerable<string> GetEnqueuedJobIds(string queue, int from, int perPage)
         {
-            return storage.Container.GetItemLinqQueryable<Documents.Queue>()
+            return storage.Container.GetItemLinqQueryable<Documents.Queue>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
                 .Where(q => q.DocumentType == DocumentTypes.Queue && q.Name == queue && q.FetchedAt.IsDefined() == false)
                 .OrderBy(q => q.CreatedOn)
                 .Skip(from).Take(perPage)
@@ -64,7 +66,7 @@ namespace Hangfire.Azure.Queue
 
         public IEnumerable<string> GetFetchedJobIds(string queue, int from, int perPage)
         {
-            return storage.Container.GetItemLinqQueryable<Documents.Queue>()
+            return storage.Container.GetItemLinqQueryable<Documents.Queue>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
                 .Where(q => q.DocumentType == DocumentTypes.Queue && q.Name == queue && q.FetchedAt.IsDefined())
                 .OrderBy(q => q.CreatedOn)
                 .Skip(from).Take(perPage)
@@ -74,7 +76,7 @@ namespace Hangfire.Azure.Queue
 
         public (int? EnqueuedCount, int? FetchedCount) GetEnqueuedAndFetchedCount(string queue)
         {
-            (int EnqueuedCount, int FetchedCount) result = storage.Container.GetItemLinqQueryable<Documents.Queue>()
+            (int EnqueuedCount, int FetchedCount) result = storage.Container.GetItemLinqQueryable<Documents.Queue>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
                 .Where(q => q.DocumentType == DocumentTypes.Queue && q.Name == queue)
                 .Select(q => new { q.Name, EnqueuedCount = q.FetchedAt.IsDefined() ? 0 : 1, FetchedCount = q.FetchedAt.IsDefined() ? 1 : 0 })
                 .ToQueryResult()

@@ -44,10 +44,10 @@ namespace Hangfire.Azure
                     // remove only the aggregate counters when the type is Counter
                     if (type == DocumentTypes.Counter)
                     {
-                        query += $" AND doc.counter_type = {(int)CounterTypes.Aggregate}";
+                        query += $" AND doc.counterType = {(int)CounterTypes.Aggregate}";
                     }
 
-                    int deleted = storage.Container.ExecuteDeleteDocuments(query, new PartitionKey((int)type));
+                    int deleted = storage.Container.ExecuteDeleteDocuments(query, new PartitionKey((int)type), cancellationToken);
 
                     logger.Trace($"Outdated {deleted} records removed from the '{type}' document.");
                 }

@@ -32,7 +32,7 @@ interface ICounter extends IDocumentBase {
 	key: string;
 	value: number;
 	// ReSharper disable once InconsistentNaming
-	counter_type: number;
+	counterType: number;
 }
 
 interface IList extends IDocumentBase {

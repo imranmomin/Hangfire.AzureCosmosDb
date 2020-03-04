@@ -26,7 +26,7 @@ namespace Hangfire.Azure
             {
                 if (typeof(Stream).IsAssignableFrom(typeof(T)))
                 {
-                    return (T)(object)(stream);
+                    return (T)(object)stream;
                 }
 
                 using (StreamReader sr = new StreamReader(stream))

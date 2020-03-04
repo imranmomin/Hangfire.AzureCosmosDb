@@ -8,6 +8,7 @@ using Hangfire.Storage;
 
 using Hangfire.Azure.Helper;
 using Microsoft.Azure.Cosmos;
+using Hangfire.Azure.Documents;
 
 // ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Queue
@@ -22,6 +23,7 @@ namespace Hangfire.Azure.Queue
         private bool disposed;
         private bool removedFromQueue;
         private bool reQueued;
+        private readonly PartitionKey partitionKey = new PartitionKey((int)DocumentTypes.Queue);
 
         public FetchedJob(CosmosDbStorage storage, Documents.Queue data)
         {
@@ -56,7 +58,8 @@ namespace Hangfire.Azure.Queue
             {
                 try
                 {
-                    Task<ItemResponse<Documents.Queue>> task = storage.Container.DeleteItemWithRetriesAsync<Documents.Queue>(data.Id, PartitionKey.None);
+                   
+                    Task<ItemResponse<Documents.Queue>> task = storage.Container.DeleteItemWithRetriesAsync<Documents.Queue>(data.Id, partitionKey);
                     task.Wait();
                 }
                 finally
@@ -76,7 +79,7 @@ namespace Hangfire.Azure.Queue
 
                 try
                 {
-                    Task<ItemResponse<Documents.Queue>> task = storage.Container.ReplaceItemWithRetriesAsync(data, data.Id);
+                    Task<ItemResponse<Documents.Queue>> task = storage.Container.ReplaceItemWithRetriesAsync(data, data.Id, partitionKey);
                     task.Wait();
                 }
                 catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
@@ -84,7 +87,7 @@ namespace Hangfire.Azure.Queue
                     data.Id = Guid.NewGuid().ToString();
                     data.SelfLink = null;
 
-                    Task<ItemResponse<Documents.Queue>> task = storage.Container.CreateItemWithRetriesAsync(data, PartitionKey.None);
+                    Task<ItemResponse<Documents.Queue>> task = storage.Container.CreateItemWithRetriesAsync(data, partitionKey);
                     task.Wait();
                 }
                 finally
@@ -105,7 +108,7 @@ namespace Hangfire.Azure.Queue
                     Documents.Queue queue = (Documents.Queue)obj;
                     queue.FetchedAt = DateTime.UtcNow;
 
-                    Task<ItemResponse<Documents.Queue>> task = storage.Container.ReplaceItemWithRetriesAsync(queue, queue.Id);
+                    Task<ItemResponse<Documents.Queue>> task = storage.Container.ReplaceItemWithRetriesAsync(queue, queue.Id, partitionKey);
                     task.Wait();
 
                     logger.Trace($"Keep-alive query for job: {queue.Id} sent");
