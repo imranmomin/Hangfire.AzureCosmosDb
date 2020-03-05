@@ -23,5 +23,12 @@ namespace Hangfire.Azure.Documents.Helper
                 ? date.ToEpoch().ToString(CultureInfo.InvariantCulture)
                 : s;
         }
+
+        internal static string TryParseEpochToDate(this string s)
+        {
+            return int.TryParse(s, out int epoch)
+                ? epoch.ToDateTime().ToLocalTime().ToString("d/M/yyyy HH:mm:ss")
+                : s;
+        }
     }
 }

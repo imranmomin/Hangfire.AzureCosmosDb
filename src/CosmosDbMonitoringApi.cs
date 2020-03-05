@@ -1,18 +1,19 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Collections.Generic;
 
+using Hangfire.Azure.Documents;
+using Hangfire.Azure.Documents.Helper;
+using Hangfire.Azure.Helper;
+using Hangfire.Azure.Queue;
 using Hangfire.Common;
 using Hangfire.States;
 using Hangfire.Storage;
 using Hangfire.Storage.Monitoring;
 
-using Hangfire.Azure.Queue;
-using Hangfire.Azure.Helper;
-using Hangfire.Azure.Documents;
-
 using Microsoft.Azure.Cosmos;
+
 using Newtonsoft.Json.Linq;
 
 namespace Hangfire.Azure
@@ -102,7 +103,7 @@ namespace Hangfire.Azure
                     Job = invocationData.DeserializeJob(),
                     CreatedAt = job.CreatedOn,
                     ExpireAt = job.ExpireOn,
-                    Properties = job.Parameters.ToDictionary(p => p.Name, p => p.Value),
+                    Properties = job.Parameters.ToDictionary(p => p.Name, p => p.Value.TryParseEpochToDate()),
                     History = states
                 };
             }
