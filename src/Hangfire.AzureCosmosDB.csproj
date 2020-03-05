@@ -9,7 +9,7 @@
     <PackageProjectUrl>https://github.com/imranmomin/hangfire.AzureCosmosDB</PackageProjectUrl>
     <Copyright>Copyright 2019</Copyright>
     <PackageTags>Hangfire Azure Cosmos</PackageTags>
-    <Description>This package adds support to Microsoft Azure CosmosDB for Hangfire</Description>
+    <Description>This package adds support to Microsoft Azure Cosmos DB for Hangfire</Description>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageVersion>1.0.1</PackageVersion>
     <Version>2.0.0</Version>

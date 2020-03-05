@@ -1,9 +1,9 @@
 ﻿using System;
-using System.Linq;
 using System.Collections.Generic;
+using System.Linq;
 
-using Hangfire.Azure.Helper;
 using Hangfire.Azure.Documents;
+using Hangfire.Azure.Helper;
 
 using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Cosmos.Linq;
@@ -30,8 +30,6 @@ namespace Hangfire.Azure.Queue
                     QueryDefinition sql = new QueryDefinition("SELECT DISTINCT VALUE doc['name'] FROM doc WHERE doc.type = @type")
                             .WithParameter("@type", (int)DocumentTypes.Queue);
 
-
-                    
                     IEnumerable<string> result = storage.Container.GetItemQueryIterator<string>(sql, requestOptions: new QueryRequestOptions { PartitionKey = partitionKey }).ToQueryResult();
                     queuesCache.Clear();
                     queuesCache.AddRange(result);

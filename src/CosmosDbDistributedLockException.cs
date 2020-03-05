@@ -6,12 +6,12 @@ namespace Hangfire.Azure
     /// Represents errors that occur while acquiring a distributed lock.
     /// </summary>
     [Serializable]
-    public class CosmosDBDistributedLockException : Exception
+    public class CosmosDbDistributedLockException : Exception
     {
         /// <summary>
-        /// Initializes a new instance of the CosmosDBDistributedLockException class with serialized data.
+        /// Initializes a new instance of the CosmosDbDistributedLockException class with serialized data.
         /// </summary>
         /// <param name="message">The message that describes the error.</param>
-        public CosmosDBDistributedLockException(string message) : base(message) { }
+        public CosmosDbDistributedLockException(string message) : base(message) { }
     }
 }

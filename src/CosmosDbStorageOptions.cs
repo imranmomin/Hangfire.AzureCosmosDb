@@ -26,7 +26,7 @@ namespace Hangfire.Azure
         public TimeSpan QueuePollInterval { get; set; }
 
         /// <summary>
-        /// Create an instance of AzureCosmosDB Storage option with default values
+        /// Create an instance of Azure CosmosDbStorage option with default values
         /// </summary>
         public CosmosDbStorageOptions()
         {

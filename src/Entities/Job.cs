@@ -1,7 +1,8 @@
 ﻿using System;
 
-using Newtonsoft.Json;
 using Hangfire.Storage;
+
+using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
 // ReSharper disable once CheckNamespace

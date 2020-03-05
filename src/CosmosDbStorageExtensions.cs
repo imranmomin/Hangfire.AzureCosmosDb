@@ -1,5 +1,7 @@
 ﻿using System;
+
 using Hangfire.Azure;
+
 using Microsoft.Azure.Cosmos;
 
 // ReSharper disable UnusedMember.Global
@@ -7,17 +9,17 @@ using Microsoft.Azure.Cosmos;
 namespace Hangfire
 {
     /// <summary>
-    /// Extension methods to user CosmosDB Storage.
+    /// Extension methods to use CosmosDBStorage.
     /// </summary>
     // ReSharper disable once UnusedType.Global
     public static class CosmosDbStorageExtensions
     {
         /// <summary>
-        /// Enables to attach Azure CosmosDB to Hangfire
+        /// Enables to attach Azure Cosmos DB to Hangfire
         /// </summary>
         /// <param name="configuration">The IGlobalConfiguration object</param>
-        /// <param name="url">The url string to CosmosDB Database</param>
-        /// <param name="authSecret">The secret key for the CosmosDB Database</param>
+        /// <param name="url">The url string to Cosmos Database</param>
+        /// <param name="authSecret">The secret key for the Cosmos Database</param>
         /// <param name="database">The name of the database to connect with</param>
         /// <param name="collection">The name of the collection on the database</param>
         /// <param name="option"></param>

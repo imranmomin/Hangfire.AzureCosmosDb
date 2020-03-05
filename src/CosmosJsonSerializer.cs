@@ -1,8 +1,9 @@
 ﻿using System.IO;
 using System.Text;
 
-using Newtonsoft.Json;
 using Microsoft.Azure.Cosmos;
+
+using Newtonsoft.Json;
 
 namespace Hangfire.Azure
 {

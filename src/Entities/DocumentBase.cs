@@ -19,6 +19,9 @@ namespace Hangfire.Azure.Documents
         [JsonConverter(typeof(UnixDateTimeConverter))]
         public DateTime? ExpireOn { get; set; }
 
+        [JsonProperty(PropertyName = "ttl", NullValueHandling = NullValueHandling.Ignore)]
+        public int? TimeToLive { get; set; }
+
         [JsonProperty("type")]
         public abstract DocumentTypes DocumentType { get; }
     }

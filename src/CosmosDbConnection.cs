@@ -1,15 +1,14 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Collections.Generic;
 
-using Hangfire.Azure.Queue;
-using Hangfire.Azure.Helper;
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
-
+using Hangfire.Azure.Helper;
+using Hangfire.Azure.Queue;
 using Hangfire.Common;
 using Hangfire.Server;
 using Hangfire.Storage;

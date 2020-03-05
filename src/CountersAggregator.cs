@@ -4,10 +4,12 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Helper;
 using Hangfire.Logging;
 using Hangfire.Server;
+
 using Microsoft.Azure.Cosmos;
 
 namespace Hangfire.Azure

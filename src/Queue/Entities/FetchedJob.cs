@@ -3,12 +3,12 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Hangfire.Azure.Documents;
+using Hangfire.Azure.Helper;
 using Hangfire.Logging;
 using Hangfire.Storage;
 
-using Hangfire.Azure.Helper;
 using Microsoft.Azure.Cosmos;
-using Hangfire.Azure.Documents;
 
 // ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Queue
@@ -58,7 +58,6 @@ namespace Hangfire.Azure.Queue
             {
                 try
                 {
-                   
                     Task<ItemResponse<Documents.Queue>> task = storage.Container.DeleteItemWithRetriesAsync<Documents.Queue>(data.Id, partitionKey);
                     task.Wait();
                 }

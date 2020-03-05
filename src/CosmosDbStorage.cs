@@ -1,14 +1,14 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using System.Collections.Generic;
 
+using Hangfire.Azure.Queue;
 using Hangfire.Logging;
 using Hangfire.Server;
 using Hangfire.Storage;
-using Hangfire.Azure.Queue;
 
 using Microsoft.Azure.Cosmos;
 
@@ -47,7 +47,7 @@ namespace Hangfire.Azure
         /// <summary>
         /// Initializes the CosmosDbStorage form the url auth secret provide.
         /// </summary>
-        /// <param name="url">The url string to CosmosDB Database</param>
+        /// <param name="url">The url string to Cosmos Database</param>
         /// <param name="authSecret">The secret key for the Cosmos Database</param>
         /// <param name="database">The name of the database to connect with</param>
         /// <param name="collection">The name of the collection/container on the database</param>
@@ -63,6 +63,7 @@ namespace Hangfire.Azure
             QueueProviders = new PersistentJobQueueProviderCollection(provider);
 
             options ??= new CosmosClientOptions();
+            options.ApplicationName = "Hangfire";
             options.Serializer = new CosmosJsonSerializer(settings);
             Client = new CosmosClient(url, authSecret, options);
             Initialize();
@@ -98,8 +99,8 @@ namespace Hangfire.Azure
         /// <param name="logger"></param>
         public override void WriteOptionsToLog(ILog logger)
         {
-            logger.Info("Using the following options for Azure CosmosDB job storage:");
-            logger.Info($"     CosmosDB Url: {Client.Endpoint.AbsoluteUri}");
+            logger.Info("Using the following options for Azure Cosmos DB job storage:");
+            logger.Info($"     Cosmos DB Url: {Client.Endpoint.AbsoluteUri}");
             logger.Info($"     Request Timeout: {Client.ClientOptions.RequestTimeout}");
             logger.Info($"     Counter Aggregate Interval: {StorageOptions.CountersAggregateInterval.TotalSeconds} seconds");
             logger.Info($"     Queue Poll Interval: {StorageOptions.QueuePollInterval.TotalSeconds} seconds");
@@ -110,7 +111,7 @@ namespace Hangfire.Azure
         /// Return the name of the database
         /// </summary>
         /// <returns></returns>
-        public override string ToString() => $"DoucmentDb Database : {database}";
+        public override string ToString() => $"Cosmos DB : {database}";
 
         private void Initialize()
         {

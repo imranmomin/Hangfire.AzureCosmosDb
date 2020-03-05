@@ -2,9 +2,10 @@
 using System.Net;
 using System.Threading.Tasks;
 
-using Hangfire.Logging;
-using Hangfire.Azure.Helper;
 using Hangfire.Azure.Documents;
+using Hangfire.Azure.Helper;
+using Hangfire.Logging;
+
 using Microsoft.Azure.Cosmos;
 
 namespace Hangfire.Azure
@@ -95,7 +96,7 @@ namespace Hangfire.Azure
                 // check the timeout
                 if (acquireStart.ElapsedMilliseconds > timeout.TotalMilliseconds)
                 {
-                    throw new CosmosDBDistributedLockException($"Could not place a lock on the resource '{resource}': Lock timeout.");
+                    throw new CosmosDbDistributedLockException($"Could not place a lock on the resource '{resource}': Lock timeout.");
                 }
 
                 // sleep for 2000 millisecond

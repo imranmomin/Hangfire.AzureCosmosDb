@@ -1,5 +1,6 @@
-﻿using Hangfire.Storage;
-using System.Threading;
+﻿using System.Threading;
+
+using Hangfire.Storage;
 
 // ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Queue

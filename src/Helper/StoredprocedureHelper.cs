@@ -2,8 +2,9 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-using Microsoft.Azure.Cosmos;
 using Hangfire.Azure.Documents;
+
+using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Cosmos.Scripts;
 
 namespace Hangfire.Azure.Helper

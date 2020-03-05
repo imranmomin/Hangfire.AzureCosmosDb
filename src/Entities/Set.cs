@@ -16,11 +16,11 @@ namespace Hangfire.Azure.Documents
 
         [JsonProperty("score")]
         public double? Score { get; set; }
-        
+
         [JsonProperty("created_on")]
         [JsonConverter(typeof(UnixDateTimeConverter))]
         public DateTime CreatedOn { get; set; }
-        
+
         public override DocumentTypes DocumentType => DocumentTypes.Set;
     }
 }

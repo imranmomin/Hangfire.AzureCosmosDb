@@ -19,7 +19,7 @@ namespace Hangfire.Azure.Helper
         /// <returns></returns>
         internal static Task<ItemResponse<T>> CreateItemWithRetriesAsync<T>(this Container container, T document, PartitionKey partitionKey, ItemRequestOptions requestOptions = null, CancellationToken cancellationToken = default)
         {
-            return Task.Run(async () => await ExecuteWithRetries(() => container.CreateItemAsync(document, partitionKey, requestOptions, cancellationToken)), cancellationToken);
+            return Task.Run(async () => await container.ExecuteWithRetries(x => x.CreateItemAsync(document, partitionKey, requestOptions, cancellationToken)), cancellationToken);
         }
 
         /// <summary>
@@ -34,7 +34,7 @@ namespace Hangfire.Azure.Helper
         /// <returns></returns>
         internal static Task<ItemResponse<T>> ReadItemWithRetriesAsync<T>(this Container container, string id, PartitionKey partitionKey, ItemRequestOptions requestOptions = null, CancellationToken cancellationToken = default)
         {
-            return Task.Run(async () => await ExecuteWithRetries(() => container.ReadItemAsync<T>(id, partitionKey, requestOptions, cancellationToken)), cancellationToken);
+            return Task.Run(async () => await container.ExecuteWithRetries(x => x.ReadItemAsync<T>(id, partitionKey, requestOptions, cancellationToken)), cancellationToken);
         }
 
         /// <summary>
@@ -47,7 +47,7 @@ namespace Hangfire.Azure.Helper
         /// <param name="partitionKey"></param>
         internal static Task<ItemResponse<T>> UpsertItemWithRetriesAsync<T>(this Container container, T document, PartitionKey partitionKey, ItemRequestOptions requestOptions = null, CancellationToken cancellationToken = default)
         {
-            return Task.Run(async () => await ExecuteWithRetries(() => container.UpsertItemAsync(document, partitionKey, requestOptions, cancellationToken)), cancellationToken);
+            return Task.Run(async () => await container.ExecuteWithRetries(x => x.UpsertItemAsync(document, partitionKey, requestOptions, cancellationToken)), cancellationToken);
         }
 
         /// <summary>
@@ -60,7 +60,7 @@ namespace Hangfire.Azure.Helper
         /// <param name="partitionKey"></param>
         internal static Task<ItemResponse<T>> DeleteItemWithRetriesAsync<T>(this Container container, string id, PartitionKey partitionKey, ItemRequestOptions requestOptions = null, CancellationToken cancellationToken = default)
         {
-            return Task.Run(async () => await ExecuteWithRetries(() => container.DeleteItemAsync<T>(id, partitionKey, requestOptions, cancellationToken)), cancellationToken);
+            return Task.Run(async () => await container.ExecuteWithRetries(x => x.DeleteItemAsync<T>(id, partitionKey, requestOptions, cancellationToken)), cancellationToken);
         }
 
         /// <summary>
@@ -75,13 +75,13 @@ namespace Hangfire.Azure.Helper
         /// <returns></returns>
         internal static Task<ItemResponse<T>> ReplaceItemWithRetriesAsync<T>(this Container container, T document, string id, PartitionKey partitionKey, ItemRequestOptions requestOptions = null, CancellationToken cancellationToken = default)
         {
-            return Task.Run(async () => await ExecuteWithRetries(() => container.ReplaceItemAsync(document, id, partitionKey, requestOptions, cancellationToken)), cancellationToken);
+            return Task.Run(async () => await container.ExecuteWithRetries(x => x.ReplaceItemAsync(document, id, partitionKey, requestOptions, cancellationToken)), cancellationToken);
         }
-        
+
         /// <summary>
         /// Execute the function with retries on throttle
         /// </summary>
-        private static async Task<T> ExecuteWithRetries<T>(Func<Task<T>> function)
+        private static async Task<T> ExecuteWithRetries<T>(this Container container, Func<Container, Task<T>> function)
         {
             while (true)
             {
@@ -89,7 +89,7 @@ namespace Hangfire.Azure.Helper
 
                 try
                 {
-                    return await function();
+                    return await function(container);
                 }
                 catch (CosmosException ex) when ((int)ex.StatusCode == 429)
                 {

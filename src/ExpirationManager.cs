@@ -1,13 +1,13 @@
 ﻿using System;
 using System.Threading;
 
-using Hangfire.Server;
-using Hangfire.Logging;
-using Microsoft.Azure.Cosmos;
-
-using Hangfire.Azure.Helper;
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
+using Hangfire.Azure.Helper;
+using Hangfire.Logging;
+using Hangfire.Server;
+
+using Microsoft.Azure.Cosmos;
 
 namespace Hangfire.Azure
 {
