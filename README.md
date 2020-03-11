@@ -2,19 +2,29 @@
 
 [![Official Site](https://img.shields.io/badge/site-hangfire.io-blue.svg)](http://hangfire.io)
 [![Latest version](https://img.shields.io/nuget/v/Hangfire.AzureCosmosDB.svg)](https://www.nuget.org/packages/Hangfire.AzureCosmosDB)
-[![Build status](https://ci.appveyor.com/api/projects/status/uvxh94dhxcokga47?svg=true)](https://ci.appveyor.com/project/imranmomin/hangfire-azurecosmosdb)
+[![Build status](https://ci.appveyor.com/api/projects/status/np818jy8h1sa4v6n?svg=true)](https://ci.appveyor.com/project/imranmomin/hangfire-azurecosmosdb)
 
 This repo will add a [Microsoft Azure Cosmos DB](https://docs.microsoft.com/en-us/azure/cosmos-db/introduction) storage support to [Hangfire](http://hangfire.io) - fire-and-forget, delayed and recurring tasks runner for .NET. Scalable and reliable background job runner. Supports multiple servers, CPU and I/O intensive, long-running and short-running jobs.
 
 
 ## Installation
 
-[Hangfire.AzureCosmosDB](https://www.nuget.org/packages/Hangfire.AzureCosmosDB) is available as a NuGet package. Install it using the NuGet Package Console window:
+[Hangfire.AzureCosmosDB](https://www.nuget.org/packages/Hangfire.AzureCosmosDB) is available on NuGet.
 
+Package Manager
 ```powershell
 PM> Install-Package Hangfire.AzureCosmosDB
 ```
 
+.NET CLI
+```
+> dotnet add package Hangfire.AzureCosmosDB
+```
+
+PackageReference
+```xml
+<PackageReference Include="Hangfire.AzureCosmosDB" Version="0.0.0" />
+```
 
 ## Usage
 
@@ -45,8 +55,10 @@ GlobalConfiguration.Configuration.UseStorage(storage);
 ```
 
 ## Recommendations
-- Keep seperate database/collection for the hangfire.
+- Keep seperate database/collection for the hangfire. (Now you can [enable free tier](https://docs.microsoft.com/en-us/azure/cosmos-db/optimize-dev-test#azure-cosmos-db-free-tier) on Azure)
 
+## SDK Support
+This package only supports the latest SDK v3 [Microsoft.Azure.Cosmos](https://www.nuget.org/packages/Microsoft.Azure.Cosmos). If you want the support for the latest SDK v2 [Microsoft.Azure.DocumentDB](https://www.nuget.org/packages/Microsoft.Azure.DocumentDB/), you will have to use [Hangfire.AzureDocumentDB](https://www.nuget.org/packages/Hangfire.AzureDocumentDB)
 
 ## Questions? Problems?
 
