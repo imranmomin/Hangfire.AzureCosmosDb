@@ -1,13 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <TargetFrameworks>netstandard2.0</TargetFrameworks>
     <ProductName>Hangfire.AzureCosmosDB</ProductName>
     <Title>Hangfire.AzureCosmosDB</Title>
     <Company>Hangfire.AzureCosmosDB</Company>
     <Authors>Imran Momin</Authors>
     <PackageLicense>https://github.com/imranmomin/hangfire.AzureCosmosDB/blob/master/LICENSE</PackageLicense>
     <PackageProjectUrl>https://github.com/imranmomin/hangfire.AzureCosmosDB</PackageProjectUrl>
-    <Copyright>Copyright 2019</Copyright>
+    <Copyright>Copyright 2020</Copyright>
     <PackageTags>Hangfire Azure Cosmos</PackageTags>
     <Description>This package adds support to Microsoft Azure Cosmos DB for Hangfire</Description>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
@@ -54,8 +54,5 @@
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.6.0" />
     <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
-  </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Properties\" />
   </ItemGroup>
 </Project>

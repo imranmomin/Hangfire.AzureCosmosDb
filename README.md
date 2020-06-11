@@ -2,6 +2,7 @@
 
 [![Official Site](https://img.shields.io/badge/site-hangfire.io-blue.svg)](http://hangfire.io)
 [![Latest version](https://img.shields.io/nuget/v/Hangfire.AzureCosmosDB.svg)](https://www.nuget.org/packages/Hangfire.AzureCosmosDB)
+[![Downloads](https://img.shields.io/nuget/dt/Hangfire.AzureCosmosDB.svg)](https://www.nuget.org/packages/Hangfire.AzureCosmosDB)
 [![Build status](https://ci.appveyor.com/api/projects/status/np818jy8h1sa4v6n?svg=true)](https://ci.appveyor.com/project/imranmomin/hangfire-azurecosmosdb)
 
 This repo will add a [Microsoft Azure Cosmos DB](https://docs.microsoft.com/en-us/azure/cosmos-db/introduction) storage support to [Hangfire](http://hangfire.io) - fire-and-forget, delayed and recurring tasks runner for .NET. Scalable and reliable background job runner. Supports multiple servers, CPU and I/O intensive, long-running and short-running jobs.

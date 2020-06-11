@@ -121,7 +121,7 @@ namespace Hangfire.Azure
 
                     // get counts of jobs on state
                     string[] stateNames = new[] { EnqueuedState.StateName, FailedState.StateName, ProcessingState.StateName, ScheduledState.StateName, SucceededState.StateName, AwaitingState.StateName }.Select(x => $"'{x}'").ToArray();
-                    QueryDefinition sql = new QueryDefinition($"SELECT doc.state_name AS state, COUNT(1) AS stateCount FROM doc WHERE doc.type = @type AND IS_DEFINED(doc.state_name) AND doc.state_name IN ({string.Join(',', stateNames)}) GROUP BY doc.state_name")
+                    QueryDefinition sql = new QueryDefinition($"SELECT doc.state_name AS state, COUNT(1) AS stateCount FROM doc WHERE doc.type = @type AND IS_DEFINED(doc.state_name) AND doc.state_name IN ({string.Join(",", stateNames)}) GROUP BY doc.state_name")
                         .WithParameter("@type", (int)DocumentTypes.Job);
 
                     List<(string state, int stateCount)> states = storage.Container.GetItemQueryIterator<JObject>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Job) })
@@ -146,7 +146,7 @@ namespace Hangfire.Azure
 
                     // get sum of stats:succeeded / stats:deleted counters
                     string[] keys = new[] { "'stats:succeeded'", "'stats:deleted'" };
-                    sql = new QueryDefinition($"SELECT doc.key, SUM(doc['value']) AS total FROM doc WHERE doc.type = @type AND doc.key IN ({string.Join(',', keys)}) GROUP BY doc.key")
+                    sql = new QueryDefinition($"SELECT doc.key, SUM(doc['value']) AS total FROM doc WHERE doc.type = @type AND doc.key IN ({string.Join(",", keys)}) GROUP BY doc.key")
                         .WithParameter("@type", (int)DocumentTypes.Counter);
 
                     List<(string key, int total)> counters = storage.Container.GetItemQueryIterator<JObject>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Counter) })
@@ -438,7 +438,7 @@ namespace Hangfire.Azure
             Dictionary<DateTime, long> result = keys.ToDictionary(k => k.Value, v => default(long));
             string[] filter = keys.Keys.Select(x => $"'{x}'").ToArray();
 
-            QueryDefinition sql = new QueryDefinition($"SELECT doc.key, SUM(doc['value']) AS total FROM doc WHERE doc.type = @type AND doc.key IN ({string.Join(',', filter)}) GROUP BY doc.key")
+            QueryDefinition sql = new QueryDefinition($"SELECT doc.key, SUM(doc['value']) AS total FROM doc WHERE doc.type = @type AND doc.key IN ({string.Join(",", filter)}) GROUP BY doc.key")
                 .WithParameter("@type", (int)DocumentTypes.Counter);
 
             List<(string key, int total)> data = storage.Container.GetItemQueryIterator<JObject>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Counter) })

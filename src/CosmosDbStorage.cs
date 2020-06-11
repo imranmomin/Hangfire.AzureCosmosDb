@@ -57,12 +57,12 @@ namespace Hangfire.Azure
         {
             this.database = database;
             this.collection = collection;
-            StorageOptions ??= new CosmosDbStorageOptions();
+            StorageOptions = storageOptions ?? new CosmosDbStorageOptions();
 
             JobQueueProvider provider = new JobQueueProvider(this);
             QueueProviders = new PersistentJobQueueProviderCollection(provider);
 
-            options ??= new CosmosClientOptions();
+            options = options ?? new CosmosClientOptions();
             options.ApplicationName = "Hangfire";
             options.Serializer = new CosmosJsonSerializer(settings);
             Client = new CosmosClient(url, authSecret, options);
