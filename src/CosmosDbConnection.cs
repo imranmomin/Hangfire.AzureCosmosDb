@@ -333,7 +333,8 @@ namespace Hangfire.Azure
                 .Where(h => h.DocumentType == DocumentTypes.Hash && h.Key == key)
                 .Select(h => new { h.Field, h.Value })
                 .ToQueryResult()
-                .ToDictionary(h => h.Field, h => h.Value);
+                .GroupBy(h => h.Field, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(hg => hg.Key, hg => hg.First().Value);
         }
 
         public override void SetRangeInHash(string key, IEnumerable<KeyValuePair<string, string>> keyValuePairs)
