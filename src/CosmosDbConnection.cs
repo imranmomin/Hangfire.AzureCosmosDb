@@ -359,7 +359,7 @@ namespace Hangfire.Azure
 
             foreach (Hash source in sources)
             {
-                Hash hash = hashes.SingleOrDefault(h => h.Field == source.Field);
+                Hash hash = hashes.FirstOrDefault(h => h.Field == source.Field);
                 if (hash == null)
                 {
                     data.Items.Add(source);
