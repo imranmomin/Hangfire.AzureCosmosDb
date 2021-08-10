@@ -17,11 +17,12 @@ function expireDocument(query: string, expireOn: number) {
     }
 
     // append the query to filter by expire_on is not defined or less than $expireOn
-    query = `${query} AND (NOT IS_DEFINED(doc.expire_on) OR doc.expire_on !== ${expireOn})`;
+    query = `${query} AND (NOT IS_DEFINED(doc.expire_on) OR doc.expire_on != ${expireOn})`;
 
     // default response
     response.setBody(responseBody);
 
+    tryQueryAndUpdate();
     // Recursively runs the query w/ support for continuation tokens.
     // Calls tryUpdate(documents) as soon as the query returns documents.
     function tryQueryAndUpdate(continuation?: string) {
