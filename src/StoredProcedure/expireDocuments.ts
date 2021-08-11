@@ -1,6 +1,7 @@
 ﻿/**
  * Expire Documents
  * @param {string} query - the query to get only those documents which need to be expired
+ * @param {number} expireOn - the epoch date time
  */
 function expireDocument(query: string, expireOn: number) {
     let context: IContext = getContext();
@@ -16,13 +17,15 @@ function expireDocument(query: string, expireOn: number) {
         throw new Error("query is either empty or null");
     }
 
-    // append the query to filter by expire_on is not defined or less than $expireOn
+    // append the query to filter by expire_on is not defined or not equal to $expireOn
     query = `${query} AND (NOT IS_DEFINED(doc.expire_on) OR doc.expire_on != ${expireOn})`;
 
     // default response
     response.setBody(responseBody);
 
+    // call the function
     tryQueryAndUpdate();
+    
     // Recursively runs the query w/ support for continuation tokens.
     // Calls tryUpdate(documents) as soon as the query returns documents.
     function tryQueryAndUpdate(continuation?: string) {

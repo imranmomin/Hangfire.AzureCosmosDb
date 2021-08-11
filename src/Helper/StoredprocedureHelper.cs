@@ -19,7 +19,7 @@ namespace Hangfire.Azure.Helper
             {
                 records.Items = data.Items.Skip(affected).ToList();
                 Task<StoredProcedureExecuteResponse<int>> task = container.Scripts.ExecuteStoredProcedureAsync<int>("upsertDocuments", partitionKey, new dynamic[] { records }, cancellationToken: cancellationToken);
-                task.Wait();
+                task.Wait(cancellationToken);
                 affected += task.Result.Resource;
             } while (affected < data.Items.Count);
             return affected;
@@ -32,7 +32,7 @@ namespace Hangfire.Azure.Helper
             do
             {
                 Task<StoredProcedureExecuteResponse<ProcedureResponse>> task = container.Scripts.ExecuteStoredProcedureAsync<ProcedureResponse>("deleteDocuments", partitionKey, new dynamic[] { query }, cancellationToken: cancellationToken);
-                task.Wait();
+                task.Wait(cancellationToken);
                 response = task.Result;
                 affected += response.Affected;
             } while (response.Continuation);
@@ -45,7 +45,7 @@ namespace Hangfire.Azure.Helper
             do
             {
                 Task<StoredProcedureExecuteResponse<ProcedureResponse>> task = container.Scripts.ExecuteStoredProcedureAsync<ProcedureResponse>("persistDocuments", partitionKey, new dynamic[] { query }, cancellationToken: cancellationToken);
-                task.Wait();
+                task.Wait(cancellationToken);
                 response = task.Result;
             } while (response.Continuation);
         }
@@ -56,7 +56,7 @@ namespace Hangfire.Azure.Helper
             do
             {
                 Task<StoredProcedureExecuteResponse<ProcedureResponse>> task = container.Scripts.ExecuteStoredProcedureAsync<ProcedureResponse>("expireDocuments", partitionKey, new dynamic[] { query, epoch }, cancellationToken: cancellationToken);
-                task.Wait();
+                task.Wait(cancellationToken);
                 response = task.Result;
             } while (response.Continuation);
         }

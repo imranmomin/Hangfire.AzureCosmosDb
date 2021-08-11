@@ -101,7 +101,7 @@ namespace Hangfire.Azure
                                 int deleted = storage.Container.ExecuteDeleteDocuments(query, partitionKey, cancellationToken);
                                 logger.Trace($"Total {deleted} records from the 'Counter:{aggregated.Key}' were aggregated.");
                             }
-                        }, cancellationToken, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Current);
+                        }, TaskContinuationOptions.OnlyOnRanToCompletion);
 
                         continueTask.Wait(cancellationToken);
                     }
