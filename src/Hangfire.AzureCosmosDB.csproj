@@ -7,7 +7,7 @@
     <Authors>Imran Momin</Authors>
     <PackageLicense>https://github.com/imranmomin/hangfire.AzureCosmosDB/blob/master/LICENSE</PackageLicense>
     <PackageProjectUrl>https://github.com/imranmomin/hangfire.AzureCosmosDB</PackageProjectUrl>
-    <Copyright>Copyright 2020</Copyright>
+    <Copyright>Copyright 2021</Copyright>
     <PackageTags>Hangfire Azure Cosmos</PackageTags>
     <Description>This package adds support to Microsoft Azure Cosmos DB for Hangfire</Description>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
@@ -50,9 +50,9 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Hangfire.Core" Version="1.7.9" />
-    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.18.0" />
-    <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
+    <PackageReference Include="Hangfire.Core" Version="1.7.24" />
+    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.20.1" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
   </ItemGroup>
 </Project>
