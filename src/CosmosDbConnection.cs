@@ -4,7 +4,6 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
-
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
 using Hangfire.Azure.Helper;
@@ -12,7 +11,6 @@ using Hangfire.Azure.Queue;
 using Hangfire.Common;
 using Hangfire.Server;
 using Hangfire.Storage;
-
 using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Cosmos.Scripts;
 
@@ -87,35 +85,39 @@ namespace Hangfire.Azure
         {
             if (jobId == null) throw new ArgumentNullException(nameof(jobId));
 
-            Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, new PartitionKey((int)DocumentTypes.Job));
-            task.Wait();
-
-            if (task.Result.Resource != null)
+            try
             {
-                Documents.Job data = task.Result;
-                InvocationData invocationData = data.InvocationData;
-                invocationData.Arguments = data.Arguments;
+                Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, new PartitionKey((int)DocumentTypes.Job));
+                task.Wait();
 
-                Common.Job job = null;
-                JobLoadException loadException = null;
-
-                try
+                if (task.Result.Resource != null)
                 {
-                    job = invocationData.DeserializeJob();
+                    Documents.Job data = task.Result;
+                    InvocationData invocationData = data.InvocationData;
+                    invocationData.Arguments = data.Arguments;
+
+                    Common.Job job = null;
+                    JobLoadException loadException = null;
+
+                    try
+                    {
+                        job = invocationData.DeserializeJob();
+                    }
+                    catch (JobLoadException ex)
+                    {
+                        loadException = ex;
+                    }
+
+                    return new JobData
+                    {
+                        Job = job,
+                        State = data.StateName,
+                        CreatedAt = data.CreatedOn,
+                        LoadException = loadException
+                    };
                 }
-                catch (JobLoadException ex)
-                {
-                    loadException = ex;
-                }
-
-                return new JobData
-                {
-                    Job = job,
-                    State = data.StateName,
-                    CreatedAt = data.CreatedOn,
-                    LoadException = loadException
-                };
             }
+            catch { /* ignored */ }
 
             return null;
         }
@@ -378,8 +380,8 @@ namespace Hangfire.Azure
             if (key == null) throw new ArgumentNullException(nameof(key));
 
             QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.key = @key")
-                    .WithParameter("@key", key)
-                    .WithParameter("@type", (int)DocumentTypes.Hash);
+                .WithParameter("@key", key)
+                .WithParameter("@type", (int)DocumentTypes.Hash);
 
             return Storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Hash) })
                 .ToQueryResult()
@@ -476,6 +478,5 @@ namespace Hangfire.Azure
         }
 
         #endregion
-
     }
 }

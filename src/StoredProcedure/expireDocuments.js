@@ -10,8 +10,9 @@ function expireDocument(query, expireOn) {
     if (query === undefined || query === null) {
         throw new Error("query is either empty or null");
     }
-    query = `${query} AND (NOT IS_DEFINED(doc.expire_on) OR doc.expire_on !== ${expireOn})`;
+    query = `${query} AND (NOT IS_DEFINED(doc.expire_on) OR doc.expire_on != ${expireOn})`;
     response.setBody(responseBody);
+    tryQueryAndUpdate();
     function tryQueryAndUpdate(continuation) {
         let feedOptions = {
             continuation: continuation,

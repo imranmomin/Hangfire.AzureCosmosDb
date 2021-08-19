@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
 using Hangfire.Azure.Helper;
@@ -11,9 +10,7 @@ using Hangfire.Common;
 using Hangfire.States;
 using Hangfire.Storage;
 using Hangfire.Storage.Monitoring;
-
 using Microsoft.Azure.Cosmos;
-
 using Newtonsoft.Json.Linq;
 
 namespace Hangfire.Azure
@@ -125,18 +122,18 @@ namespace Hangfire.Azure
                         .WithParameter("@type", (int)DocumentTypes.Job);
 
                     List<(string state, int stateCount)> states = storage.Container.GetItemQueryIterator<JObject>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Job) })
-                         .ToQueryResult()
-                         .Select(x => (x.Value<string>("state").ToLower(), x.Value<int>("stateCount")))
-                         .ToList();
+                        .ToQueryResult()
+                        .Select(x => (x.Value<string>("state"), x.Value<int>("stateCount")))
+                        .ToList();
 
                     foreach ((string state, int stateCount) state in states)
                     {
-                        results.Add(state.state, state.stateCount);
+                        results.Add(state.state.ToLower(), state.stateCount);
                     }
 
                     // get counts of servers
                     sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type")
-                       .WithParameter("@type", (int)DocumentTypes.Server);
+                        .WithParameter("@type", (int)DocumentTypes.Server);
 
                     long servers = storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Server) })
                         .ToQueryResult()
@@ -145,7 +142,7 @@ namespace Hangfire.Azure
                     results.Add("servers", servers);
 
                     // get sum of stats:succeeded / stats:deleted counters
-                    string[] keys = new[] { "'stats:succeeded'", "'stats:deleted'" };
+                    string[] keys = { "'stats:succeeded'", "'stats:deleted'" };
                     sql = new QueryDefinition($"SELECT doc.key, SUM(doc['value']) AS total FROM doc WHERE doc.type = @type AND doc.key IN ({string.Join(",", keys)}) GROUP BY doc.key")
                         .WithParameter("@type", (int)DocumentTypes.Counter);
 
@@ -206,8 +203,8 @@ namespace Hangfire.Azure
                 State = state.Name,
                 InEnqueuedState = EnqueuedState.StateName.Equals(state.Name, StringComparison.OrdinalIgnoreCase),
                 EnqueuedAt = EnqueuedState.StateName.Equals(state.Name, StringComparison.OrdinalIgnoreCase)
-                   ? JobHelper.DeserializeNullableDateTime(state.Data["EnqueuedAt"])
-                   : null
+                    ? JobHelper.DeserializeNullableDateTime(state.Data.TryGetValue("EnqueuedAt", out string enqueuedAt) ? enqueuedAt : null)
+                    : null
             });
         }
 
@@ -228,8 +225,8 @@ namespace Hangfire.Azure
             {
                 Job = job,
                 InProcessingState = ProcessingState.StateName.Equals(state.Name, StringComparison.OrdinalIgnoreCase),
-                ServerId = state.Data.ContainsKey("ServerId") ? state.Data["ServerId"] : state.Data["ServerName"],
-                StartedAt = JobHelper.DeserializeDateTime(state.Data["StartedAt"])
+                ServerId = state.Data.TryGetValue("ServerId", out string serverId) ? serverId : state.Data.TryGetValue("ServerName", out string serverName) ? serverName : null,
+                StartedAt = JobHelper.DeserializeDateTime(state.Data.TryGetValue("StartedAt", out string startedAt) ? startedAt : null)
             });
         }
 
@@ -239,8 +236,8 @@ namespace Hangfire.Azure
             {
                 Job = job,
                 InScheduledState = ScheduledState.StateName.Equals(state.Name, StringComparison.OrdinalIgnoreCase),
-                EnqueueAt = JobHelper.DeserializeDateTime(state.Data["EnqueueAt"]),
-                ScheduledAt = JobHelper.DeserializeDateTime(state.Data["ScheduledAt"])
+                EnqueueAt = JobHelper.DeserializeDateTime(state.Data.TryGetValue("EnqueueAt", out string enqueuedAt) ? enqueuedAt : null),
+                ScheduledAt = JobHelper.DeserializeDateTime(state.Data.TryGetValue("ScheduledAt", out string scheduledAt) ? scheduledAt : null)
             });
         }
 
@@ -250,11 +247,11 @@ namespace Hangfire.Azure
             {
                 Job = job,
                 InSucceededState = SucceededState.StateName.Equals(state.Name, StringComparison.OrdinalIgnoreCase),
-                Result = state.Data.ContainsKey("Result") ? state.Data["Result"] : null,
-                TotalDuration = state.Data.ContainsKey("PerformanceDuration") && state.Data.ContainsKey("Latency")
-                                ? (long?)long.Parse(state.Data["PerformanceDuration"]) + long.Parse(state.Data["Latency"])
-                                : null,
-                SucceededAt = JobHelper.DeserializeNullableDateTime(state.Data["SucceededAt"])
+                Result = state.Data.TryGetValue("Result", out string result) ? result : null,
+                TotalDuration = state.Data.TryGetValue("PerformanceDuration", out string performanceDuration) && state.Data.TryGetValue("Latency", out string latency)
+                    ? (long?)long.Parse(performanceDuration) + long.Parse(latency)
+                    : null,
+                SucceededAt = JobHelper.DeserializeNullableDateTime(state.Data.TryGetValue("SucceededAt", out string succeededAt) ? succeededAt : null)
             });
         }
 
@@ -265,10 +262,10 @@ namespace Hangfire.Azure
                 Job = job,
                 InFailedState = FailedState.StateName.Equals(state.Name, StringComparison.OrdinalIgnoreCase),
                 Reason = state.Reason,
-                FailedAt = JobHelper.DeserializeNullableDateTime(state.Data["FailedAt"]),
-                ExceptionDetails = state.Data["ExceptionDetails"],
-                ExceptionMessage = state.Data["ExceptionMessage"],
-                ExceptionType = state.Data["ExceptionType"]
+                FailedAt = JobHelper.DeserializeNullableDateTime(state.Data.TryGetValue("FailedAt", out string failedAt) ? failedAt : null),
+                ExceptionDetails = state.Data.TryGetValue("ExceptionDetails", out string exceptionDetails) ? exceptionDetails : null,
+                ExceptionMessage = state.Data.TryGetValue("ExceptionMessage", out string exceptionMessage) ? exceptionMessage : null,
+                ExceptionType = state.Data.TryGetValue("ExceptionType", out string exceptionType) ? exceptionType : null
             });
         }
 
@@ -278,7 +275,7 @@ namespace Hangfire.Azure
             {
                 Job = job,
                 InDeletedState = DeletedState.StateName.Equals(state.Name, StringComparison.OrdinalIgnoreCase),
-                DeletedAt = JobHelper.DeserializeNullableDateTime(state.Data["DeletedAt"])
+                DeletedAt = JobHelper.DeserializeNullableDateTime(state.Data.TryGetValue("DeletedAt", out string deletedAt) ? deletedAt : null)
             });
         }
 
@@ -325,15 +322,15 @@ namespace Hangfire.Azure
                 .ToQueryResult()
                 .ToList();
 
-            string[] ids = queues.Select(x => x.JobId).ToArray();
+            string[] queueJobIds = queues.Select(x => x.JobId).ToArray();
             List<Documents.Job> filterJobs = storage.Container.GetItemLinqQueryable<Documents.Job>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Job) })
-                .Where(x => ids.Contains(x.Id))
+                .Where(x => queueJobIds.Contains(x.Id))
                 .ToQueryResult()
                 .ToList();
 
-            ids = filterJobs.Select(x => x.StateId).ToArray();
+            string[] filteredJobIds = filterJobs.Select(x => x.StateId).ToArray();
             List<State> states = storage.Container.GetItemLinqQueryable<State>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.State) })
-                .Where(x => ids.Contains(x.Id))
+                .Where(x => filteredJobIds.Contains(x.Id))
                 .ToQueryResult()
                 .ToList();
 
@@ -393,8 +390,8 @@ namespace Hangfire.Azure
                 .WithParameter("@state", state);
 
             return storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Job) })
-                  .ToQueryResult()
-                  .FirstOrDefault();
+                .ToQueryResult()
+                .FirstOrDefault();
         }
 
         public IDictionary<DateTime, long> SucceededByDatesCount() => GetDatesTimelineStats("succeeded");
