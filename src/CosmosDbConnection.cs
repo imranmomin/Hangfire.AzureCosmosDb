@@ -117,10 +117,7 @@ namespace Hangfire.Azure
                     };
                 }
             }
-            catch (CosmosException e) when (e.StatusCode == HttpStatusCode.NotFound)
-            {
-                /* ignored */
-            }
+            catch { /* ignored */ }
 
             return null;
         }
