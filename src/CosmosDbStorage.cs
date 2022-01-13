@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -169,6 +170,24 @@ namespace Hangfire.Azure
             if (storedProcedureTask.IsFaulted || storedProcedureTask.IsCanceled)
             {
                 throw new ApplicationException("Unable to create the stored procedures", databaseTask.Exception);
+            }
+
+            Task indexesTask = containerTask.ContinueWith(t =>
+            {
+                ContainerResponse containerResponse = t.Result;
+                Collection<CompositePath> compositeIndexes = new Collection<CompositePath>
+                {
+                    new CompositePath {Path = "/name", Order = CompositePathSortOrder.Ascending},
+                    new CompositePath {Path = "/created_on", Order = CompositePathSortOrder.Ascending}
+                };
+                containerResponse.Resource.IndexingPolicy.CompositeIndexes.Add(compositeIndexes);
+                return Container.ReplaceContainerAsync(containerResponse.Resource);
+            });
+            
+            indexesTask.Wait();
+            if (indexesTask.IsFaulted || indexesTask.IsCanceled)
+            {
+                throw new ApplicationException("Unable to create the indexes", databaseTask.Exception);
             }
         }
     }
