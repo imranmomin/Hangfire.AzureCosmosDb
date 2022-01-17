@@ -1,9 +1,8 @@
 ﻿// ReSharper disable once CheckNamespace
-namespace Hangfire.Azure.Queue
+namespace Hangfire.Azure.Queue;
+
+public interface IPersistentJobQueueProvider
 {
-    public interface IPersistentJobQueueProvider
-    {
-        IPersistentJobQueue GetJobQueue();
-        IPersistentJobQueueMonitoringApi GetJobQueueMonitoringApi();
-    }
+    IPersistentJobQueue GetJobQueue();
+    IPersistentJobQueueMonitoringApi GetJobQueueMonitoringApi();
 }

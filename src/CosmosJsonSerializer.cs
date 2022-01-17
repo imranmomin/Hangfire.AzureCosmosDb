@@ -5,56 +5,55 @@ using Microsoft.Azure.Cosmos;
 
 using Newtonsoft.Json;
 
-namespace Hangfire.Azure
+namespace Hangfire.Azure;
+
+public class CosmosJsonSerializer : CosmosSerializer
 {
-    public class CosmosJsonSerializer : CosmosSerializer
+    private static readonly Encoding defaultEncoding = new UTF8Encoding(false, true);
+    private readonly JsonSerializer serializer;
+
+    public CosmosJsonSerializer() : this(new JsonSerializerSettings())
     {
-        private static readonly Encoding defaultEncoding = new UTF8Encoding(false, true);
-        private readonly JsonSerializer serializer;
+    }
 
-        public CosmosJsonSerializer() : this(new JsonSerializerSettings())
-        {
-        }
+    public CosmosJsonSerializer(JsonSerializerSettings serializerSettings)
+    {
+        serializer = JsonSerializer.Create(serializerSettings);
+    }
 
-        public CosmosJsonSerializer(JsonSerializerSettings serializerSettings)
+    public override T FromStream<T>(Stream stream)
+    {
+        using (stream)
         {
-            serializer = JsonSerializer.Create(serializerSettings);
-        }
-
-        public override T FromStream<T>(Stream stream)
-        {
-            using (stream)
+            if (typeof(Stream).IsAssignableFrom(typeof(T)))
             {
-                if (typeof(Stream).IsAssignableFrom(typeof(T)))
-                {
-                    return (T)(object)stream;
-                }
+                return (T)(object)stream;
+            }
 
-                using (StreamReader sr = new StreamReader(stream))
+            using (StreamReader sr = new StreamReader(stream))
+            {
+                using (JsonTextReader jsonTextReader = new JsonTextReader(sr))
                 {
-                    using (JsonTextReader jsonTextReader = new JsonTextReader(sr))
-                    {
-                        return serializer.Deserialize<T>(jsonTextReader)!;
-                    }
+                    return serializer.Deserialize<T>(jsonTextReader)!;
                 }
             }
         }
+    }
 
-        public override Stream ToStream<T>(T input)
+    public override Stream ToStream<T>(T input)
+    {
+        MemoryStream streamPayload = new MemoryStream();
+        using (StreamWriter streamWriter = new StreamWriter(streamPayload, defaultEncoding, 1024, true))
         {
-            MemoryStream streamPayload = new MemoryStream();
-            using (StreamWriter streamWriter = new StreamWriter(streamPayload, defaultEncoding, 1024, true))
+            using (JsonWriter writer = new JsonTextWriter(streamWriter))
             {
-                using (JsonWriter writer = new JsonTextWriter(streamWriter))
-                {
-                    writer.Formatting = Formatting.None;
-                    serializer.Serialize(writer, input);
-                    writer.Flush();
-                    streamWriter.Flush();
-                }
+                writer.Formatting = Formatting.None;
+                serializer.Serialize(writer, input);
+                writer.Flush();
+                streamWriter.Flush();
             }
-            streamPayload.Position = 0;
-            return streamPayload;
         }
+        streamPayload.Position = 0;
+        return streamPayload;
     }
 }

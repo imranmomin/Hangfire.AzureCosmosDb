@@ -19,7 +19,7 @@ public class JobQueueFacts : IClassFixture<ContainerFixture>
 
     public JobQueueFacts(ContainerFixture containerFixture)
     {
-        this.ContainerFixture = containerFixture;
+        ContainerFixture = containerFixture;
         Storage = containerFixture.Storage;
     }
 
@@ -127,7 +127,7 @@ public class JobQueueFacts : IClassFixture<ContainerFixture>
         jobQueue.Enqueue(queue, jobId);
 
         //act
-        FetchedJob job = (FetchedJob)jobQueue.Dequeue(defaultQueues, CancellationToken.None);
+        FetchedJob job = (FetchedJob)jobQueue.Dequeue(new[] { queue }, CancellationToken.None);
 
         //assert
         Assert.Equal(jobId, job.JobId);
@@ -183,7 +183,9 @@ public class JobQueueFacts : IClassFixture<ContainerFixture>
         //act
         FetchedJob job = (FetchedJob)jobQueue.Dequeue(defaultQueues, CancellationToken.None);
         job.RemoveFromQueue();
-        long count = Storage.GetMonitoringApi().EnqueuedCount("default");
+
+        JobQueueMonitoringApi monitoringApi = new JobQueueMonitoringApi(Storage);
+        long count = monitoringApi.GetEnqueuedCount("default");
 
         //assert
         Assert.Equal(0, count);
@@ -202,7 +204,7 @@ public class JobQueueFacts : IClassFixture<ContainerFixture>
         jobQueue.Enqueue(queue, jobId);
 
         // act
-        string query = "SELECT * FROM doc WHERE doc.type = @type AND doc.name = @queue";
+        const string query = "SELECT * FROM doc WHERE doc.type = @type AND doc.name = @queue";
         QueryDefinition sql = new QueryDefinition(query)
             .WithParameter("@type", (int)DocumentTypes.Queue)
             .WithParameter("@queue", queue);
@@ -217,5 +219,25 @@ public class JobQueueFacts : IClassFixture<ContainerFixture>
         Assert.NotNull(data);
         Assert.Equal(jobId, data!.JobId);
         Assert.Equal(queue, data.Name);
+    }
+
+    [Fact]
+    public void Dequeue_ShouldWaitForTheDistributionLock()
+    {
+        // clean all the documents for the container
+        ContainerFixture.Clean();
+
+        //arrange 
+        JobQueue jobQueue = new JobQueue(Storage);
+        jobQueue.Enqueue("default", Guid.NewGuid().ToString());
+
+        //act
+        const string lockKey = "locks:job:dequeue";
+        CosmosDbDistributedLock distributedLock = new CosmosDbDistributedLock(lockKey, TimeSpan.Zero, Storage);
+        CancellationTokenSource cancellationSource = new CancellationTokenSource(500);
+
+        // assert
+        Assert.Throws<OperationCanceledException>(() => jobQueue.Dequeue(defaultQueues, cancellationSource.Token));
+        distributedLock.Dispose();
     }
 }

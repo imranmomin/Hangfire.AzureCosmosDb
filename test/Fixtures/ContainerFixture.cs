@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Threading;
-using System.Threading.Tasks;
-using Hangfire.Azure;
 using Hangfire.Azure.Helper;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
@@ -32,9 +29,9 @@ public class ContainerFixture : IDisposable
 
     public void Clean()
     {
-        foreach (var type in Enum.GetValues(typeof(Azure.Documents.DocumentTypes)))
+        const string query = "SELECT * FROM doc";
+        foreach (var type in Enum.GetValues(typeof(Documents.DocumentTypes)))
         {
-            string query = "SELECT * FROM doc";
             Storage.Container.ExecuteDeleteDocuments(query, new PartitionKey((int)type));
         }
     }
@@ -43,7 +40,7 @@ public class ContainerFixture : IDisposable
     {
         if (disposed) return;
         disposed = true;
-        
+
         Clean();
         Storage.Dispose();
     }
