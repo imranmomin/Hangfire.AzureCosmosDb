@@ -8,22 +8,22 @@ using Newtonsoft.Json.Converters;
 // ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents
 {
-    internal class Job : DocumentBase
+    public class Job : DocumentBase
     {
         [JsonProperty("data")]
-        public InvocationData InvocationData { get; set; }
+        public InvocationData InvocationData { get; set; } = null!;
 
         [JsonProperty("arguments")]
-        public string Arguments { get; set; }
+        public string Arguments { get; set; } = null!;
 
         [JsonProperty("state_id")]
-        public string StateId { get; set; }
+        public string StateId { get; set; } = null!;
 
         [JsonProperty("state_name")]
-        public string StateName { get; set; }
+        public string StateName { get; set; } = null!;
 
         [JsonProperty("parameters")]
-        public Parameter[] Parameters { get; set; }
+        public Parameter[] Parameters { get; set; } = null!;
 
         [JsonProperty("created_on")]
         [JsonConverter(typeof(UnixDateTimeConverter))]

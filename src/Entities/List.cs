@@ -6,13 +6,13 @@ using Newtonsoft.Json.Converters;
 // ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents
 {
-    internal class List : DocumentBase
+    public class List : DocumentBase
     {
         [JsonProperty("key")]
-        public string Key { get; set; }
+        public string Key { get; set; } = null!;
 
         [JsonProperty("value")]
-        public string Value { get; set; }
+        public string Value { get; set; } = null!;
 
         [JsonProperty("created_on")]
         [JsonConverter(typeof(UnixDateTimeConverter))]

@@ -1,6 +1,6 @@
 ﻿namespace Hangfire.Azure.Queue
 {
-    internal class JobQueueProvider : IPersistentJobQueueProvider
+    public class JobQueueProvider : IPersistentJobQueueProvider
     {
         private readonly JobQueue queue;
         private readonly JobQueueMonitoringApi monitoringQueue;

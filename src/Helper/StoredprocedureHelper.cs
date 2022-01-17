@@ -9,9 +9,9 @@ using Microsoft.Azure.Cosmos.Scripts;
 
 namespace Hangfire.Azure.Helper
 {
-    internal static class StoredprocedureHelper
+    public static class StoredprocedureHelper
     {
-        internal static int ExecuteUpsertDocuments<T>(this Container container, Data<T> data, PartitionKey partitionKey, CancellationToken cancellationToken = default)
+        public static int ExecuteUpsertDocuments<T>(this Container container, Data<T> data, PartitionKey partitionKey, CancellationToken cancellationToken = default)
         {
             int affected = 0;
             Data<T> records = new Data<T>(data.Items);
@@ -25,7 +25,7 @@ namespace Hangfire.Azure.Helper
             return affected;
         }
 
-        internal static int ExecuteDeleteDocuments(this Container container, string query, PartitionKey partitionKey, CancellationToken cancellationToken = default)
+        public static int ExecuteDeleteDocuments(this Container container, string query, PartitionKey partitionKey, CancellationToken cancellationToken = default)
         {
             int affected = 0;
             ProcedureResponse response;
@@ -39,7 +39,7 @@ namespace Hangfire.Azure.Helper
             return affected;
         }
 
-        internal static void ExecutePersistDocuments(this Container container, string query, PartitionKey partitionKey, CancellationToken cancellationToken = default)
+        public static void ExecutePersistDocuments(this Container container, string query, PartitionKey partitionKey, CancellationToken cancellationToken = default)
         {
             ProcedureResponse response;
             do
@@ -50,7 +50,7 @@ namespace Hangfire.Azure.Helper
             } while (response.Continuation);
         }
 
-        internal static void ExecuteExpireDocuments(this Container container, string query, int epoch, PartitionKey partitionKey, CancellationToken cancellationToken = default)
+        public static void ExecuteExpireDocuments(this Container container, string query, int epoch, PartitionKey partitionKey, CancellationToken cancellationToken = default)
         {
             ProcedureResponse response;
             do

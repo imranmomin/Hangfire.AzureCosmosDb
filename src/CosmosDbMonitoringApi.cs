@@ -15,13 +15,13 @@ using Newtonsoft.Json.Linq;
 
 namespace Hangfire.Azure
 {
-    internal sealed class CosmosDbMonitoringApi : IMonitoringApi
+    public sealed class CosmosDbMonitoringApi : IMonitoringApi
     {
         private readonly CosmosDbStorage storage;
-        private readonly object cacheLock = new object();
+        private readonly object cacheLock = new();
         private static readonly TimeSpan cacheTimeout = TimeSpan.FromSeconds(2);
         private static DateTime cacheUpdated;
-        private static StatisticsDto cacheStatisticsDto;
+        private static StatisticsDto? cacheStatisticsDto;
 
         public CosmosDbMonitoringApi(CosmosDbStorage storage) => this.storage = storage;
 
@@ -69,7 +69,7 @@ namespace Hangfire.Azure
                 .ToList();
         }
 
-        public JobDetailsDto JobDetails(string jobId)
+        public JobDetailsDto? JobDetails(string jobId)
         {
             if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
 
@@ -92,15 +92,14 @@ namespace Hangfire.Azure
                         CreatedAt = s.CreatedOn,
                         Reason = s.Reason,
                         StateName = s.Name
-                    })
-                    .ToList();
+                    }).ToList();
 
                 return new JobDetailsDto
                 {
                     Job = invocationData.DeserializeJob(),
                     CreatedAt = job.CreatedOn,
                     ExpireAt = job.ExpireOn,
-                    Properties = job.Parameters.ToDictionary(p => p.Name, p => p.Value.TryParseEpochToDate()),
+                    Properties = job.Parameters.ToDictionary(p => p.Name, p => p.Value.TryParseEpochToDate(out string? x) ? x : p.Value),
                     History = states
                 };
             }
@@ -118,13 +117,14 @@ namespace Hangfire.Azure
 
                     // get counts of jobs on state
                     string[] stateNames = new[] { EnqueuedState.StateName, FailedState.StateName, ProcessingState.StateName, ScheduledState.StateName, SucceededState.StateName, AwaitingState.StateName }.Select(x => $"'{x}'").ToArray();
-                    QueryDefinition sql = new QueryDefinition($"SELECT doc.state_name AS state, COUNT(1) AS stateCount FROM doc WHERE doc.type = @type AND IS_DEFINED(doc.state_name) AND doc.state_name IN ({string.Join(",", stateNames)}) GROUP BY doc.state_name")
-                        .WithParameter("@type", (int)DocumentTypes.Job);
+                    QueryDefinition sql = new QueryDefinition("SELECT doc.state_name AS state, COUNT(1) AS stateCount FROM doc WHERE doc.type = @type AND IS_DEFINED(doc.state_name) " +
+                                                              $"AND doc.state_name IN ({string.Join(",", stateNames)}) GROUP BY doc.state_name");
+                    sql.WithParameter("@type", (int)DocumentTypes.Job);
 
                     List<(string state, int stateCount)> states = storage.Container.GetItemQueryIterator<JObject>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Job) })
                         .ToQueryResult()
                         .Select(x => (x.Value<string>("state"), x.Value<int>("stateCount")))
-                        .ToList();
+                        .ToList()!;
 
                     foreach ((string state, int stateCount) state in states)
                     {
@@ -149,7 +149,7 @@ namespace Hangfire.Azure
                     List<(string key, int total)> counters = storage.Container.GetItemQueryIterator<JObject>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Counter) })
                         .ToQueryResult()
                         .Select(x => (x.Value<string>("key"), x.Value<int>("total")))
-                        .ToList();
+                        .ToList()!;
 
                     foreach ((string key, int total) counter in counters)
                     {
@@ -197,14 +197,12 @@ namespace Hangfire.Azure
         public JobList<EnqueuedJobDto> EnqueuedJobs(string queue, int from, int perPage)
         {
             string queryText = $"SELECT * FROM doc WHERE doc.type = @type AND doc.name = @name AND NOT IS_DEFINED(doc.fetched_at) ORDER BY doc.created_on OFFSET {from} LIMIT {perPage}";
-            return GetJobsOnQueue(queryText, queue, (state, job, fetchedAt) => new EnqueuedJobDto
+            return GetJobsOnQueue(queryText, queue, (state, job, _) => new EnqueuedJobDto
             {
                 Job = job,
                 State = state.Name,
                 InEnqueuedState = EnqueuedState.StateName.Equals(state.Name, StringComparison.OrdinalIgnoreCase),
-                EnqueuedAt = EnqueuedState.StateName.Equals(state.Name, StringComparison.OrdinalIgnoreCase)
-                    ? JobHelper.DeserializeNullableDateTime(state.Data.TryGetValue("EnqueuedAt", out string enqueuedAt) ? enqueuedAt : null)
-                    : null
+                EnqueuedAt = JobHelper.DeserializeNullableDateTime(state.Data.TryGetValue("EnqueuedAt", out string enqueuedAt) ? enqueuedAt : null)
             });
         }
 
@@ -340,7 +338,7 @@ namespace Hangfire.Azure
                 InvocationData invocationData = job.InvocationData;
                 invocationData.Arguments = job.Arguments;
 
-                State state = states.Find(x => x.Id == job.StateId);
+                State? state = states.SingleOrDefault(x => x.Id == job.StateId);
 
                 T data = selector(state, invocationData.DeserializeJob(), queueItem.FetchedAt);
                 jobs.Add(new KeyValuePair<string, T>(job.Id, data));
@@ -441,7 +439,7 @@ namespace Hangfire.Azure
             List<(string key, int total)> data = storage.Container.GetItemQueryIterator<JObject>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Counter) })
                 .ToQueryResult()
                 .Select(x => (x.Value<string>("key"), x.Value<int>("total")))
-                .ToList();
+                .ToList()!;
 
             foreach (string key in keys.Keys)
             {

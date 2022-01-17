@@ -1,41 +1,43 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
-
 using Hangfire.Azure.Queue;
 using Hangfire.Logging;
 using Hangfire.Server;
 using Hangfire.Storage;
-
 using Microsoft.Azure.Cosmos;
-
+using Microsoft.Azure.Cosmos.Scripts;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
-
 
 namespace Hangfire.Azure
 {
     /// <summary>
     /// CosmosDbStorage extend the storage option for Hangfire.
     /// </summary>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1001:TypesThatOwnDisposableFieldsShouldBeDisposable")]
-    public sealed class CosmosDbStorage : JobStorage
+    [SuppressMessage("Microsoft.Design", "CA1001:TypesThatOwnDisposableFieldsShouldBeDisposable")]
+    public sealed class CosmosDbStorage : JobStorage, IDisposable
     {
-        internal PersistentJobQueueProviderCollection QueueProviders { get; }
+        public PersistentJobQueueProviderCollection QueueProviders { get; }
 
         internal CosmosDbStorageOptions StorageOptions { get; }
 
         private CosmosClient Client { get; }
 
-        internal Container Container { get; private set; }
+        public Container Container { get; private set; } = null!;
 
-        private readonly string database;
-        private readonly string collection;
-        private readonly JsonSerializerSettings settings = new JsonSerializerSettings
+        private readonly string databaseName;
+        private readonly string containerName;
+        private bool disposed;
+
+        private readonly JsonSerializerSettings settings = new()
         {
             NullValueHandling = NullValueHandling.Ignore,
             DateTimeZoneHandling = DateTimeZoneHandling.Utc,
@@ -46,28 +48,27 @@ namespace Hangfire.Azure
         };
 
         /// <summary>
-        /// Initializes the CosmosDbStorage form the url auth secret provide.
+        /// Creates an instance of CosmosDbStorage
         /// </summary>
         /// <param name="url">The url string to Cosmos Database</param>
         /// <param name="authSecret">The secret key for the Cosmos Database</param>
-        /// <param name="database">The name of the database to connect with</param>
-        /// <param name="collection">The name of the collection/container on the database</param>
-        /// <param name="options">The CosmosDbStorageOptions object to override any of the options</param>
-        /// <param name="storageOptions"></param>
-        public CosmosDbStorage(string url, string authSecret, string database, string collection, CosmosClientOptions options = null, CosmosDbStorageOptions storageOptions = null)
+        /// <param name="databaseName">The name of the database to connect with</param>
+        /// <param name="containerName">The name of the collection/container on the database</param>
+        /// <param name="options">The CosmosClientOptions object to override any of the options</param>
+        /// <param name="storageOptions">The CosmosDbStorageOptions object to override any of the options</param>
+        private CosmosDbStorage(string url, string authSecret, string databaseName, string containerName, CosmosClientOptions? options = null, CosmosDbStorageOptions? storageOptions = null)
         {
-            this.database = database;
-            this.collection = collection;
+            this.databaseName = databaseName;
+            this.containerName = containerName;
             StorageOptions = storageOptions ?? new CosmosDbStorageOptions();
 
             JobQueueProvider provider = new JobQueueProvider(this);
             QueueProviders = new PersistentJobQueueProviderCollection(provider);
 
-            options = options ?? new CosmosClientOptions();
+            options ??= new CosmosClientOptions();
             options.ApplicationName = "Hangfire";
             options.Serializer = new CosmosJsonSerializer(settings);
             Client = new CosmosClient(url, authSecret, options);
-            Initialize();
         }
 
         /// <summary>
@@ -112,83 +113,123 @@ namespace Hangfire.Azure
         /// Return the name of the database
         /// </summary>
         /// <returns></returns>
-        public override string ToString() => $"Cosmos DB : {database}";
+        public override string ToString() => $"Cosmos DB : {databaseName}";
 
-        private void Initialize()
+        /// <summary>
+        /// Creates and returns an instance of CosmosDbStorage
+        /// </summary>
+        /// <param name="url">The url string to Cosmos Database</param>
+        /// <param name="authSecret">The secret key for the Cosmos Database</param>
+        /// <param name="databaseName">The name of the database to connect with</param>
+        /// <param name="containerName">The name of the collection/container on the database</param>
+        /// <param name="options">The CosmosClientOptions object to override any of the options</param>
+        /// <param name="storageOptions">The CosmosDbStorageOptions object to override any of the options</param>
+        public static CosmosDbStorage Create(string url, string authSecret, string databaseName, string containerName, CosmosClientOptions? options = null, CosmosDbStorageOptions? storageOptions = null)
+        {
+            CosmosDbStorage storage = new CosmosDbStorage(url, authSecret, databaseName, containerName, options, storageOptions);
+            storage.InitializeAsync().Wait();
+            return storage;
+        }
+
+        /// <summary>
+        /// Creates and returns an instance of CosmosDbStorage
+        /// </summary>
+        /// <param name="url">The url string to Cosmos Database</param>
+        /// <param name="authSecret">The secret key for the Cosmos Database</param>
+        /// <param name="databaseName">The name of the database to connect with</param>
+        /// <param name="containerName">The name of the collection/container on the database</param>
+        /// <param name="options">The CosmosClientOptions object to override any of the options</param>
+        /// <param name="storageOptions">The CosmosDbStorageOptions object to override any of the options</param>
+        /// <param name="cancellationToken">A cancellation token</param>
+        public static async Task<CosmosDbStorage> CreateAsync(string url, string authSecret, string databaseName, string containerName,
+            CosmosClientOptions? options = null,
+            CosmosDbStorageOptions? storageOptions = null,
+            CancellationToken cancellationToken = default)
+        {
+            CosmosDbStorage storage = new CosmosDbStorage(url, authSecret, databaseName, containerName, options, storageOptions);
+            await storage.InitializeAsync(cancellationToken);
+            return storage;
+        }
+
+        private async Task InitializeAsync(CancellationToken cancellationToken = default)
         {
             ILog logger = LogProvider.For<CosmosDbStorage>();
 
             // create database
-            logger.Info($"Creating database : {database}");
-            Task<DatabaseResponse> databaseTask = Client.CreateDatabaseIfNotExistsAsync(database);
+            logger.Info($"Creating database : {databaseName}");
+            DatabaseResponse databaseResponse = await Client.CreateDatabaseIfNotExistsAsync(databaseName, cancellationToken: cancellationToken);
 
-            // create document collection
-            Task<ContainerResponse> containerTask = databaseTask.ContinueWith(t =>
+            // create container
+            logger.Info($"Creating container : {containerName}");
+            Database resultDatabase = databaseResponse.Database;
+
+            ContainerProperties properties = new ContainerProperties
             {
-                logger.Info($"Creating document collection : {collection}");
-                Database resultDatabase = t.Result.Database;
-                return resultDatabase.CreateContainerIfNotExistsAsync(collection, "/type");
-            }, TaskContinuationOptions.OnlyOnRanToCompletion).Unwrap();
+                Id = containerName,
+                DefaultTimeToLive = -1,
+                PartitionKeyPath = "/type"
+            };
+
+            // add the index policy
+            Collection<CompositePath> compositeIndexes = new Collection<CompositePath>
+            {
+                new() { Path = "/name", Order = CompositePathSortOrder.Ascending },
+                new() { Path = "/created_on", Order = CompositePathSortOrder.Ascending }
+            };
+            properties.IndexingPolicy.CompositeIndexes.Add(compositeIndexes);
+
+            ContainerResponse containerResponse = await resultDatabase.CreateContainerIfNotExistsAsync(properties, cancellationToken: cancellationToken);
+            Container = containerResponse.Container;
 
             // create stored procedures 
-            Task storedProcedureTask = containerTask.ContinueWith(t =>
+            Assembly assembly = Assembly.GetExecutingAssembly();
+            string[] storedProcedureFiles = assembly.GetManifestResourceNames().Where(n => n.EndsWith(".js")).ToArray();
+            foreach (string storedProcedureFile in storedProcedureFiles)
             {
-                Container = t.Result;
-                System.Reflection.Assembly assembly = System.Reflection.Assembly.GetExecutingAssembly();
-                string[] storedProcedureFiles = assembly.GetManifestResourceNames().Where(n => n.EndsWith(".js")).ToArray();
-                foreach (string storedProcedureFile in storedProcedureFiles)
+                logger.Info($"Creating storedprocedure : {storedProcedureFile}");
+                Stream? stream = assembly.GetManifestResourceStream(storedProcedureFile);
+                if (stream != null)
                 {
-                    logger.Info($"Creating storedprocedure : {storedProcedureFile}");
-                    Stream stream = assembly.GetManifestResourceStream(storedProcedureFile);
-                    using (MemoryStream memoryStream = new MemoryStream())
+                    using MemoryStream memoryStream = new MemoryStream();
+                    await stream.CopyToAsync(memoryStream);
+
+                    StoredProcedureProperties sp = new StoredProcedureProperties
                     {
-                        stream?.CopyTo(memoryStream);
-                        Microsoft.Azure.Cosmos.Scripts.StoredProcedureProperties sp = new Microsoft.Azure.Cosmos.Scripts.StoredProcedureProperties
-                        {
-                            Body = Encoding.UTF8.GetString(memoryStream.ToArray()),
-                            Id = Path.GetFileNameWithoutExtension(storedProcedureFile)?
-                                .Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries)
-                                .Last()
-                        };
+                        Body = Encoding.UTF8.GetString(memoryStream.ToArray()),
+                        Id = Path.GetFileNameWithoutExtension(storedProcedureFile)?
+                            .Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries)
+                            .Last()
+                    };
 
-                        Task<Microsoft.Azure.Cosmos.Scripts.StoredProcedureResponse> spTask = Container.Scripts.ReplaceStoredProcedureAsync(sp);
-                        spTask.ContinueWith(x =>
-                        {
-                            if (x.Status == TaskStatus.Faulted && x.Exception.InnerException is CosmosException ex && ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-                            {
-                                return Container.Scripts.CreateStoredProcedureAsync(sp);
-                            }
+                    string query = "SELECT * FROM doc where doc.id = @Id";
+                    QueryDefinition queryDefinition = new QueryDefinition(query);
+                    queryDefinition.WithParameter("@Id", sp.Id);
 
-                            return Task.FromResult(x.Result);
-                        }).Unwrap().Wait();
+                    using FeedIterator<StoredProcedureProperties> iterator = Container.Scripts.GetStoredProcedureQueryIterator<StoredProcedureProperties>(queryDefinition);
+                    if (iterator.HasMoreResults)
+                    {
+                        FeedResponse<StoredProcedureProperties> storedProcedure = await iterator.ReadNextAsync(cancellationToken);
+                        if (storedProcedure.Count == 0)
+                        {
+                            await Container.Scripts.CreateStoredProcedureAsync(sp, cancellationToken: cancellationToken);
+                        }
+                        else
+                        {
+                            await Container.Scripts.ReplaceStoredProcedureAsync(sp, cancellationToken: cancellationToken);
+                        }
                     }
-                    stream?.Close();
+
+                    // close the stream
+                    stream.Close();
                 }
-            }, TaskContinuationOptions.OnlyOnRanToCompletion);
-
-            storedProcedureTask.Wait();
-            if (storedProcedureTask.IsFaulted || storedProcedureTask.IsCanceled)
-            {
-                throw new ApplicationException("Unable to create the stored procedures", databaseTask.Exception);
             }
+        }
 
-            Task indexesTask = containerTask.ContinueWith(t =>
-            {
-                ContainerResponse containerResponse = t.Result;
-                Collection<CompositePath> compositeIndexes = new Collection<CompositePath>
-                {
-                    new CompositePath {Path = "/name", Order = CompositePathSortOrder.Ascending},
-                    new CompositePath {Path = "/created_on", Order = CompositePathSortOrder.Ascending}
-                };
-                containerResponse.Resource.IndexingPolicy.CompositeIndexes.Add(compositeIndexes);
-                return Container.ReplaceContainerAsync(containerResponse.Resource);
-            });
-            
-            indexesTask.Wait();
-            if (indexesTask.IsFaulted || indexesTask.IsCanceled)
-            {
-                throw new ApplicationException("Unable to create the indexes", databaseTask.Exception);
-            }
+        public void Dispose()
+        {
+            if (disposed) return;
+            disposed = true;
+            Client.Dispose();
         }
     }
 }

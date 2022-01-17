@@ -15,10 +15,10 @@ using Microsoft.Azure.Cosmos.Scripts;
 
 namespace Hangfire.Azure
 {
-    internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
+    public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
     {
         private readonly CosmosDbConnection connection;
-        private readonly List<Action> commands = new List<Action>();
+        private readonly List<Action> commands = new();
 
         public CosmosDbWriteOnlyTransaction(CosmosDbConnection connection) => this.connection = connection;
 
@@ -133,6 +133,8 @@ namespace Hangfire.Azure
                 string queryJobs = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Job} AND doc.id = '{jobId}'";
                 connection.Storage.Container.ExecuteExpireDocuments(queryJobs, epoch, new PartitionKey((int)DocumentTypes.Job));
             });
+            
+            // we need to also remove the state documents
             QueueCommand(() =>
             {
                 string queryStates = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.State} AND doc.job_id = '{jobId}'";
@@ -172,7 +174,7 @@ namespace Hangfire.Azure
                 };
 
                 Task<ItemResponse<State>> task = connection.Storage.Container.CreateItemAsync(data, new PartitionKey((int)DocumentTypes.State));
-                Task<StoredProcedureExecuteResponse<bool>> spTask = task.ContinueWith(x => connection.Storage.Container.Scripts.ExecuteStoredProcedureAsync<bool>("setJobState", new PartitionKey((int)DocumentTypes.Job), new dynamic[] { jobId, data })).Unwrap();
+                Task<StoredProcedureExecuteResponse<bool>> spTask = task.ContinueWith(_ => connection.Storage.Container.Scripts.ExecuteStoredProcedureAsync<bool>("setJobState", new PartitionKey((int)DocumentTypes.Job), new dynamic[] { jobId, data })).Unwrap();
                 spTask.Wait();
             });
         }
@@ -344,6 +346,7 @@ namespace Hangfire.Azure
                 PartitionKey partitionKey = new PartitionKey((int)DocumentTypes.Hash);
                 List<Hash> hashes = connection.Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
                     .Where(h => h.DocumentType == DocumentTypes.Hash && h.Key == key)
+                    .OrderByDescending(x => x.ExpireOn)
                     .ToQueryResult()
                     .ToList();
 
@@ -356,7 +359,7 @@ namespace Hangfire.Azure
 
                 foreach (Hash source in sources)
                 {
-                    Hash hash = hashes.SingleOrDefault(h => h.Field == source.Field);
+                    Hash? hash = hashes.FirstOrDefault(h => h.Field == source.Field);
                     if (hash == null)
                     {
                         data.Items.Add(source);

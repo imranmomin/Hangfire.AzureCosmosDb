@@ -16,7 +16,7 @@ using Microsoft.Azure.Cosmos.Scripts;
 
 namespace Hangfire.Azure
 {
-    internal sealed class CosmosDbConnection : JobStorageConnection
+    public sealed class CosmosDbConnection : JobStorageConnection
     {
         public CosmosDbStorage Storage { get; }
         public PersistentJobQueueProviderCollection QueueProviders { get; }
@@ -32,7 +32,7 @@ namespace Hangfire.Azure
 
         #region Job
 
-        public override string CreateExpiredJob(Common.Job job, IDictionary<string, string> parameters, DateTime createdAt, TimeSpan expireIn)
+        public override string? CreateExpiredJob(Common.Job job, IDictionary<string, string> parameters, DateTime createdAt, TimeSpan expireIn)
         {
             if (job == null) throw new ArgumentNullException(nameof(job));
             if (parameters == null) throw new ArgumentNullException(nameof(parameters));
@@ -55,12 +55,12 @@ namespace Hangfire.Azure
             Task<ItemResponse<Documents.Job>> task = Storage.Container.CreateItemWithRetriesAsync(entityJob, new PartitionKey((int)DocumentTypes.Job));
             task.Wait();
 
-            if (task.Result.StatusCode == HttpStatusCode.Created || task.Result.StatusCode == HttpStatusCode.OK)
+            if (task.Result.StatusCode is HttpStatusCode.Created or HttpStatusCode.OK)
             {
                 return entityJob.Id;
             }
 
-            return string.Empty;
+            return null;
         }
 
         public override IFetchedJob FetchNextJob(string[] queues, CancellationToken cancellationToken)
@@ -73,7 +73,7 @@ namespace Hangfire.Azure
 
             if (providers.Length != 1)
             {
-                throw new InvalidOperationException($"Multiple provider instances registered for queues: {string.Join(", ", queues)}. You should choose only one type of persistent queues per server instance.");
+                throw new InvalidOperationException($"Multiple provider instances registered for queues: [{string.Join(", ", queues)}]. You should choose only one type of persistent queues per server instance.");
             }
 
             IPersistentJobQueue persistentQueue = providers.Single().GetJobQueue();
@@ -81,9 +81,14 @@ namespace Hangfire.Azure
             return queue;
         }
 
-        public override JobData GetJobData(string jobId)
+        public override JobData? GetJobData(string jobId)
         {
             if (jobId == null) throw new ArgumentNullException(nameof(jobId));
+
+            if (Guid.TryParse(jobId, out Guid _) == false)
+            {
+                return null;
+            }
 
             try
             {
@@ -93,11 +98,12 @@ namespace Hangfire.Azure
                 if (task.Result.Resource != null)
                 {
                     Documents.Job data = task.Result;
+
                     InvocationData invocationData = data.InvocationData;
                     invocationData.Arguments = data.Arguments;
 
-                    Common.Job job = null;
-                    JobLoadException loadException = null;
+                    Common.Job? job = null;
+                    JobLoadException? loadException = null;
 
                     try
                     {
@@ -117,36 +123,46 @@ namespace Hangfire.Azure
                     };
                 }
             }
-            catch { /* ignored */ }
+            catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
+            {
+                /* ignored */
+            }
 
             return null;
         }
 
-        public override StateData GetStateData(string jobId)
+        public override StateData? GetStateData(string jobId)
         {
             if (jobId == null) throw new ArgumentNullException(nameof(jobId));
 
-            Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, new PartitionKey((int)DocumentTypes.Job));
-            task.Wait();
-
-            if (task.Result.Resource != null)
+            try
             {
-                Documents.Job job = task.Result;
+                Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, new PartitionKey((int)DocumentTypes.Job));
+                task.Wait();
 
-                // get the state document
-                Task<ItemResponse<State>> stateTask = Storage.Container.ReadItemWithRetriesAsync<State>(job.StateId, new PartitionKey((int)DocumentTypes.State));
-                stateTask.Wait();
-
-                if (stateTask.Result.Resource != null)
+                if (task.Result.Resource != null)
                 {
-                    State state = stateTask.Result;
-                    return new StateData
+                    Documents.Job job = task.Result;
+
+                    // get the state document
+                    Task<ItemResponse<State>> stateTask = Storage.Container.ReadItemWithRetriesAsync<State>(job.StateId, new PartitionKey((int)DocumentTypes.State));
+                    stateTask.Wait();
+
+                    if (stateTask.Result.Resource != null)
                     {
-                        Name = state.Name,
-                        Reason = state.Reason,
-                        Data = state.Data
-                    };
+                        State state = stateTask.Result;
+                        return new StateData
+                        {
+                            Name = state.Name,
+                            Reason = state.Reason,
+                            Data = state.Data
+                        };
+                    }
                 }
+            }
+            catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
+            {
+                /* ignored */
             }
 
             return null;
@@ -156,21 +172,42 @@ namespace Hangfire.Azure
 
         #region Parameter
 
-        public override string GetJobParameter(string id, string name)
+        public override string? GetJobParameter(string id, string name)
         {
             if (id == null) throw new ArgumentNullException(nameof(id));
             if (name == null) throw new ArgumentNullException(nameof(name));
 
-            Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(id, new PartitionKey((int)DocumentTypes.Job));
-            Documents.Job data = task.Result;
+            if (Guid.TryParse(id, out Guid _) == false)
+            {
+                return null;
+            }
 
-            return data?.Parameters.Where(p => p.Name == name).Select(p => p.Value).FirstOrDefault();
+            try
+            {
+                Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(id, new PartitionKey((int)DocumentTypes.Job));
+                if (task.Result.Resource != null)
+                {
+                    Documents.Job data = task.Result;
+                    return data.Parameters.Where(p => p.Name == name).Select(p => p.Value).FirstOrDefault();
+                }
+            }
+            catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
+            {
+                /* ignored */
+            }
+
+            return null;
         }
 
         public override void SetJobParameter(string id, string name, string value)
         {
             if (id == null) throw new ArgumentNullException(nameof(id));
             if (name == null) throw new ArgumentNullException(nameof(name));
+
+            if (Guid.TryParse(id, out Guid _) == false)
+            {
+                return;
+            }
 
             Parameter parameter = new Parameter
             {
@@ -209,7 +246,7 @@ namespace Hangfire.Azure
 
             return Storage.Container.GetItemLinqQueryable<Set>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Set) })
                 .Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
-                .OrderBy(s => s.CreatedOn)
+                .OrderBy(s => s.Score)
                 .Skip(startingFrom).Take(endingAt)
                 .Select(s => s.Value)
                 .ToQueryResult()
@@ -254,12 +291,18 @@ namespace Hangfire.Azure
             return new HashSet<string>(sets);
         }
 
-        public override string GetFirstByLowestScoreFromSet(string key, double fromScore, double toScore)
+        public override string? GetFirstByLowestScoreFromSet(string key, double fromScore, double toScore)
+        {
+            return base.GetFirstByLowestScoreFromSet(key, fromScore, toScore, 1).FirstOrDefault();
+        }
+
+        public override List<string> GetFirstByLowestScoreFromSet(string key, double fromScore, double toScore, int count)
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
-            if (toScore < fromScore) throw new ArgumentException("The `toScore` value must be higher or equal to the `fromScore` value.");
+            if (count <= 0) throw new ArgumentException("The value must be a positive number", nameof(count));
+            if (toScore < fromScore) throw new ArgumentException("The `toScore` value must be higher or equal to the `fromScore` value.", nameof(toScore));
 
-            QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE doc['value'] FROM doc WHERE doc.type = @type AND doc.key = @key AND (doc.score BETWEEN @from AND @to) ORDER BY doc.score")
+            QueryDefinition sql = new QueryDefinition($"SELECT TOP {count} VALUE doc['value'] FROM doc WHERE doc.type = @type AND doc.key = @key AND (doc.score BETWEEN @from AND @to) ORDER BY doc.score")
                 .WithParameter("@key", key)
                 .WithParameter("@type", (int)DocumentTypes.Set)
                 .WithParameter("@from", (int)fromScore)
@@ -267,7 +310,7 @@ namespace Hangfire.Azure
 
             return Storage.Container.GetItemQueryIterator<string>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Set) })
                 .ToQueryResult()
-                .FirstOrDefault();
+                .ToList();
         }
 
         #endregion
@@ -306,8 +349,15 @@ namespace Hangfire.Azure
             if (serverId == null) throw new ArgumentNullException(nameof(serverId));
             string id = $"{serverId}:{DocumentTypes.Server}".GenerateHash();
 
-            Task<ItemResponse<Documents.Server>> task = Storage.Container.DeleteItemWithRetriesAsync<Documents.Server>(id, new PartitionKey((int)DocumentTypes.Server));
-            task.Wait();
+            try
+            {
+                Task<ItemResponse<Documents.Server>> task = Storage.Container.DeleteItemWithRetriesAsync<Documents.Server>(id, new PartitionKey((int)DocumentTypes.Server));
+                task.Wait();
+            }
+            catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
+            {
+                /* ignored */
+            }
         }
 
         public override int RemoveTimedOutServers(TimeSpan timeOut)
@@ -327,7 +377,7 @@ namespace Hangfire.Azure
 
         #region Hash
 
-        public override Dictionary<string, string> GetAllEntriesFromHash(string key)
+        public override Dictionary<string, string?> GetAllEntriesFromHash(string key)
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
 
@@ -360,15 +410,32 @@ namespace Hangfire.Azure
 
             foreach (Hash source in sources)
             {
-                Hash hash = hashes.SingleOrDefault(h => h.Field == source.Field);
-                if (hash == null)
+                int count = hashes.Count(x => x.Field == source.Field);
+
+                // if for some reason we find more than one document for the same field
+                // lets remove all the hash except one
+                if (count > 1)
                 {
-                    data.Items.Add(source);
-                }
-                else if (!string.Equals(hash.Value, source.Value, StringComparison.InvariantCultureIgnoreCase))
-                {
+                    Hash hash = hashes.First(x => x.Field == source.Field);
                     hash.Value = source.Value;
                     data.Items.Add(hash);
+                    
+                    string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Hash} AND doc.key = '{hash.Key}' AND doc.field = '{hash.Field}' AND doc.id != '{hash.Id}'";
+                    Storage.Container.ExecuteDeleteDocuments(query, partitionKey);
+                }
+                
+                if (count == 1)
+                {
+                    Hash hash = hashes.Single(x => x.Field == source.Field);
+                    if (string.Equals(hash.Value, source.Value, StringComparison.InvariantCultureIgnoreCase) == false)
+                    {
+                        hash.Value = source.Value;
+                        data.Items.Add(hash);
+                    }
+                }
+                else if (count == 0)
+                {
+                    data.Items.Add(source);
                 }
             }
 
@@ -388,7 +455,7 @@ namespace Hangfire.Azure
                 .FirstOrDefault();
         }
 
-        public override string GetValueFromHash(string key, string name)
+        public override string? GetValueFromHash(string key, string name)
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
             if (name == null) throw new ArgumentNullException(nameof(name));

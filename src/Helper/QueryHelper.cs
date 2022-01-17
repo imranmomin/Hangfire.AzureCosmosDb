@@ -7,9 +7,9 @@ using Microsoft.Azure.Cosmos.Linq;
 
 namespace Hangfire.Azure.Helper
 {
-    internal static class QueryHelper
+    public static class QueryHelper
     {
-        internal static IEnumerable<T> ToQueryResult<T>(this FeedIterator<T> iterator)
+        public static IEnumerable<T> ToQueryResult<T>(this FeedIterator<T> iterator)
         {
             while (iterator.HasMoreResults)
             {
@@ -22,7 +22,7 @@ namespace Hangfire.Azure.Helper
             }
         }
 
-        internal static IEnumerable<T> ToQueryResult<T>(this IQueryable<T> queryable)
+        public static IEnumerable<T> ToQueryResult<T>(this IQueryable<T> queryable)
         {
             FeedIterator<T> iterator = queryable.ToFeedIterator();
             return iterator.ToQueryResult();

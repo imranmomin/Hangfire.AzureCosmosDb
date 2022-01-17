@@ -8,10 +8,16 @@ namespace Hangfire.Azure
     [Serializable]
     public class CosmosDbDistributedLockException : Exception
     {
+        public string Key { get; }
+
         /// <summary>
         /// Initializes a new instance of the CosmosDbDistributedLockException class with serialized data.
         /// </summary>
         /// <param name="message">The message that describes the error.</param>
-        public CosmosDbDistributedLockException(string message) : base(message) { }
+        /// <param name="key">The key of the resource</param>
+        public CosmosDbDistributedLockException(string message, string key) : base(message)
+        {
+            Key = key;
+        }
     }
 }

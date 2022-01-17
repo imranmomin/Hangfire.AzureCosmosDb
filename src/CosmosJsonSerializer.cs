@@ -34,7 +34,7 @@ namespace Hangfire.Azure
                 {
                     using (JsonTextReader jsonTextReader = new JsonTextReader(sr))
                     {
-                        return serializer.Deserialize<T>(jsonTextReader);
+                        return serializer.Deserialize<T>(jsonTextReader)!;
                     }
                 }
             }

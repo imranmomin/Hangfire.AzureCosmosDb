@@ -1,23 +1,21 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Helper;
-
 using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Cosmos.Linq;
 
 namespace Hangfire.Azure.Queue
 {
-    internal class JobQueueMonitoringApi : IPersistentJobQueueMonitoringApi
+    public class JobQueueMonitoringApi : IPersistentJobQueueMonitoringApi
     {
         private readonly CosmosDbStorage storage;
-        private readonly List<string> queuesCache = new List<string>();
+        private readonly List<string> queuesCache = new();
         private DateTime cacheUpdated;
-        private readonly object cacheLock = new object();
+        private readonly object cacheLock = new();
         private static readonly TimeSpan queuesCacheTimeout = TimeSpan.FromSeconds(5);
-        private readonly PartitionKey partitionKey = new PartitionKey((int)DocumentTypes.Queue);
+        private readonly PartitionKey partitionKey = new((int)DocumentTypes.Queue);
 
         public JobQueueMonitoringApi(CosmosDbStorage storage) => this.storage = storage;
 
@@ -28,7 +26,7 @@ namespace Hangfire.Azure.Queue
                 if (queuesCache.Count == 0 || cacheUpdated.Add(queuesCacheTimeout) < DateTime.UtcNow)
                 {
                     QueryDefinition sql = new QueryDefinition("SELECT DISTINCT VALUE doc['name'] FROM doc WHERE doc.type = @type")
-                            .WithParameter("@type", (int)DocumentTypes.Queue);
+                        .WithParameter("@type", (int)DocumentTypes.Queue);
 
                     IEnumerable<string> result = storage.Container.GetItemQueryIterator<string>(sql, requestOptions: new QueryRequestOptions { PartitionKey = partitionKey }).ToQueryResult();
                     queuesCache.Clear();
@@ -42,10 +40,9 @@ namespace Hangfire.Azure.Queue
 
         public int GetEnqueuedCount(string queue)
         {
-            QueryDefinition sql =
-                new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.name = @name")
-                    .WithParameter("@name", queue)
-                    .WithParameter("@type", (int)DocumentTypes.Queue);
+            QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.name = @name")
+                .WithParameter("@name", queue)
+                .WithParameter("@type", (int)DocumentTypes.Queue);
 
             return storage.Container.GetItemQueryIterator<int>(sql, requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
                 .ToQueryResult()
@@ -84,6 +81,5 @@ namespace Hangfire.Azure.Queue
 
             return result;
         }
-
     }
 }

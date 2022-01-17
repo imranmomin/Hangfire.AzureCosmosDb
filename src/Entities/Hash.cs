@@ -3,16 +3,16 @@
 // ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents
 {
-    internal class Hash : DocumentBase
+    public class Hash : DocumentBase
     {
         [JsonProperty("key")]
-        public string Key { get; set; }
+        public string Key { get; set; } = null!;
 
         [JsonProperty("field")]
-        public string Field { get; set; }
+        public string Field { get; set; } = null!;
 
         [JsonProperty("value")]
-        public string Value { get; set; }
+        public string? Value { get; set; }
 
         public override DocumentTypes DocumentType => DocumentTypes.Hash;
     }

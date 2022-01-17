@@ -1,19 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
-
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
 // ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents
 {
-    internal abstract class DocumentBase
+    public abstract class DocumentBase
     {
-        [JsonProperty("id")]
-        public string Id { get; set; } = Guid.NewGuid().ToString();
+        [JsonProperty("id")] public string Id { get; set; } = Guid.NewGuid().ToString();
 
-        [JsonProperty("_self")]
-        public string SelfLink { get; set; }
+        [JsonProperty("_self")] public string? SelfLink { get; set; }
 
         [JsonProperty("expire_on")]
         [JsonConverter(typeof(UnixDateTimeConverter))]
@@ -22,11 +19,13 @@ namespace Hangfire.Azure.Documents
         [JsonProperty(PropertyName = "ttl", NullValueHandling = NullValueHandling.Ignore)]
         public int? TimeToLive { get; set; }
 
-        [JsonProperty("type")]
-        public abstract DocumentTypes DocumentType { get; }
+        [JsonProperty("type")] public abstract DocumentTypes DocumentType { get; }
+
+        [JsonProperty("_etag", NullValueHandling = NullValueHandling.Ignore)]
+        public string? ETag { get; set; }
     }
 
-    internal enum DocumentTypes
+    public enum DocumentTypes
     {
         Server = 1,
         Job = 2,
@@ -39,22 +38,19 @@ namespace Hangfire.Azure.Documents
         Lock = 9
     }
 
-    internal class ProcedureResponse
+    public class ProcedureResponse
     {
-        [JsonProperty("affected")]
-        public int Affected { get; set; }
+        [JsonProperty("affected")] public int Affected { get; set; }
 
-        [JsonProperty("continuation")]
-        public bool Continuation { get; set; }
+        [JsonProperty("continuation")] public bool Continuation { get; set; }
     }
 
-    internal class Data<T>
+    public class Data<T>
     {
         public Data() => Items = new List<T>();
 
         public Data(List<T> items) => Items = items;
 
-        [JsonProperty("items")]
-        public List<T> Items { get; set; }
+        [JsonProperty("items")] public List<T> Items { get; set; }
     }
 }

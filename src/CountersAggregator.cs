@@ -4,37 +4,39 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
-
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Helper;
 using Hangfire.Logging;
 using Hangfire.Server;
-
 using Microsoft.Azure.Cosmos;
 
 namespace Hangfire.Azure
 {
 #pragma warning disable 618
-    internal class CountersAggregator : IServerComponent
+    public class CountersAggregator : IServerComponent
 #pragma warning restore 618
     {
         private readonly ILog logger = LogProvider.For<CountersAggregator>();
         private const string DISTRIBUTED_LOCK_KEY = "locks:counters:aggragator";
         private readonly TimeSpan defaultLockTimeout;
         private readonly CosmosDbStorage storage;
-        private readonly PartitionKey partitionKey = new PartitionKey((int)DocumentTypes.Counter);
+        private readonly PartitionKey partitionKey = new((int)DocumentTypes.Counter);
 
         public CountersAggregator(CosmosDbStorage storage)
         {
             this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
-            defaultLockTimeout = TimeSpan.FromSeconds(30) + storage.StorageOptions.CountersAggregateInterval;
+            defaultLockTimeout = TimeSpan.FromSeconds(30).Add(storage.StorageOptions.CountersAggregateInterval);
         }
 
         public void Execute(CancellationToken cancellationToken)
         {
-            using (new CosmosDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage))
+            CosmosDbDistributedLock? distributedLock = null;
+
+            try
             {
-                logger.Trace("Aggregating records in 'Counter' table.");
+                distributedLock = new CosmosDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage);
+
+                logger.Trace("Aggregating records in [Counter] table.");
 
                 QueryDefinition sql = new QueryDefinition("SELECT * FROM doc WHERE doc.type = @type AND doc.counterType = @counterType")
                     .WithParameter("@type", (int)DocumentTypes.Counter)
@@ -67,7 +69,7 @@ namespace Hangfire.Azure
                             }
                             else
                             {
-                                logger.Warn($"Document with ID: {id} is a {readTask.Result.Resource.Type.ToString()} type which could not be aggregated");
+                                logger.Warn($"Document with ID: [{id}] is a [{readTask.Result.Resource.Type.ToString()}] type which could not be aggregated");
                                 continue;
                             }
                         }
@@ -99,7 +101,7 @@ namespace Hangfire.Azure
                                 string ids = string.Join(",", data.Counters.Select(c => $"'{c.Id}'").ToArray());
                                 string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Counter} AND doc.counterType = {(int)CounterTypes.Raw} AND doc.id IN ({ids})";
                                 int deleted = storage.Container.ExecuteDeleteDocuments(query, partitionKey, cancellationToken);
-                                logger.Trace($"Total {deleted} records from the 'Counter:{aggregated.Key}' were aggregated.");
+                                logger.Trace($"Total [{deleted}] records from the ['Counter:{aggregated.Key}'] were aggregated.");
                             }
                         }, TaskContinuationOptions.OnlyOnRanToCompletion);
 
@@ -107,13 +109,21 @@ namespace Hangfire.Azure
                     }
                 }
 
-                logger.Trace("Records from the 'Counter' table aggregated.");
-            }
+                logger.Trace("Records from the [Counter] table aggregated.");
 
-            cancellationToken.WaitHandle.WaitOne(storage.StorageOptions.CountersAggregateInterval);
+                cancellationToken.WaitHandle.WaitOne(storage.StorageOptions.CountersAggregateInterval);
+            }
+            catch (CosmosDbDistributedLockException exception) when (exception.Key == DISTRIBUTED_LOCK_KEY)
+            {
+                logger.Debug($@"An exception was thrown during acquiring distributed lock on the [{DISTRIBUTED_LOCK_KEY}] resource within [{defaultLockTimeout.TotalSeconds}] seconds." +
+                             $@"Counter records were not aggregated. It will be retried in [{storage.StorageOptions.CountersAggregateInterval.TotalSeconds}] seconds.");
+            }
+            finally
+            {
+                distributedLock?.Dispose();
+            }
         }
 
         public override string ToString() => GetType().ToString();
-
     }
 }
