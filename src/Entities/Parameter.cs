@@ -9,5 +9,5 @@ public class Parameter
     public string Name { get; set; } = null!;
 
     [JsonProperty("value")]
-    public string Value { get; set; } = null!;
+    public string? Value { get; set; }
 }

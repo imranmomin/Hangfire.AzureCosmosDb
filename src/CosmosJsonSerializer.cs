@@ -12,10 +12,6 @@ public class CosmosJsonSerializer : CosmosSerializer
     private static readonly Encoding defaultEncoding = new UTF8Encoding(false, true);
     private readonly JsonSerializer serializer;
 
-    public CosmosJsonSerializer() : this(new JsonSerializerSettings())
-    {
-    }
-
     public CosmosJsonSerializer(JsonSerializerSettings serializerSettings)
     {
         serializer = JsonSerializer.Create(serializerSettings);

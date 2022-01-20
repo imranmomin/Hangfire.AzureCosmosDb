@@ -8,12 +8,12 @@ using Xunit;
 
 namespace Hangfire.Azure.Tests;
 
-public class JobQueueMonitoringFacts : IClassFixture<ContainerFixture>
+public class JobQueueMonitoringApiFacts : IClassFixture<ContainerFixture>
 {
     private ContainerFixture ContainerFixture { get; }
     private CosmosDbStorage Storage { get; }
 
-    public JobQueueMonitoringFacts(ContainerFixture containerFixture)
+    public JobQueueMonitoringApiFacts(ContainerFixture containerFixture)
     {
         ContainerFixture = containerFixture;
         Storage = containerFixture.Storage;

@@ -23,7 +23,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
     public CosmosDbConnection(CosmosDbStorage storage)
     {
-        Storage = storage;
+        Storage = storage ?? throw new ArgumentNullException(nameof(storage));
         QueueProviders = storage.QueueProviders;
     }
 
@@ -32,7 +32,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
     #region Job
 
-    public override string? CreateExpiredJob(Common.Job job, IDictionary<string, string> parameters, DateTime createdAt, TimeSpan expireIn)
+    public override string? CreateExpiredJob(Common.Job job, IDictionary<string, string?> parameters, DateTime createdAt, TimeSpan expireIn)
     {
         if (job == null) throw new ArgumentNullException(nameof(job));
         if (parameters == null) throw new ArgumentNullException(nameof(parameters));
@@ -44,7 +44,6 @@ public sealed class CosmosDbConnection : JobStorageConnection
             Arguments = invocationData.Arguments,
             CreatedOn = createdAt,
             ExpireOn = createdAt.Add(expireIn),
-
             Parameters = parameters.Select(p => new Parameter
             {
                 Name = p.Key,
@@ -81,7 +80,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
         return queue;
     }
 
-    public override JobData? GetJobData(string jobId)
+    public override JobData? GetJobData(string? jobId)
     {
         if (jobId == null) throw new ArgumentNullException(nameof(jobId));
 
@@ -118,7 +117,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
                 {
                     Job = job,
                     State = data.StateName,
-                    CreatedAt = data.CreatedOn,
+                    CreatedAt = data.CreatedOn.ToLocalTime(),
                     LoadException = loadException
                 };
             }
@@ -131,10 +130,15 @@ public sealed class CosmosDbConnection : JobStorageConnection
         return null;
     }
 
-    public override StateData? GetStateData(string jobId)
+    public override StateData? GetStateData(string? jobId)
     {
         if (jobId == null) throw new ArgumentNullException(nameof(jobId));
 
+        if (Guid.TryParse(jobId, out Guid _) == false)
+        {
+            return null;
+        }
+        
         try
         {
             Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, new PartitionKey((int)DocumentTypes.Job));
@@ -419,11 +423,11 @@ public sealed class CosmosDbConnection : JobStorageConnection
                 Hash hash = hashes.First(x => x.Field == source.Field);
                 hash.Value = source.Value;
                 data.Items.Add(hash);
-                    
+
                 string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Hash} AND doc.key = '{hash.Key}' AND doc.field = '{hash.Field}' AND doc.id != '{hash.Id}'";
                 Storage.Container.ExecuteDeleteDocuments(query, partitionKey);
             }
-                
+
             if (count == 1)
             {
                 Hash hash = hashes.Single(x => x.Field == source.Field);

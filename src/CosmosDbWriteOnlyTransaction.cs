@@ -1,15 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Threading.Tasks;
-
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
 using Hangfire.Azure.Helper;
 using Hangfire.Azure.Queue;
 using Hangfire.States;
 using Hangfire.Storage;
-
 using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Cosmos.Scripts;
 
@@ -24,7 +23,10 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
     private void QueueCommand(Action command) => commands.Add(command);
     public override void Commit() => commands.ForEach(command => command());
-    public override void Dispose() { }
+
+    public override void Dispose()
+    {
+    }
 
     #region Queue
 
@@ -133,7 +135,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
             string queryJobs = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Job} AND doc.id = '{jobId}'";
             connection.Storage.Container.ExecuteExpireDocuments(queryJobs, epoch, new PartitionKey((int)DocumentTypes.Job));
         });
-            
+
         // we need to also remove the state documents
         QueueCommand(() =>
         {
@@ -321,7 +323,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
     #endregion
 
-    #region  Hash
+    #region Hash
 
     public override void RemoveHash(string key)
     {
@@ -494,5 +496,4 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
     }
 
     #endregion
-
 }

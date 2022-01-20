@@ -22,8 +22,14 @@ public sealed class PersistentJobQueueProviderCollection : IEnumerable<IPersiste
         if (queues == null) throw new ArgumentNullException(nameof(queues));
 
         providers.Add(queueProvider);
+       
         foreach (string queue in queues)
         {
+            if (providersByQueue.ContainsKey(queue))
+            {
+                throw new ArgumentException($"Queue [{queue}] already exists", nameof(queue));
+            }
+            
             providersByQueue.Add(queue, queueProvider);
         }
     }
