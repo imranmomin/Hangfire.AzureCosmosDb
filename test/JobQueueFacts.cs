@@ -8,236 +8,247 @@ using Xunit;
 using Hangfire.Azure.Helper;
 using Hangfire.Azure.Queue;
 using Microsoft.Azure.Cosmos;
+using Xunit.Abstractions;
 
 namespace Hangfire.Azure.Tests;
 
 public class JobQueueFacts : IClassFixture<ContainerFixture>
 {
-    private static readonly string[] defaultQueues = { "default" };
-    private CosmosDbStorage Storage { get; }
-    private ContainerFixture ContainerFixture { get; }
+	private static readonly string[] defaultQueues = { "default" };
+	private CosmosDbStorage Storage { get; }
+	private ContainerFixture ContainerFixture { get; }
 
-    public JobQueueFacts(ContainerFixture containerFixture)
-    {
-        ContainerFixture = containerFixture;
-        Storage = containerFixture.Storage;
-    }
+	public JobQueueFacts(ContainerFixture containerFixture, ITestOutputHelper testOutputHelper)
+	{
+		ContainerFixture = containerFixture;
+		Storage = containerFixture.Storage;
 
-    [Fact]
-    public void Dequeue_ShouldThrowAnException_WhenQueuesCollectionIsNull()
-    {
-        // act
-        JobQueue jobQueue = new JobQueue(Storage);
-        ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => jobQueue.Dequeue(null!, CancellationToken.None));
+		ContainerFixture.SetupLogger(testOutputHelper);
+	}
 
-        // asset 
-        Assert.Equal("queues", exception.ParamName);
-    }
+	[Fact]
+	public void Dequeue_ShouldThrowAnException_WhenQueuesCollectionIsNull()
+	{
+		// act
+		JobQueue jobQueue = new(Storage);
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => jobQueue.Dequeue(null!, CancellationToken.None));
 
-    [Fact]
-    public void Dequeue_ShouldThrowAnException_WhenQueuesCollectionIsEmpty()
-    {
-        // act
-        JobQueue jobQueue = new JobQueue(Storage);
-        ArgumentException exception = Assert.Throws<ArgumentException>(() => jobQueue.Dequeue(Array.Empty<string>(), CancellationToken.None));
+		// asset 
+		Assert.Equal("queues", exception.ParamName);
+	}
 
-        // asset 
-        Assert.Equal("queues", exception.ParamName);
-    }
+	[Fact]
+	public void Dequeue_ShouldThrowAnException_WhenQueuesCollectionIsEmpty()
+	{
+		// act
+		JobQueue jobQueue = new(Storage);
+		ArgumentException exception = Assert.Throws<ArgumentException>(() => jobQueue.Dequeue(Array.Empty<string>(), CancellationToken.None));
 
-    [Fact]
-    public void Dequeue_ThrowsOperationCanceled_WhenCancellationTokenIsSetAtTheBeginning()
-    {
-        // act
-        CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
-        cancellationTokenSource.Cancel();
-        JobQueue jobQueue = new JobQueue(Storage);
+		// asset 
+		Assert.Equal("queues", exception.ParamName);
+	}
 
-        // assert
-        Assert.Throws<OperationCanceledException>(() => jobQueue.Dequeue(defaultQueues, cancellationTokenSource.Token));
-    }
+	[Fact]
+	public void Dequeue_ThrowsOperationCanceled_WhenCancellationTokenIsSetAtTheBeginning()
+	{
+		// act
+		CancellationTokenSource cancellationTokenSource = new();
+		cancellationTokenSource.Cancel();
+		JobQueue jobQueue = new(Storage);
 
-    [Theory]
-    [InlineData("default", "c8732989-96e1-40e5-af16-dcf4d79cb4d6")]
-    [InlineData("high", "4c5f2c17-54ad-4e9e-ae38-c9ff750febd9")]
-    public void Dequeue_ShouldFetchAJob_FromTheSpecifiedQueue(string queue, string jobId)
-    {
-        // clean all the documents for the container
-        ContainerFixture.Clean();
+		// assert
+		Assert.Throws<OperationCanceledException>(() => jobQueue.Dequeue(defaultQueues, cancellationTokenSource.Token));
+	}
 
-        //arrange 
-        JobQueue jobQueue = new JobQueue(Storage);
-        jobQueue.Enqueue("high", queue.Equals("high") ? jobId : Guid.NewGuid().ToString());
-        jobQueue.Enqueue("default", queue.Equals("default") ? jobId : Guid.NewGuid().ToString());
+	[Theory]
+	[InlineData("default", "c8732989-96e1-40e5-af16-dcf4d79cb4d6")]
+	[InlineData("high", "4c5f2c17-54ad-4e9e-ae38-c9ff750febd9")]
+	public void Dequeue_ShouldFetchAJob_FromTheSpecifiedQueue(string queue, string jobId)
+	{
+		// clean all the documents for the container
+		ContainerFixture.Clean();
 
-        //act
-        FetchedJob job = (FetchedJob)jobQueue.Dequeue(new[] { queue }, CancellationToken.None);
+		//arrange 
+		JobQueue jobQueue = new(Storage);
+		jobQueue.Enqueue("high", queue.Equals("high") ? jobId : Guid.NewGuid().ToString());
+		jobQueue.Enqueue("default", queue.Equals("default") ? jobId : Guid.NewGuid().ToString());
 
-        //assert
-        Assert.Equal(jobId, job.JobId);
-        Assert.Equal(queue, job.Queue);
-    }
+		//act
+		FetchedJob job = (FetchedJob)jobQueue.Dequeue(new[] { queue }, CancellationToken.None);
 
-    [Theory]
-    [InlineData("default")]
-    public void Dequeue_ShouldFetchTimedOutJobs_FromTheSpecifiedQueue(string queue)
-    {
-        // clean all the documents for the container
-        ContainerFixture.Clean();
+		//assert
+		Assert.Equal(jobId, job.JobId);
+		Assert.Equal(queue, job.Queue);
+	}
 
-        //arrange 
-        Documents.Queue document = new Documents.Queue
-        {
-            Name = queue,
-            JobId = Guid.NewGuid().ToString(),
-            FetchedAt = DateTime.UtcNow.AddMinutes(-16),
-            CreatedOn = DateTime.UtcNow
-        };
-        Task<ItemResponse<Documents.Queue>> response = Storage.Container.CreateItemWithRetriesAsync(document, new PartitionKey((int)DocumentTypes.Queue));
-        response.Wait();
+	[Theory]
+	[InlineData("default")]
+	public void Dequeue_ShouldFetchTimedOutJobs_FromTheSpecifiedQueue(string queue)
+	{
+		// clean all the documents for the container
+		ContainerFixture.Clean();
 
-        //act
-        JobQueue jobQueue = new JobQueue(Storage);
-        FetchedJob job = (FetchedJob)jobQueue.Dequeue(new[] { queue }, CancellationToken.None);
+		//arrange 
+		Documents.Queue document = new()
+		{
+			Name = queue,
+			JobId = Guid.NewGuid().ToString(),
+			FetchedAt = DateTime.UtcNow.AddMinutes(-16),
+			CreatedOn = DateTime.UtcNow
+		};
+		Task<ItemResponse<Documents.Queue>> response = Storage.Container.CreateItemWithRetriesAsync(document, new PartitionKey((int)DocumentTypes.Queue));
+		response.Wait();
 
-        //assert
-        Assert.Equal(document.JobId, job.JobId);
-        Assert.Equal(queue, job.Queue);
-    }
+		//act
+		JobQueue jobQueue = new(Storage);
+		FetchedJob job = (FetchedJob)jobQueue.Dequeue(new[] { queue }, CancellationToken.None);
 
-    [Theory]
-    [InlineData("default", "c8732989-96e1-40e5-af16-dcf4d79cb4d6")]
-    public void Dequeue_ShouldFetchNonTimedOutJobs_FromTheSpecifiedQueue(string queue, string jobId)
-    {
-        // clean all the documents for the container
-        ContainerFixture.Clean();
+		//assert
+		Assert.Equal(document.JobId, job.JobId);
+		Assert.Equal(queue, job.Queue);
+	}
 
-        //arrange 
-        Documents.Queue document = new Documents.Queue
-        {
-            Name = queue,
-            JobId = Guid.NewGuid().ToString(),
-            FetchedAt = DateTime.UtcNow.AddMinutes(-10),
-            CreatedOn = DateTime.UtcNow.AddMinutes(-1)
-        };
-        Task<ItemResponse<Documents.Queue>> response = Storage.Container.CreateItemWithRetriesAsync(document, new PartitionKey((int)DocumentTypes.Queue));
-        response.Wait();
+	[Theory]
+	[InlineData("default", "c8732989-96e1-40e5-af16-dcf4d79cb4d6")]
+	public void Dequeue_ShouldFetchNonTimedOutJobs_FromTheSpecifiedQueue(string queue, string jobId)
+	{
+		// clean all the documents for the container
+		ContainerFixture.Clean();
 
-        JobQueue jobQueue = new JobQueue(Storage);
-        jobQueue.Enqueue(queue, jobId);
+		//arrange 
+		Documents.Queue document = new()
+		{
+			Name = queue,
+			JobId = Guid.NewGuid().ToString(),
+			FetchedAt = DateTime.UtcNow.AddMinutes(-10),
+			CreatedOn = DateTime.UtcNow.AddMinutes(-1)
+		};
+		Task<ItemResponse<Documents.Queue>> response = Storage.Container.CreateItemWithRetriesAsync(document, new PartitionKey((int)DocumentTypes.Queue));
+		response.Wait();
 
-        //act
-        FetchedJob job = (FetchedJob)jobQueue.Dequeue(new[] { queue }, CancellationToken.None);
+		JobQueue jobQueue = new(Storage);
+		jobQueue.Enqueue(queue, jobId);
 
-        //assert
-        Assert.Equal(jobId, job.JobId);
-        Assert.Equal(queue, job.Queue);
-        Assert.True((job.FetchedAt!.Value - DateTime.UtcNow).TotalSeconds <= 5);
-    }
+		//act
+		FetchedJob job = (FetchedJob)jobQueue.Dequeue(new[] { queue }, CancellationToken.None);
 
-    [Fact]
-    public void Dequeue_ShouldSetFetchedAt_WhenTheJobIsFetched()
-    {
-        // clean all the documents for the container
-        ContainerFixture.Clean();
+		//assert
+		Assert.Equal(jobId, job.JobId);
+		Assert.Equal(queue, job.Queue);
+		Assert.True((job.FetchedAt!.Value - DateTime.UtcNow).TotalSeconds <= 5);
+	}
 
-        //arrange 
-        JobQueue jobQueue = new JobQueue(Storage);
-        jobQueue.Enqueue("default", Guid.NewGuid().ToString());
+	[Fact]
+	public void Dequeue_ShouldSetFetchedAt_WhenTheJobIsFetched()
+	{
+		// clean all the documents for the container
+		ContainerFixture.Clean();
 
-        //act
-        FetchedJob job = (FetchedJob)jobQueue.Dequeue(defaultQueues, CancellationToken.None);
+		//arrange 
+		JobQueue jobQueue = new(Storage);
+		jobQueue.Enqueue("default", Guid.NewGuid().ToString());
+		jobQueue.Enqueue("default", Guid.NewGuid().ToString());
+		jobQueue.Enqueue("default", Guid.NewGuid().ToString());
+		jobQueue.Enqueue("default", Guid.NewGuid().ToString());
+		jobQueue.Enqueue("default", Guid.NewGuid().ToString());
+		jobQueue.Enqueue("default", Guid.NewGuid().ToString());
+		jobQueue.Enqueue("default", Guid.NewGuid().ToString());
 
-        //assert
-        Assert.NotNull(job.FetchedAt);
-    }
+		//act
+		FetchedJob job = (FetchedJob)jobQueue.Dequeue(defaultQueues, CancellationToken.None);
 
-    [Fact]
-    public void Dequeue_ShouldSetFetchedAtToNull_WhenTheJobRequeue()
-    {
-        // clean all the documents for the container
-        ContainerFixture.Clean();
+		//assert
+		Assert.NotNull(job.FetchedAt);
+	}
 
-        //arrange 
-        JobQueue jobQueue = new JobQueue(Storage);
-        jobQueue.Enqueue("default", Guid.NewGuid().ToString());
-        //act
+	[Fact]
+	public void Dequeue_ShouldSetFetchedAtToNull_WhenTheJobRequeue()
+	{
+		// clean all the documents for the container
+		ContainerFixture.Clean();
 
-        FetchedJob job = (FetchedJob)jobQueue.Dequeue(defaultQueues, CancellationToken.None);
-        job.Requeue();
+		//arrange 
+		JobQueue jobQueue = new(Storage);
+		jobQueue.Enqueue("default", Guid.NewGuid().ToString());
+		//act
 
-        //assert
-        Assert.Null(job.FetchedAt);
-    }
+		FetchedJob job = (FetchedJob)jobQueue.Dequeue(defaultQueues, CancellationToken.None);
+		job.Requeue();
 
-    [Fact]
-    public void Dequeue_ShouldRemoveFromQueue_WhenTheJobIsRemovedFromQueue()
-    {
-        // clean all the documents for the container
-        ContainerFixture.Clean();
+		//assert
+		Assert.Null(job.FetchedAt);
+	}
 
-        //arrange 
-        JobQueue jobQueue = new JobQueue(Storage);
-        jobQueue.Enqueue("default", Guid.NewGuid().ToString());
+	[Fact]
+	public void Dequeue_ShouldRemoveFromQueue_WhenTheJobIsRemovedFromQueue()
+	{
+		// clean all the documents for the container
+		ContainerFixture.Clean();
 
-        //act
-        FetchedJob job = (FetchedJob)jobQueue.Dequeue(defaultQueues, CancellationToken.None);
-        job.RemoveFromQueue();
+		//arrange 
+		JobQueue jobQueue = new(Storage);
+		jobQueue.Enqueue("default", Guid.NewGuid().ToString());
 
-        JobQueueMonitoringApi monitoringApi = new JobQueueMonitoringApi(Storage);
-        long count = monitoringApi.GetEnqueuedCount("default");
+		//act
+		FetchedJob job = (FetchedJob)jobQueue.Dequeue(defaultQueues, CancellationToken.None);
+		job.RemoveFromQueue();
 
-        //assert
-        Assert.Equal(0, count);
-    }
+		JobQueueMonitoringApi monitoringApi = new(Storage);
+		long count = monitoringApi.GetEnqueuedCount("default");
 
-    [Theory]
-    [InlineData("default", "c8732989-96e1-40e5-af16-dcf4d79cb4d6")]
-    [InlineData("high", "c8732989-96e1-40e5-af16-dcf4d79cb4d6")]
-    public void Enqueue_AddsAJobToTheQueue(string queue, string jobId)
-    {
-        // clean
-        ContainerFixture.Clean();
+		//assert
+		Assert.Equal(0, count);
+	}
 
-        // arrange
-        JobQueue jobQueue = new JobQueue(Storage);
-        jobQueue.Enqueue(queue, jobId);
+	[Theory]
+	[InlineData("default", "c8732989-96e1-40e5-af16-dcf4d79cb4d6")]
+	[InlineData("high", "c8732989-96e1-40e5-af16-dcf4d79cb4d6")]
+	public void Enqueue_AddsAJobToTheQueue(string queue, string jobId)
+	{
+		// clean
+		ContainerFixture.Clean();
 
-        // act
-        const string query = "SELECT * FROM doc WHERE doc.type = @type AND doc.name = @queue";
-        QueryDefinition sql = new QueryDefinition(query)
-            .WithParameter("@type", (int)DocumentTypes.Queue)
-            .WithParameter("@queue", queue);
+		// arrange
+		JobQueue jobQueue = new(Storage);
+		jobQueue.Enqueue(queue, jobId);
 
-        PartitionKey partitionKey = new((int)DocumentTypes.Queue);
-        QueryRequestOptions queryRequestOptions = new QueryRequestOptions { PartitionKey = partitionKey, MaxItemCount = 1 };
+		// act
+		const string query = "SELECT * FROM doc WHERE doc.type = @type AND doc.name = @queue";
+		QueryDefinition sql = new QueryDefinition(query)
+			.WithParameter("@type", (int)DocumentTypes.Queue)
+			.WithParameter("@queue", queue);
 
-        Documents.Queue? data = Storage.Container.GetItemQueryIterator<Documents.Queue>(sql, requestOptions: queryRequestOptions)
-            .ToQueryResult()
-            .FirstOrDefault();
+		PartitionKey partitionKey = new((int)DocumentTypes.Queue);
+		QueryRequestOptions queryRequestOptions = new()
+			{ PartitionKey = partitionKey, MaxItemCount = 1 };
 
-        Assert.NotNull(data);
-        Assert.Equal(jobId, data!.JobId);
-        Assert.Equal(queue, data.Name);
-    }
+		Documents.Queue? data = Storage.Container.GetItemQueryIterator<Documents.Queue>(sql, requestOptions: queryRequestOptions)
+			.ToQueryResult()
+			.FirstOrDefault();
 
-    [Fact]
-    public void Dequeue_ShouldWaitForTheDistributionLock()
-    {
-        // clean all the documents for the container
-        ContainerFixture.Clean();
+		Assert.NotNull(data);
+		Assert.Equal(jobId, data!.JobId);
+		Assert.Equal(queue, data.Name);
+	}
 
-        //arrange 
-        JobQueue jobQueue = new JobQueue(Storage);
-        jobQueue.Enqueue("default", Guid.NewGuid().ToString());
+	[Fact]
+	public void Dequeue_ShouldThrowOperationCancelled_WhenTokenIsCancelled()
+	{
+		// clean all the documents for the container
+		ContainerFixture.Clean();
 
-        //act
-        const string lockKey = "locks:job:dequeue";
-        CosmosDbDistributedLock distributedLock = new CosmosDbDistributedLock(lockKey, TimeSpan.Zero, Storage);
-        CancellationTokenSource cancellationSource = new CancellationTokenSource(500);
+		//arrange 
+		JobQueue jobQueue = new(Storage);
+		jobQueue.Enqueue("default", Guid.NewGuid().ToString());
 
-        // assert
-        Assert.Throws<OperationCanceledException>(() => jobQueue.Dequeue(defaultQueues, cancellationSource.Token));
-        distributedLock.Dispose();
-    }
+		//act
+		const string lockKey = "locks:job:dequeue";
+		CosmosDbDistributedLock distributedLock = new(lockKey, TimeSpan.FromSeconds(2), Storage);
+		CancellationTokenSource cancellationSource = new();
+		cancellationSource.Cancel();
+
+		// assert
+		Assert.Throws<OperationCanceledException>(() => jobQueue.Dequeue(defaultQueues, cancellationSource.Token));
+		distributedLock.Dispose();
+	}
 }

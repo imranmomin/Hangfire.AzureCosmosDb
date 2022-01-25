@@ -2,15 +2,16 @@
 
 public class JobQueueProvider : IPersistentJobQueueProvider
 {
-    private readonly JobQueue queue;
-    private readonly JobQueueMonitoringApi monitoringQueue;
+	private readonly JobQueueMonitoringApi monitoringQueue;
+	private readonly JobQueue queue;
 
-    public JobQueueProvider(CosmosDbStorage storage)
-    {
-        queue = new JobQueue(storage);
-        monitoringQueue = new JobQueueMonitoringApi(storage);
-    }
+	public JobQueueProvider(CosmosDbStorage storage)
+	{
+		queue = new JobQueue(storage);
+		monitoringQueue = new JobQueueMonitoringApi(storage);
+	}
 
-    public IPersistentJobQueue GetJobQueue() => queue;
-    public IPersistentJobQueueMonitoringApi GetJobQueueMonitoringApi() => monitoringQueue;
+	public IPersistentJobQueue GetJobQueue() => queue;
+
+	public IPersistentJobQueueMonitoringApi GetJobQueueMonitoringApi() => monitoringQueue;
 }

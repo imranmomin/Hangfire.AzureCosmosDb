@@ -1,60 +1,60 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
-    <ProductName>Hangfire.AzureCosmosDB</ProductName>
-    <Title>Hangfire.AzureCosmosDB</Title>
-    <Company>Hangfire.AzureCosmosDB</Company>
-    <Authors>Imran Momin</Authors>
-    <PackageLicense>https://github.com/imranmomin/hangfire.AzureCosmosDB/blob/master/LICENSE</PackageLicense>
-    <PackageProjectUrl>https://github.com/imranmomin/hangfire.AzureCosmosDB</PackageProjectUrl>
-    <Copyright>Copyright 2021</Copyright>
-    <PackageTags>Hangfire Azure Cosmos</PackageTags>
-    <Description>This package adds support to Microsoft Azure Cosmos DB for Hangfire</Description>
-    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-    <PackageVersion>1.0.1</PackageVersion>
-    <Version>2.0.0</Version>
-    <FileVersion>2.0.0.0</FileVersion>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <RootNamespace>Hangfire.Azure</RootNamespace>
-    <TypeScriptToolsVersion>Latest</TypeScriptToolsVersion>
-    <TypeScriptCompileBlocked>true</TypeScriptCompileBlocked>
-    <LangVersion>latest</LangVersion>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-  <ItemGroup>
-    <None Remove="node_modules\**" />
-    <None Remove="package-lock.json" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="StoredProcedure\heartbeatServer.js">
-      <DependentUpon>heartbeatServer.ts</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="StoredProcedure\setJobParameter.js">
-      <DependentUpon>setJobParameter.ts</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="StoredProcedure\setJobState.js">
-      <DependentUpon>setJobState.ts</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="StoredProcedure\persistDocuments.js">
-      <DependentUpon>persistDocuments.ts</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="StoredProcedure\expireDocuments.js">
-      <DependentUpon>expireDocuments.ts</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="StoredProcedure\deleteDocuments.js">
-      <DependentUpon>deleteDocuments.ts</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="StoredProcedure\upsertDocuments.js">
-      <DependentUpon>upsertDocuments.ts</DependentUpon>
-    </EmbeddedResource>
-    <None Include="StoredProcedure\document.js">
-      <DependentUpon>document.ts</DependentUpon>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="Hangfire.Core" Version="1.7.28" />
-    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.23.0" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
-    <PackageReference Include="System.ValueTuple" Version="4.5.0" />
-  </ItemGroup>
+	<PropertyGroup>
+		<TargetFramework>netstandard2.0</TargetFramework>
+		<ProductName>Hangfire.AzureCosmosDB</ProductName>
+		<Title>Hangfire.AzureCosmosDB</Title>
+		<Company>Hangfire.AzureCosmosDB</Company>
+		<Authors>Imran Momin</Authors>
+		<PackageLicense>https://github.com/imranmomin/hangfire.AzureCosmosDB/blob/master/LICENSE</PackageLicense>
+		<PackageProjectUrl>https://github.com/imranmomin/hangfire.AzureCosmosDB</PackageProjectUrl>
+		<Copyright>Copyright 2021</Copyright>
+		<PackageTags>Hangfire Azure Cosmos</PackageTags>
+		<Description>This package adds support to Microsoft Azure Cosmos DB for Hangfire</Description>
+		<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+		<PackageVersion>1.0.1</PackageVersion>
+		<Version>2.0.0</Version>
+		<FileVersion>2.0.0.0</FileVersion>
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<RootNamespace>Hangfire.Azure</RootNamespace>
+		<TypeScriptToolsVersion>Latest</TypeScriptToolsVersion>
+		<TypeScriptCompileBlocked>true</TypeScriptCompileBlocked>
+		<LangVersion>latest</LangVersion>
+		<Nullable>enable</Nullable>
+	</PropertyGroup>
+	<ItemGroup>
+		<None Remove="node_modules\**"/>
+		<None Remove="package-lock.json"/>
+	</ItemGroup>
+	<ItemGroup>
+		<EmbeddedResource Include="StoredProcedure\heartbeatServer.js">
+			<DependentUpon>heartbeatServer.ts</DependentUpon>
+		</EmbeddedResource>
+		<EmbeddedResource Include="StoredProcedure\setJobParameter.js">
+			<DependentUpon>setJobParameter.ts</DependentUpon>
+		</EmbeddedResource>
+		<EmbeddedResource Include="StoredProcedure\setJobState.js">
+			<DependentUpon>setJobState.ts</DependentUpon>
+		</EmbeddedResource>
+		<EmbeddedResource Include="StoredProcedure\persistDocuments.js">
+			<DependentUpon>persistDocuments.ts</DependentUpon>
+		</EmbeddedResource>
+		<EmbeddedResource Include="StoredProcedure\expireDocuments.js">
+			<DependentUpon>expireDocuments.ts</DependentUpon>
+		</EmbeddedResource>
+		<EmbeddedResource Include="StoredProcedure\deleteDocuments.js">
+			<DependentUpon>deleteDocuments.ts</DependentUpon>
+		</EmbeddedResource>
+		<EmbeddedResource Include="StoredProcedure\upsertDocuments.js">
+			<DependentUpon>upsertDocuments.ts</DependentUpon>
+		</EmbeddedResource>
+		<None Include="StoredProcedure\document.js">
+			<DependentUpon>document.ts</DependentUpon>
+		</None>
+	</ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Hangfire.Core" Version="1.7.28"/>
+		<PackageReference Include="Microsoft.Azure.Cosmos" Version="3.23.0"/>
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.1"/>
+		<PackageReference Include="System.ValueTuple" Version="4.5.0"/>
+	</ItemGroup>
 </Project>

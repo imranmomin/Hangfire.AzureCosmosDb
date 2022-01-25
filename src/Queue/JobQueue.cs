@@ -14,101 +14,112 @@ namespace Hangfire.Azure.Queue;
 
 public class JobQueue : IPersistentJobQueue
 {
-    private readonly ILog logger = LogProvider.For<JobQueue>();
-    private readonly CosmosDbStorage storage;
-    private const string DISTRIBUTED_LOCK_KEY = "locks:job:dequeue";
-    private readonly TimeSpan defaultLockTimeout;
-    private readonly TimeSpan invisibilityTimeout = TimeSpan.FromMinutes(15);
-    private readonly object syncLock = new();
-    private readonly PartitionKey partitionKey = new((int)DocumentTypes.Queue);
+	private const string DISTRIBUTED_LOCK_KEY = "locks:job:dequeue";
+	private readonly TimeSpan defaultLockTimeout;
+	private readonly TimeSpan invisibilityTimeout = TimeSpan.FromMinutes(15);
+	private readonly ILog logger = LogProvider.For<JobQueue>();
+	private readonly PartitionKey partitionKey = new((int)DocumentTypes.Queue);
+	private readonly CosmosDbStorage storage;
+	private readonly object syncLock = new();
 
-    public JobQueue(CosmosDbStorage storage)
-    {
-        this.storage = storage;
-        defaultLockTimeout = TimeSpan.FromSeconds(30).Add(storage.StorageOptions.QueuePollInterval);
-    }
+	public JobQueue(CosmosDbStorage storage)
+	{
+		this.storage = storage;
+		defaultLockTimeout = TimeSpan.FromSeconds(30).Add(storage.StorageOptions.QueuePollInterval);
+	}
 
-    public IFetchedJob Dequeue(string[] queues, CancellationToken cancellationToken)
-    {
-        if (queues == null) throw new ArgumentNullException(nameof(queues));
-        if (queues.Length == 0) throw new ArgumentException("Queue array must be non-empty.", nameof(queues));
+	public IFetchedJob Dequeue(string[] queues, CancellationToken cancellationToken)
+	{
+		if (queues == null) throw new ArgumentNullException(nameof(queues));
+		if (queues.Length == 0) throw new ArgumentException("Queue array must be non-empty.", nameof(queues));
 
-        lock (syncLock)
-        {
-            IEnumerable<string> queueParams = Enumerable.Range(0, queues.Length).Select((_, i) => $"@queue_{i}");
-            string query = $"SELECT TOP 1 * FROM doc WHERE doc.type = @type AND doc.name IN ({string.Join(", ", queueParams)}) " +
-                           "AND (NOT IS_DEFINED(doc.fetched_at) OR doc.fetched_at < @timeout) ORDER BY doc.name ASC, doc.created_on ASC";
+		lock (syncLock)
+		{
+			IEnumerable<string> queueParams = Enumerable.Range(0, queues.Length).Select((_, i) => $"@queue_{i}");
+			string query = $"SELECT TOP 1 * FROM doc WHERE doc.type = @type AND doc.name IN ({string.Join(", ", queueParams)}) " +
+			               "AND (NOT IS_DEFINED(doc.fetched_at) OR doc.fetched_at < @timeout) ORDER BY doc.name ASC, doc.created_on ASC";
 
-            QueryDefinition sql = new QueryDefinition(query)
-                .WithParameter("@type", (int)DocumentTypes.Queue);
+			QueryDefinition sql = new QueryDefinition(query)
+				.WithParameter("@type", (int)DocumentTypes.Queue);
 
-            for (int index = 0; index < queues.Length; index++)
-            {
-                string queue = queues[index];
-                sql.WithParameter($"@queue_{index}", queue);
-            }
+			for (int index = 0; index < queues.Length; index++)
+			{
+				string queue = queues[index];
+				sql.WithParameter($"@queue_{index}", queue);
+			}
 
-            while (true)
-            {
-                CosmosDbDistributedLock? distributedLock = null;
-                cancellationToken.ThrowIfCancellationRequested();
-                logger.Trace("Looking for any jobs from the queue");
+			while (true)
+			{
+				CosmosDbDistributedLock? distributedLock = null;
+				cancellationToken.ThrowIfCancellationRequested();
+				logger.Trace($"Looking for any jobs from the queue(s): [{string.Join(",", queues)}]");
 
-                try
-                {
-                    distributedLock = new CosmosDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage);
+				try
+				{
+					distributedLock = new CosmosDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage);
 
-                    int invisibilityTimeoutEpoch = DateTime.UtcNow.Add(invisibilityTimeout.Negate()).ToEpoch();
-                    sql.WithParameter("@timeout", invisibilityTimeoutEpoch);
+					int invisibilityTimeoutEpoch = DateTime.UtcNow.Add(invisibilityTimeout.Negate()).ToEpoch();
+					sql.WithParameter("@timeout", invisibilityTimeoutEpoch);
 
-                    QueryRequestOptions queryRequestOptions = new QueryRequestOptions { PartitionKey = partitionKey, MaxItemCount = 1 };
-                    Documents.Queue? data = storage.Container.GetItemQueryIterator<Documents.Queue>(sql, requestOptions: queryRequestOptions)
-                        .ToQueryResult()
-                        .FirstOrDefault();
+					QueryRequestOptions queryRequestOptions = new()
+					{
+						PartitionKey = partitionKey,
+						MaxItemCount = 1
+					};
 
-                    if (data != null)
-                    {
-                        // mark the document that it was fetched
-                        PatchOperation[] patchOperations = { PatchOperation.Set("/fetched_at", DateTime.UtcNow.ToEpoch()) };
-                        PatchItemRequestOptions patchItemRequestOptions = new PatchItemRequestOptions { IfMatchEtag = data.ETag };
+					Documents.Queue? data = storage.Container.GetItemQueryIterator<Documents.Queue>(sql, requestOptions: queryRequestOptions)
+						.ToQueryResult()
+						.FirstOrDefault();
 
-                        Task<ItemResponse<Documents.Queue>> task = storage.Container.PatchItemWithRetriesAsync<Documents.Queue>(data.Id, partitionKey, patchOperations, patchItemRequestOptions, cancellationToken);
-                        task.Wait(cancellationToken);
+					if (data != null)
+					{
+						// mark the document that it was fetched
+						PatchOperation[] patchOperations =
+						{
+							PatchOperation.Set("/fetched_at", DateTime.UtcNow.ToEpoch())
+						};
+						PatchItemRequestOptions patchItemRequestOptions = new()
+						{
+							IfMatchEtag = data.ETag
+						};
 
-                        data = task.Result;
+						Task<ItemResponse<Documents.Queue>> task = storage.Container.PatchItemWithRetriesAsync<Documents.Queue>(data.Id, partitionKey, patchOperations, patchItemRequestOptions, cancellationToken);
+						task.Wait(cancellationToken);
 
-                        logger.Trace($"Found job [{data.JobId}] from the queue : [{data.Name}]");
-                        return new FetchedJob(storage, data);
-                    }
-                }
-                catch (CosmosDbDistributedLockException exception) when (exception.Key == DISTRIBUTED_LOCK_KEY)
-                {
-                    logger.Debug($@"An exception was thrown during acquiring distributed lock on the [{DISTRIBUTED_LOCK_KEY}] resource within [{defaultLockTimeout.TotalSeconds}] seconds." +
-                                 $@"Outdated records were not removed. It will be retried in [{storage.StorageOptions.QueuePollInterval.TotalSeconds}] seconds.");
-                }
-                finally
-                {
-                    distributedLock?.Dispose();
-                }
+						data = task.Result;
 
-                logger.Trace($"Unable to find any jobs in the queue. Will check the queue for jobs in [{storage.StorageOptions.QueuePollInterval.TotalSeconds}] seconds");
-                cancellationToken.WaitHandle.WaitOne(storage.StorageOptions.QueuePollInterval);
-            }
-        }
-    }
+						logger.Trace($"Found job [{data.JobId}] from the queue : [{data.Name}]");
+						return new FetchedJob(storage, data);
+					}
+				}
+				catch (CosmosDbDistributedLockException exception) when (exception.Key == DISTRIBUTED_LOCK_KEY)
+				{
+					logger.Debug($@"An exception was thrown during acquiring distributed lock on the [{DISTRIBUTED_LOCK_KEY}] resource within [{defaultLockTimeout.TotalSeconds}] seconds. " +
+					             $@"It will be retried in [{storage.StorageOptions.QueuePollInterval.TotalSeconds}] seconds.");
+				}
+				finally
+				{
+					distributedLock?.Dispose();
+				}
 
-    public void Enqueue(string queue, string jobId) => Enqueue(queue, jobId, DateTime.UtcNow);
+				logger.Trace($"Unable to find any jobs in the queue. Will check the queue for jobs in [{storage.StorageOptions.QueuePollInterval.TotalSeconds}] seconds");
+				cancellationToken.WaitHandle.WaitOne(storage.StorageOptions.QueuePollInterval);
+			}
+		}
+	}
 
-    public void Enqueue(string queue, string jobId, DateTime createdOn)
-    {
-        Documents.Queue data = new Documents.Queue
-        {
-            Name = queue,
-            JobId = jobId,
-            CreatedOn = createdOn
-        };
+	public void Enqueue(string queue, string jobId) => Enqueue(queue, jobId, DateTime.UtcNow);
 
-        Task<ItemResponse<Documents.Queue>> task = storage.Container.CreateItemWithRetriesAsync(data, partitionKey);
-        task.Wait();
-    }
+	private void Enqueue(string queue, string jobId, DateTime createdOn)
+	{
+		Documents.Queue data = new()
+		{
+			Name = queue,
+			JobId = jobId,
+			CreatedOn = createdOn
+		};
+
+		Task<ItemResponse<Documents.Queue>> task = storage.Container.CreateItemWithRetriesAsync(data, partitionKey);
+		task.Wait();
+	}
 }

@@ -5,216 +5,219 @@ using System.Threading;
 using Hangfire.Azure.Queue;
 using Hangfire.Azure.Tests.Fixtures;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Hangfire.Azure.Tests;
 
 public class JobQueueMonitoringApiFacts : IClassFixture<ContainerFixture>
 {
-    private ContainerFixture ContainerFixture { get; }
-    private CosmosDbStorage Storage { get; }
+	private ContainerFixture ContainerFixture { get; }
+	private CosmosDbStorage Storage { get; }
 
-    public JobQueueMonitoringApiFacts(ContainerFixture containerFixture)
-    {
-        ContainerFixture = containerFixture;
-        Storage = containerFixture.Storage;
-    }
+	public JobQueueMonitoringApiFacts(ContainerFixture containerFixture, ITestOutputHelper testOutputHelper)
+	{
+		ContainerFixture = containerFixture;
+		Storage = containerFixture.Storage;
 
-    [Fact]
-    public void GetQueues_WhenIsEmpty()
-    {
-        // clean
-        ContainerFixture.Clean();
+		ContainerFixture.SetupLogger(testOutputHelper);
+	}
 
-        // act
-        JobQueueMonitoringApi monitoring = new JobQueueMonitoringApi(Storage);
-        IEnumerable<string> queues = monitoring.GetQueues();
+	[Fact]
+	public void GetQueues_WhenIsEmpty()
+	{
+		// clean
+		ContainerFixture.Clean();
 
-        // assert
-        Assert.Empty(queues);
-    }
+		// act
+		JobQueueMonitoringApi monitoring = new(Storage);
+		IEnumerable<string> queues = monitoring.GetQueues();
 
-    [Fact]
-    public void GetQueues_WhenIsNotEmpty()
-    {
-        // clean
-        ContainerFixture.Clean();
+		// assert
+		Assert.Empty(queues);
+	}
 
-        // arrange
-        JobQueue jobQueue = new JobQueue(Storage);
-        jobQueue.Enqueue("default", Guid.NewGuid().ToString());
-        jobQueue.Enqueue("high", Guid.NewGuid().ToString());
+	[Fact]
+	public void GetQueues_WhenIsNotEmpty()
+	{
+		// clean
+		ContainerFixture.Clean();
 
-        // act
-        JobQueueMonitoringApi monitoring = new JobQueueMonitoringApi(Storage);
-        IEnumerable<string> queues = monitoring.GetQueues();
+		// arrange
+		JobQueue jobQueue = new(Storage);
+		jobQueue.Enqueue("default", Guid.NewGuid().ToString());
+		jobQueue.Enqueue("high", Guid.NewGuid().ToString());
 
-        //assert
-        Assert.NotEmpty(queues);
-    }
+		// act
+		JobQueueMonitoringApi monitoring = new(Storage);
+		IEnumerable<string> queues = monitoring.GetQueues();
 
-    [Theory]
-    [InlineData("default")]
-    public void GetEnqueuedCount_WhenIsEmpty(string queue)
-    {
-        // clean
-        ContainerFixture.Clean();
+		//assert
+		Assert.NotEmpty(queues);
+	}
 
-        // act
-        JobQueueMonitoringApi monitoring = new JobQueueMonitoringApi(Storage);
-        long count = monitoring.GetEnqueuedCount(queue);
+	[Theory]
+	[InlineData("default")]
+	public void GetEnqueuedCount_WhenIsEmpty(string queue)
+	{
+		// clean
+		ContainerFixture.Clean();
 
-        //assert
-        Assert.Equal(0, count);
-    }
+		// act
+		JobQueueMonitoringApi monitoring = new(Storage);
+		long count = monitoring.GetEnqueuedCount(queue);
 
-    [Theory]
-    [InlineData("default")]
-    public void GetEnqueuedCount_WhenIsNotEmpty(string queue)
-    {
-        // clean
-        ContainerFixture.Clean();
+		//assert
+		Assert.Equal(0, count);
+	}
 
-        // arrange
-        JobQueue jobQueue = new JobQueue(Storage);
-        jobQueue.Enqueue(queue, Guid.NewGuid().ToString());
-        jobQueue.Enqueue(queue, Guid.NewGuid().ToString());
+	[Theory]
+	[InlineData("default")]
+	public void GetEnqueuedCount_WhenIsNotEmpty(string queue)
+	{
+		// clean
+		ContainerFixture.Clean();
 
-        // act
-        JobQueueMonitoringApi monitoring = new JobQueueMonitoringApi(Storage);
-        long count = monitoring.GetEnqueuedCount(queue);
+		// arrange
+		JobQueue jobQueue = new(Storage);
+		jobQueue.Enqueue(queue, Guid.NewGuid().ToString());
+		jobQueue.Enqueue(queue, Guid.NewGuid().ToString());
 
-        //assert
-        Assert.Equal(2, count);
-    }
+		// act
+		JobQueueMonitoringApi monitoring = new(Storage);
+		long count = monitoring.GetEnqueuedCount(queue);
 
-    [Theory]
-    [InlineData("default")]
-    public void GetEnqueuedCount_WhenFetched(string queue)
-    {
-        // clean
-        ContainerFixture.Clean();
+		//assert
+		Assert.Equal(2, count);
+	}
 
-        // arrange
-        JobQueue jobQueue = new JobQueue(Storage);
-        jobQueue.Enqueue(queue, Guid.NewGuid().ToString());
-        jobQueue.Enqueue(queue, Guid.NewGuid().ToString());
+	[Theory]
+	[InlineData("default")]
+	public void GetEnqueuedCount_WhenFetched(string queue)
+	{
+		// clean
+		ContainerFixture.Clean();
 
-        jobQueue.Dequeue(new[] { queue }, CancellationToken.None);
+		// arrange
+		JobQueue jobQueue = new(Storage);
+		jobQueue.Enqueue(queue, Guid.NewGuid().ToString());
+		jobQueue.Enqueue(queue, Guid.NewGuid().ToString());
 
-        // act
-        JobQueueMonitoringApi monitoring = new JobQueueMonitoringApi(Storage);
-        long count = monitoring.GetEnqueuedCount(queue);
+		jobQueue.Dequeue(new[] { queue }, CancellationToken.None);
 
-        //assert
-        Assert.Equal(1, count);
-    }
+		// act
+		JobQueueMonitoringApi monitoring = new(Storage);
+		long count = monitoring.GetEnqueuedCount(queue);
 
-    [Theory]
-    [InlineData("default")]
-    public void GetEnqueuedJobIds_WhenIsNotEmpty(string queue)
-    {
-        // clean
-        ContainerFixture.Clean();
+		//assert
+		Assert.Equal(1, count);
+	}
 
-        // arrange
-        JobQueue jobQueue = new JobQueue(Storage);
-        string jobId = Guid.NewGuid().ToString();
-        jobQueue.Enqueue(queue, jobId);
+	[Theory]
+	[InlineData("default")]
+	public void GetEnqueuedJobIds_WhenIsNotEmpty(string queue)
+	{
+		// clean
+		ContainerFixture.Clean();
 
-        // act
-        JobQueueMonitoringApi monitoring = new JobQueueMonitoringApi(Storage);
-        IEnumerable<string> ids = monitoring.GetEnqueuedJobIds(queue, 0, 10);
+		// arrange
+		JobQueue jobQueue = new(Storage);
+		string jobId = Guid.NewGuid().ToString();
+		jobQueue.Enqueue(queue, jobId);
 
-        //assert
-        Assert.NotEmpty(ids);
-    }
+		// act
+		JobQueueMonitoringApi monitoring = new(Storage);
+		IEnumerable<string> ids = monitoring.GetEnqueuedJobIds(queue, 0, 10);
 
-    [Theory]
-    [InlineData("default")]
-    public void GetEnqueuedJobIds_WhenFetched(string queue)
-    {
-        // clean
-        ContainerFixture.Clean();
+		//assert
+		Assert.NotEmpty(ids);
+	}
 
-        // arrange
-        JobQueue jobQueue = new JobQueue(Storage);
-        jobQueue.Enqueue(queue, Guid.NewGuid().ToString());
-        string jobId = Guid.NewGuid().ToString();
-        jobQueue.Enqueue(queue, jobId);
+	[Theory]
+	[InlineData("default")]
+	public void GetEnqueuedJobIds_WhenFetched(string queue)
+	{
+		// clean
+		ContainerFixture.Clean();
 
-        jobQueue.Dequeue(new[] { queue }, CancellationToken.None);
+		// arrange
+		JobQueue jobQueue = new(Storage);
+		jobQueue.Enqueue(queue, Guid.NewGuid().ToString());
+		string jobId = Guid.NewGuid().ToString();
+		jobQueue.Enqueue(queue, jobId);
 
-        // act
-        JobQueueMonitoringApi monitoring = new JobQueueMonitoringApi(Storage);
-        string id = monitoring.GetEnqueuedJobIds(queue, 0, 10).Single();
+		jobQueue.Dequeue(new[] { queue }, CancellationToken.None);
 
-        //assert
-        Assert.Equal(jobId, id);
-    }
+		// act
+		JobQueueMonitoringApi monitoring = new(Storage);
+		string id = monitoring.GetEnqueuedJobIds(queue, 0, 10).First();
 
-    [Theory]
-    [InlineData("default")]
-    public void GetFetchedJobIds_WhenIsNotEmpty(string queue)
-    {
-        // clean
-        ContainerFixture.Clean();
+		//assert
+		Assert.Equal(jobId, id);
+	}
 
-        // arrange
-        JobQueue jobQueue = new JobQueue(Storage);
-        string jobId = Guid.NewGuid().ToString();
-        jobQueue.Enqueue(queue, jobId);
-        jobQueue.Dequeue(new[] { queue }, CancellationToken.None);
+	[Theory]
+	[InlineData("default")]
+	public void GetFetchedJobIds_WhenIsNotEmpty(string queue)
+	{
+		// clean
+		ContainerFixture.Clean();
 
-        // act
-        JobQueueMonitoringApi monitoring = new JobQueueMonitoringApi(Storage);
-        IEnumerable<string> ids = monitoring.GetFetchedJobIds(queue, 0, 10);
+		// arrange
+		JobQueue jobQueue = new(Storage);
+		string jobId = Guid.NewGuid().ToString();
+		jobQueue.Enqueue(queue, jobId);
+		jobQueue.Dequeue(new[] { queue }, CancellationToken.None);
 
-        //assert
-        Assert.NotEmpty(ids);
-    }
+		// act
+		JobQueueMonitoringApi monitoring = new(Storage);
+		IEnumerable<string> ids = monitoring.GetFetchedJobIds(queue, 0, 10).ToList();
 
-    [Theory]
-    [InlineData("default")]
-    public void GetFetchedJobIds_WhenFetched(string queue)
-    {
-        // clean
-        ContainerFixture.Clean();
+		//assert
+		Assert.NotEmpty(ids);
+	}
 
-        // arrange
-        JobQueue jobQueue = new JobQueue(Storage);
-        string jobId = Guid.NewGuid().ToString();
-        jobQueue.Enqueue(queue, jobId);
-        jobQueue.Enqueue(queue, Guid.NewGuid().ToString());
-        jobQueue.Dequeue(new[] { queue }, CancellationToken.None);
+	[Theory]
+	[InlineData("default")]
+	public void GetFetchedJobIds_WhenFetched(string queue)
+	{
+		// clean
+		ContainerFixture.Clean();
 
-        // act
-        JobQueueMonitoringApi monitoring = new JobQueueMonitoringApi(Storage);
-        string id = monitoring.GetFetchedJobIds(queue, 0, 10).Single();
+		// arrange
+		JobQueue jobQueue = new(Storage);
+		string jobId = Guid.NewGuid().ToString();
+		jobQueue.Enqueue(queue, jobId);
+		jobQueue.Enqueue(queue, Guid.NewGuid().ToString());
+		jobQueue.Dequeue(new[] { queue }, CancellationToken.None);
 
-        //assert
-        Assert.Equal(jobId, id);
-    }
+		// act
+		JobQueueMonitoringApi monitoring = new(Storage);
+		string id = monitoring.GetFetchedJobIds(queue, 0, 10).Single();
 
-    [Theory]
-    [InlineData("default")]
-    public void GetEnqueuedAndFetchedCount_WhenNotEmpty(string queue)
-    {
-        // clean
-        ContainerFixture.Clean();
+		//assert
+		Assert.Equal(jobId, id);
+	}
 
-        // arrange
-        JobQueue jobQueue = new JobQueue(Storage);
-        string jobId = Guid.NewGuid().ToString();
-        jobQueue.Enqueue(queue, jobId);
-        jobQueue.Enqueue(queue, Guid.NewGuid().ToString());
-        jobQueue.Dequeue(new[] { queue }, CancellationToken.None);
+	[Theory]
+	[InlineData("default")]
+	public void GetEnqueuedAndFetchedCount_WhenNotEmpty(string queue)
+	{
+		// clean
+		ContainerFixture.Clean();
 
-        // act
-        JobQueueMonitoringApi monitoring = new JobQueueMonitoringApi(Storage);
-        (int? EnqueuedCount, int? FetchedCount) record = monitoring.GetEnqueuedAndFetchedCount(queue);
+		// arrange
+		JobQueue jobQueue = new(Storage);
+		string jobId = Guid.NewGuid().ToString();
+		jobQueue.Enqueue(queue, jobId);
+		jobQueue.Enqueue(queue, Guid.NewGuid().ToString());
+		jobQueue.Dequeue(new[] { queue }, CancellationToken.None);
 
-        //assert
-        Assert.Equal(1, record.EnqueuedCount);
-        Assert.Equal(1, record.FetchedCount);
-    }
+		// act
+		JobQueueMonitoringApi monitoring = new(Storage);
+		(int? enqueuedCount, int? fetchedCount) = monitoring.GetEnqueuedAndFetchedCount(queue);
+
+		//assert
+		Assert.Equal(1, enqueuedCount);
+		Assert.Equal(1, fetchedCount);
+	}
 }

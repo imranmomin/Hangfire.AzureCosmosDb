@@ -6,54 +6,37 @@ namespace Hangfire.Azure.Documents.Helper;
 
 public static class TimeHelper
 {
-    private static readonly DateTime epochDateTime = new(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+	private static readonly DateTime epochDateTime = new(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
 
-    public static int ToEpoch(this DateTime date)
-    {
-        if (date.Equals(DateTime.MinValue)) return int.MinValue;
-        TimeSpan epochTimeSpan = date - epochDateTime;
-        return (int)epochTimeSpan.TotalSeconds;
-    }
+	public static int ToEpoch(this DateTime date)
+	{
+		if (date.Equals(DateTime.MinValue)) return int.MinValue;
 
-    public static DateTime ToDateTime(this int totalSeconds) => epochDateTime.AddSeconds(totalSeconds);
+		TimeSpan epochTimeSpan = date - epochDateTime;
+		return (int)epochTimeSpan.TotalSeconds;
+	}
 
-    public static string? TryParseToEpoch(this string? s)
-    {
-        if (s == null)
-        {
-            return null;
-        }
+	public static DateTime ToDateTime(this int totalSeconds) => epochDateTime.AddSeconds(totalSeconds);
 
-        if (string.IsNullOrWhiteSpace(s))
-        {
-            return null;
-        }
+	public static string? TryParseToEpoch(this string? s)
+	{
+		if (s == null) return null;
+		if (string.IsNullOrWhiteSpace(s)) return null;
 
-        return DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime date)
-            ? date.ToEpoch().ToString(CultureInfo.InvariantCulture)
-            : s;
-    }
+		return DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime date)
+			? date.ToEpoch().ToString(CultureInfo.InvariantCulture)
+			: s;
+	}
 
-    public static bool TryParseEpochToDate(this string? s, out string? value)
-    {
-        value = null;
+	public static bool TryParseEpochToDate(this string? s, out string? value)
+	{
+		value = null;
 
-        if (s == null)
-        {
-            return false;
-        }
+		if (s == null) return false;
+		if (string.IsNullOrWhiteSpace(s)) return false;
+		if (!int.TryParse(s, out int epoch)) return false;
 
-        if (string.IsNullOrWhiteSpace(s))
-        {
-            return false;
-        }
-
-        if (int.TryParse(s, out int epoch))
-        {
-            value = epoch.ToDateTime().ToLocalTime().ToString("d/M/yyyy HH:mm:ss");
-            return true;
-        }
-
-        return false;
-    }
+		value = epoch.ToDateTime().ToLocalTime().ToString("d/M/yyyy HH:mm:ss");
+		return true;
+	}
 }
