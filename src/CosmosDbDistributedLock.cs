@@ -60,45 +60,32 @@ public class CosmosDbDistributedLock : IDisposable
 
 		string id = $"{resource}:{DocumentTypes.Lock}".GenerateHash();
 
+		// ttl for lock document
+		// this is if the expiration manager was not able to remove the orphan lock in time.
+		double ttl = Math.Max(15, timeout.TotalSeconds) * 1.5;
+
 		while (@lock == null)
 		{
+			Lock data = new()
+			{
+				Id = id,
+				Name = resource,
+				ExpireOn = DateTime.UtcNow.Add(timeout),
+				LastHeartBeat = DateTime.UtcNow,
+				TimeToLive = (int)ttl
+			};
+
 			try
 			{
-				Task<ItemResponse<Lock>> readTask = storage.Container.ReadItemWithRetriesAsync<Lock>(id, partitionKey);
-				readTask.Wait();
+				Task<ItemResponse<Lock>> createTask = storage.Container.CreateItemWithRetriesAsync(data, partitionKey);
+				createTask.Wait();
 
-				if (readTask.Result.Resource != null)
-					// TODO: check if the item has already expired.
-					// If it safe to remove it here or have a some type of counter
-					logger.Trace($"Unable to acquire lock for [{resource}]. It already has an active lock on for it.");
+				@lock = createTask.Result.Resource;
+				break;
 			}
-			catch (AggregateException aggregateException) when (aggregateException.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
+			catch (Exception ex)
 			{
-				// ttl for lock document
-				// this is if the expiration manager was not able to remove the orphan lock in time.
-				double ttl = Math.Max(15, timeout.TotalSeconds) * 1.5;
-
-				@lock = new Lock
-				{
-					Id = id,
-					Name = resource,
-					ExpireOn = DateTime.UtcNow.Add(timeout),
-					LastHeartBeat = DateTime.UtcNow,
-					TimeToLive = (int)ttl
-				};
-
-				try
-				{
-					Task<ItemResponse<Lock>> createTask = storage.Container.CreateItemWithRetriesAsync(@lock, partitionKey);
-					createTask.Wait();
-
-					@lock = createTask.Result.Resource;
-					break;
-				}
-				catch (Exception ex)
-				{
-					logger.ErrorException($"Unable to create a lock for resource [{resource}]", ex);
-				}
+				logger.ErrorException($"Unable to create a lock for resource [{resource}]", ex);
 			}
 
 			// check the timeout
@@ -110,7 +97,7 @@ public class CosmosDbDistributedLock : IDisposable
 		}
 
 		// set the timer for the KeepLockAlive callbacks
-		int period = (int)TimeSpan.FromSeconds(@lock.TimeToLive!.Value).TotalMilliseconds / 2;
+		int period = (int)TimeSpan.FromSeconds(ttl).TotalMilliseconds / 2;
 		period = period < 1000 ? 1000 : period;
 		timer = new Timer(KeepLockAlive, null, period, period);
 
@@ -133,6 +120,7 @@ public class CosmosDbDistributedLock : IDisposable
 			{
 				PatchOperation.Set("/last_heartbeat", DateTime.UtcNow.ToEpoch())
 			};
+
 			PatchItemRequestOptions patchItemRequestOptions = new()
 			{
 				IfMatchEtag = @lock.ETag
