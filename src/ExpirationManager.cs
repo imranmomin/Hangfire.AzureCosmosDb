@@ -26,13 +26,18 @@ public class ExpirationManager : IServerComponent
 
 	public void Execute(CancellationToken cancellationToken)
 	{
-		while (true)
+		bool isComplete = false;
+
+		while (cancellationToken.IsCancellationRequested == false && isComplete == false)
 		{
-			int expireOn = DateTime.UtcNow.ToEpoch();
 			CosmosDbDistributedLock? distributedLock = null;
 
 			try
 			{
+				// check if the token was cancelled
+				cancellationToken.ThrowIfCancellationRequested();
+
+				// get the distributed lock
 				distributedLock = new CosmosDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage);
 
 				foreach (DocumentTypes type in documents)
@@ -41,28 +46,34 @@ public class ExpirationManager : IServerComponent
 
 					logger.Trace($"Removing outdated records from the [{type}] document.");
 
+					int expireOn = DateTime.UtcNow.ToEpoch();
 					string query = $"SELECT * FROM doc WHERE doc.type = {(int)type} AND IS_DEFINED(doc.expire_on) AND doc.expire_on < {expireOn}";
 
 					// remove only the aggregate counters when the type is Counter
 					if (type == DocumentTypes.Counter) query += $" AND doc.counterType = {(int)CounterTypes.Aggregate}";
 
-					int deleted = storage.Container.ExecuteDeleteDocuments(query, new PartitionKey((int)type), cancellationToken);
+					int deleted = storage.Container.ExecuteDeleteDocuments(query, new PartitionKey((int)type));
 
 					logger.Trace($"Outdated [{deleted}] records removed from the [{type}] document.");
 				}
+
+				isComplete = true;
 			}
 			catch (CosmosDbDistributedLockException exception) when (exception.Key == DISTRIBUTED_LOCK_KEY)
 			{
 				logger.Debug($@"An exception was thrown during acquiring distributed lock on the [{DISTRIBUTED_LOCK_KEY}] resource within [{defaultLockTimeout.TotalSeconds}] seconds." +
-				             $@"Outdated records were not removed. It will be retried in [{storage.StorageOptions.ExpirationCheckInterval.TotalSeconds}] seconds.");
+				             @"Outdated records were not removed. It will be retried in [5] seconds.");
 
-				// wait for the interval specified
-				cancellationToken.WaitHandle.WaitOne(storage.StorageOptions.ExpirationCheckInterval);
+				// wait for 5 seconds
+				Thread.Sleep(5000);
 			}
 			finally
 			{
 				distributedLock?.Dispose();
 			}
 		}
+
+		// wait for the interval specified
+		cancellationToken.WaitHandle.WaitOne(storage.StorageOptions.ExpirationCheckInterval);
 	}
 }

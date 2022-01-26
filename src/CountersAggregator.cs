@@ -29,12 +29,18 @@ public class CountersAggregator : IServerComponent
 
 	public void Execute(CancellationToken cancellationToken)
 	{
-		CosmosDbDistributedLock? distributedLock = null;
+		bool isCompleted = false;
 
-		while (true)
+		while (cancellationToken.IsCancellationRequested == false && isCompleted == false)
 		{
+			CosmosDbDistributedLock? distributedLock = null;
+
 			try
 			{
+				// check if the token was cancelled
+				cancellationToken.ThrowIfCancellationRequested();
+
+				// get the distributed lock
 				distributedLock = new CosmosDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage);
 
 				logger.Trace("Aggregating records in [Counter] table.");
@@ -69,77 +75,75 @@ public class CountersAggregator : IServerComponent
 
 					try
 					{
-						Task<ItemResponse<Counter>> readTask = storage.Container.ReadItemAsync<Counter>(id, partitionKey, cancellationToken: cancellationToken);
-						readTask.Wait(cancellationToken);
+						Task<ItemResponse<Counter>> readTask = storage.Container.ReadItemWithRetriesAsync<Counter>(id, partitionKey, cancellationToken: cancellationToken);
+						// ReSharper disable once MethodSupportsCancellation
+						readTask.Wait();
 
-						if (readTask.Result.StatusCode == HttpStatusCode.OK)
+						Counter aggregated = readTask.Result.Resource;
+
+						PatchOperation[] patchOperations =
 						{
-							Counter aggregated = readTask.Result.Resource;
-							PatchOperation[] patchOperations =
-							{
-								PatchOperation.Set("/value", aggregated.Value + data.Value),
-								PatchOperation.Set("/expire_on", new[] { aggregated.ExpireOn, data.ExpireOn }.Max())
-							};
+							PatchOperation.Set("/value", aggregated.Value + data.Value),
+							PatchOperation.Set("/expire_on", new[] { aggregated.ExpireOn, data.ExpireOn }.Max())
+						};
 
-							PatchItemRequestOptions patchItemRequestOptions = new()
-							{
-								IfMatchEtag = aggregated.ETag
-							};
-
-							task = storage.Container.PatchItemWithRetriesAsync<Counter>(aggregated.Id, partitionKey, patchOperations, patchItemRequestOptions, cancellationToken);
-						}
-						else
+						PatchItemRequestOptions patchItemRequestOptions = new()
 						{
-							logger.Warn($"Document with ID: [{id}] is a [{readTask.Result.Resource.Type.ToString()}] type which could not be aggregated");
-							continue;
-						}
+							IfMatchEtag = aggregated.ETag
+						};
+
+						// ReSharper disable once MethodSupportsCancellation
+						task = storage.Container.PatchItemWithRetriesAsync<Counter>(aggregated.Id, partitionKey, patchOperations, patchItemRequestOptions);
 					}
-					catch (AggregateException ex) when (ex.InnerException is CosmosException clientException)
+					catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
 					{
-						if (clientException.StatusCode == HttpStatusCode.NotFound)
+						Counter aggregated = new()
 						{
-							Counter aggregated = new()
-							{
-								Id = id,
-								Key = key,
-								Type = CounterTypes.Aggregate,
-								Value = data.Value,
-								ExpireOn = data.ExpireOn
-							};
+							Id = id,
+							Key = key,
+							Type = CounterTypes.Aggregate,
+							Value = data.Value,
+							ExpireOn = data.ExpireOn
+						};
 
-							task = storage.Container.CreateItemWithRetriesAsync(aggregated, partitionKey, cancellationToken: cancellationToken);
-						}
-						else
-						{
-							logger.ErrorException("Error while reading document", ex.InnerException);
-							continue;
-						}
+						// ReSharper disable once MethodSupportsCancellation
+						task = storage.Container.CreateItemWithRetriesAsync(aggregated, partitionKey);
+					}
+					catch (AggregateException ex) when (ex.InnerException is CosmosException)
+					{
+						logger.ErrorException("Error while reading document", ex);
+						continue;
 					}
 
-					task.Wait(cancellationToken);
+					// ReSharper disable once MethodSupportsCancellation
+					task.Wait();
 
 					// now - remove the raw counters
 					string ids = string.Join(",", data.Counters.Select(c => $"'{c.Id}'").ToArray());
 					string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Counter} AND doc.counterType = {(int)CounterTypes.Raw} AND doc.id IN ({ids})";
-					int deleted = storage.Container.ExecuteDeleteDocuments(query, partitionKey, cancellationToken);
+					int deleted = storage.Container.ExecuteDeleteDocuments(query, partitionKey);
 					logger.Trace($"Total [{deleted}] records from the ['Counter:{key}'] were aggregated.");
 				}
 
-				logger.Trace($" Records [{rawCounters.Count}] from the [Counter] table aggregated.");
+				logger.Trace($"Records [{rawCounters.Count}] from the [Counter] table aggregated.");
+				isCompleted = true;
 			}
 			catch (CosmosDbDistributedLockException exception) when (exception.Key == DISTRIBUTED_LOCK_KEY)
 			{
 				logger.Debug($@"An exception was thrown during acquiring distributed lock on the [{DISTRIBUTED_LOCK_KEY}] resource within [{defaultLockTimeout.TotalSeconds}] seconds." +
-				             $@"Counter records were not aggregated. It will be retried in [{storage.StorageOptions.CountersAggregateInterval.TotalSeconds}] seconds.");
+				             @"Counter records were not aggregated. It will be retried in [5] seconds.");
+
+				// will wait for 5 seconds
+				Thread.Sleep(5000);
 			}
 			finally
 			{
 				distributedLock?.Dispose();
 			}
-
-			// wait for the interval specified
-			cancellationToken.WaitHandle.WaitOne(storage.StorageOptions.CountersAggregateInterval);
 		}
+
+		// wait for the interval specified
+		cancellationToken.WaitHandle.WaitOne(storage.StorageOptions.CountersAggregateInterval);
 	}
 
 	public override string ToString() => GetType().ToString();

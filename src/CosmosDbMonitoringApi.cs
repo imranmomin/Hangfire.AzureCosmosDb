@@ -76,7 +76,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 	{
 		if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
 
-		Task<ItemResponse<Documents.Job>> task = storage.Container.ReadItemAsync<Documents.Job>(jobId, new PartitionKey((int)DocumentTypes.Job));
+		Task<ItemResponse<Documents.Job>> task = storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, new PartitionKey((int)DocumentTypes.Job));
 		task.Wait();
 
 		// if the resource is not found return null;

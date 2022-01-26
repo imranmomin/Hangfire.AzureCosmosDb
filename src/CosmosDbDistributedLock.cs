@@ -92,11 +92,8 @@ public class CosmosDbDistributedLock : IDisposable
 					Task<ItemResponse<Lock>> createTask = storage.Container.CreateItemWithRetriesAsync(@lock, partitionKey);
 					createTask.Wait();
 
-					if (createTask.Result.StatusCode is HttpStatusCode.OK or HttpStatusCode.Created)
-					{
-						@lock = createTask.Result.Resource;
-						break;
-					}
+					@lock = createTask.Result.Resource;
+					break;
 				}
 				catch (Exception ex)
 				{

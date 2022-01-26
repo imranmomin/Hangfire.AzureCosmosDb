@@ -34,7 +34,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 	#region Job
 
-	public override string? CreateExpiredJob(Job job, IDictionary<string, string?> parameters, DateTime createdAt, TimeSpan expireIn)
+	public override string CreateExpiredJob(Job job, IDictionary<string, string?> parameters, DateTime createdAt, TimeSpan expireIn)
 	{
 		if (job == null) throw new ArgumentNullException(nameof(job));
 		if (parameters == null) throw new ArgumentNullException(nameof(parameters));
@@ -56,7 +56,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 		Task<ItemResponse<Documents.Job>> task = Storage.Container.CreateItemWithRetriesAsync(entityJob, new PartitionKey((int)DocumentTypes.Job));
 		task.Wait();
 
-		return task.Result.StatusCode is HttpStatusCode.Created or HttpStatusCode.OK ? entityJob.Id : null;
+		return entityJob.Id;
 	}
 
 	public override IFetchedJob FetchNextJob(string[] queues, CancellationToken cancellationToken)
@@ -85,33 +85,29 @@ public sealed class CosmosDbConnection : JobStorageConnection
 			Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, new PartitionKey((int)DocumentTypes.Job));
 			task.Wait();
 
-			if (task.Result.Resource != null)
+			Documents.Job data = task.Result.Resource;
+			InvocationData invocationData = data.InvocationData;
+			invocationData.Arguments = data.Arguments;
+
+			Job? job = null;
+			JobLoadException? loadException = null;
+
+			try
 			{
-				Documents.Job data = task.Result.Resource;
-
-				InvocationData invocationData = data.InvocationData;
-				invocationData.Arguments = data.Arguments;
-
-				Job? job = null;
-				JobLoadException? loadException = null;
-
-				try
-				{
-					job = invocationData.DeserializeJob();
-				}
-				catch (JobLoadException ex)
-				{
-					loadException = ex;
-				}
-
-				return new JobData
-				{
-					Job = job,
-					State = data.StateName,
-					CreatedAt = data.CreatedOn.ToLocalTime(),
-					LoadException = loadException
-				};
+				job = invocationData.DeserializeJob();
 			}
+			catch (JobLoadException ex)
+			{
+				loadException = ex;
+			}
+
+			return new JobData
+			{
+				Job = job,
+				State = data.StateName,
+				CreatedAt = data.CreatedOn.ToLocalTime(),
+				LoadException = loadException
+			};
 		}
 		catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
 		{
@@ -131,25 +127,19 @@ public sealed class CosmosDbConnection : JobStorageConnection
 			Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, new PartitionKey((int)DocumentTypes.Job));
 			task.Wait();
 
-			if (task.Result.Resource != null)
+			Documents.Job job = task.Result.Resource;
+
+			// get the state document
+			Task<ItemResponse<State>> stateTask = Storage.Container.ReadItemWithRetriesAsync<State>(job.StateId, new PartitionKey((int)DocumentTypes.State));
+			stateTask.Wait();
+
+			State state = stateTask.Result.Resource;
+			return new StateData
 			{
-				Documents.Job job = task.Result.Resource;
-
-				// get the state document
-				Task<ItemResponse<State>> stateTask = Storage.Container.ReadItemWithRetriesAsync<State>(job.StateId, new PartitionKey((int)DocumentTypes.State));
-				stateTask.Wait();
-
-				if (stateTask.Result.Resource != null)
-				{
-					State state = stateTask.Result.Resource;
-					return new StateData
-					{
-						Name = state.Name,
-						Reason = state.Reason,
-						Data = state.Data
-					};
-				}
-			}
+				Name = state.Name,
+				Reason = state.Reason,
+				Data = state.Data
+			};
 		}
 		catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
 		{
@@ -173,11 +163,9 @@ public sealed class CosmosDbConnection : JobStorageConnection
 		{
 			Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(id, new PartitionKey((int)DocumentTypes.Job));
 			task.Wait();
-			if (task.Result.Resource != null)
-			{
-				Documents.Job data = task.Result.Resource;
-				return data.Parameters.Where(p => p.Name == name).Select(p => p.Value).FirstOrDefault();
-			}
+
+			Documents.Job data = task.Result.Resource;
+			return data.Parameters.Where(p => p.Name == name).Select(p => p.Value).FirstOrDefault();
 		}
 		catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
 		{
