@@ -58,8 +58,6 @@ public class CosmosDbDistributedLock : IDisposable
 		Stopwatch acquireStart = new();
 		acquireStart.Start();
 
-		string id = $"{resource}:{DocumentTypes.Lock}".GenerateHash();
-
 		// ttl for lock document
 		// this is if the expiration manager was not able to remove the orphan lock in time.
 		double ttl = Math.Max(15, timeout.TotalSeconds) * 1.5;
@@ -68,8 +66,7 @@ public class CosmosDbDistributedLock : IDisposable
 		{
 			Lock data = new()
 			{
-				Id = id,
-				Name = resource,
+				Id = resource,
 				ExpireOn = DateTime.UtcNow.Add(timeout),
 				LastHeartBeat = DateTime.UtcNow,
 				TimeToLive = (int)ttl
@@ -114,7 +111,7 @@ public class CosmosDbDistributedLock : IDisposable
 
 		try
 		{
-			logger.Trace($"Preparing the Keep-alive query for lock: [{@lock.Name}]");
+			logger.Trace($"Preparing the Keep-alive query for lock: [{@lock.Id}]");
 
 			PatchOperation[] patchOperations =
 			{
@@ -131,7 +128,7 @@ public class CosmosDbDistributedLock : IDisposable
 
 			@lock = task.Result;
 
-			logger.Trace($"Keep-alive query for lock: [{@lock.Name}] sent");
+			logger.Trace($"Keep-alive query for lock: [{@lock.Id}] sent");
 		}
 		catch (AggregateException aggregateException) when (aggregateException.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
 		{
@@ -139,7 +136,7 @@ public class CosmosDbDistributedLock : IDisposable
 		}
 		catch (Exception ex)
 		{
-			logger.DebugException($"Unable to execute keep-alive query for the lock: [{@lock.Name}]", ex);
+			logger.DebugException($"Unable to execute keep-alive query for the lock: [{@lock.Id}]", ex);
 		}
 	}
 }

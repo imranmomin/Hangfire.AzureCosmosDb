@@ -83,7 +83,7 @@ public class CountersAggregator : IServerComponent
 
 						PatchOperation[] patchOperations =
 						{
-							PatchOperation.Set("/value", aggregated.Value + data.Value),
+							PatchOperation.Increment("/value", data.Value),
 							PatchOperation.Set("/expire_on", new[] { aggregated.ExpireOn, data.ExpireOn }.Max())
 						};
 

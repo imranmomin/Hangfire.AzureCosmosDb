@@ -7,9 +7,6 @@ namespace Hangfire.Azure.Documents;
 
 public class Server : DocumentBase
 {
-	[JsonProperty("server_id")]
-	public string ServerId { get; set; } = null!;
-
 	[JsonProperty("workers")]
 	public int Workers { get; set; }
 

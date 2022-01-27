@@ -12,7 +12,6 @@ using Hangfire.Common;
 using Hangfire.Server;
 using Hangfire.Storage;
 using Microsoft.Azure.Cosmos;
-using Microsoft.Azure.Cosmos.Scripts;
 using Job = Hangfire.Common.Job;
 
 namespace Hangfire.Azure;
@@ -181,13 +180,23 @@ public sealed class CosmosDbConnection : JobStorageConnection
 		if (name == null) throw new ArgumentNullException(nameof(name));
 		if (Guid.TryParse(id, out Guid _) == false) return;
 
-		Parameter parameter = new()
+		Task<ItemResponse<Documents.Job>> readTask = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(id, new PartitionKey((int)DocumentTypes.Job));
+		readTask.Wait();
+
+		Documents.Job data = readTask.Result.Resource;
+		int index = Array.FindIndex(data.Parameters, x => x.Name == name);
+		index = index == -1 ? data.Parameters.Length : index;
+
+		PatchOperation[] patchOperations =
 		{
-			Value = value,
-			Name = name
+			PatchOperation.Set($"/parameters/{index}", new Parameter { Name = name, Value = value })
+		};
+		PatchItemRequestOptions patchItemRequestOptions = new()
+		{
+			IfMatchEtag = data.ETag
 		};
 
-		Task<StoredProcedureExecuteResponse<bool>> task = Storage.Container.Scripts.ExecuteStoredProcedureAsync<bool>("setJobParameter", new PartitionKey((int)DocumentTypes.Job), new dynamic[] { id, parameter });
+		Task<ItemResponse<Documents.Job>> task = Storage.Container.PatchItemWithRetriesAsync<Documents.Job>(id, new PartitionKey((int)DocumentTypes.Job), patchOperations, patchItemRequestOptions);
 		task.Wait();
 	}
 
@@ -263,7 +272,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 		return new HashSet<string>(sets);
 	}
 
-	public override string? GetFirstByLowestScoreFromSet(string key, double fromScore, double toScore) => base.GetFirstByLowestScoreFromSet(key, fromScore, toScore, 1).FirstOrDefault();
+	public override string? GetFirstByLowestScoreFromSet(string key, double fromScore, double toScore) => GetFirstByLowestScoreFromSet(key, fromScore, toScore, 1).FirstOrDefault();
 
 	public override List<string> GetFirstByLowestScoreFromSet(string key, double fromScore, double toScore, int count)
 	{
@@ -288,27 +297,25 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 	public override void AnnounceServer(string serverId, ServerContext context)
 	{
-		if (serverId == null) throw new ArgumentNullException(nameof(serverId));
+		if (string.IsNullOrWhiteSpace(serverId)) throw new ArgumentNullException(nameof(serverId));
 		if (context == null) throw new ArgumentNullException(nameof(context));
 
 		Documents.Server server = new()
 		{
-			Id = $"{serverId}:{DocumentTypes.Server}".GenerateHash(),
-			ServerId = serverId,
+			Id = serverId,
 			Workers = context.WorkerCount,
 			Queues = context.Queues,
 			CreatedOn = DateTime.UtcNow,
 			LastHeartbeat = DateTime.UtcNow
 		};
 
-		Task<ItemResponse<Documents.Server>> task = Storage.Container.CreateItemWithRetriesAsync(server, new PartitionKey((int)DocumentTypes.Server));
+		Task<ItemResponse<Documents.Server>> task = Storage.Container.UpsertItemWithRetriesAsync(server, new PartitionKey((int)DocumentTypes.Server));
 		task.Wait();
 	}
 
 	public override void Heartbeat(string serverId)
 	{
-		if (serverId == null) throw new ArgumentNullException(nameof(serverId));
-		string id = $"{serverId}:{DocumentTypes.Server}".GenerateHash();
+		if (string.IsNullOrWhiteSpace(serverId)) throw new ArgumentNullException(nameof(serverId));
 
 		try
 		{
@@ -316,7 +323,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 			{
 				PatchOperation.Set("/last_heartbeat", DateTime.UtcNow.ToEpoch())
 			};
-			Task<ItemResponse<Documents.Server>> task = Storage.Container.PatchItemWithRetriesAsync<Documents.Server>(id, new PartitionKey((int)DocumentTypes.Server), patchOperations);
+			Task<ItemResponse<Documents.Server>> task = Storage.Container.PatchItemWithRetriesAsync<Documents.Server>(serverId, new PartitionKey((int)DocumentTypes.Server), patchOperations);
 			task.Wait();
 		}
 		catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
@@ -327,12 +334,11 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 	public override void RemoveServer(string serverId)
 	{
-		if (serverId == null) throw new ArgumentNullException(nameof(serverId));
-		string id = $"{serverId}:{DocumentTypes.Server}".GenerateHash();
+		if (string.IsNullOrWhiteSpace(serverId)) throw new ArgumentNullException(nameof(serverId));
 
 		try
 		{
-			Task<ItemResponse<Documents.Server>> task = Storage.Container.DeleteItemWithRetriesAsync<Documents.Server>(id, new PartitionKey((int)DocumentTypes.Server));
+			Task<ItemResponse<Documents.Server>> task = Storage.Container.DeleteItemWithRetriesAsync<Documents.Server>(serverId, new PartitionKey((int)DocumentTypes.Server));
 			task.Wait();
 		}
 		catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })

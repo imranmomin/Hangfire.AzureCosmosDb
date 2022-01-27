@@ -64,7 +64,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 		.ToQueryResult()
 		.Select(server => new ServerDto
 		{
-			Name = server.ServerId,
+			Name = server.Id,
 			Heartbeat = server.LastHeartbeat.ToLocalTime(),
 			Queues = server.Queues,
 			StartedAt = server.CreatedOn,
