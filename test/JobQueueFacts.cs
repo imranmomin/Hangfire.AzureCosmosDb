@@ -213,9 +213,8 @@ public class JobQueueFacts : IClassFixture<ContainerFixture>
 		jobQueue.Enqueue(queue, jobId);
 
 		// act
-		const string query = "SELECT * FROM doc WHERE doc.type = @type AND doc.name = @queue";
+		const string query = "SELECT * FROM doc WHERE doc.name = @queue";
 		QueryDefinition sql = new QueryDefinition(query)
-			.WithParameter("@type", (int)DocumentTypes.Queue)
 			.WithParameter("@queue", queue);
 
 		PartitionKey partitionKey = new((int)DocumentTypes.Queue);

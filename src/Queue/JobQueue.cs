@@ -36,11 +36,10 @@ public class JobQueue : IPersistentJobQueue
 		lock (syncLock)
 		{
 			IEnumerable<string> queueParams = Enumerable.Range(0, queues.Length).Select((_, i) => $"@queue_{i}");
-			string query = $"SELECT TOP 1 * FROM doc WHERE doc.type = @type AND doc.name IN ({string.Join(", ", queueParams)}) " +
+			string query = $"SELECT TOP 1 * FROM doc WHERE doc.name IN ({string.Join(", ", queueParams)}) " +
 			               "AND (NOT IS_DEFINED(doc.fetched_at) OR doc.fetched_at < @timeout) ORDER BY doc.name ASC, doc.created_on ASC";
 
-			QueryDefinition sql = new QueryDefinition(query)
-				.WithParameter("@type", (int)DocumentTypes.Queue);
+			QueryDefinition sql = new(query);
 
 			for (int index = 0; index < queues.Length; index++)
 			{

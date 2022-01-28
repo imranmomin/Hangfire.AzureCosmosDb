@@ -45,8 +45,7 @@ public class CountersAggregator : IServerComponent
 
 				logger.Trace("Aggregating records in [Counter] table.");
 
-				QueryDefinition sql = new QueryDefinition("SELECT * FROM doc WHERE doc.type = @type AND doc.counterType = @counterType")
-					.WithParameter("@type", (int)DocumentTypes.Counter)
+				QueryDefinition sql = new QueryDefinition("SELECT * FROM doc WHERE AND doc.counterType = @counterType")
 					.WithParameter("@counterType", (int)CounterTypes.Raw);
 
 				QueryRequestOptions queryRequestOptions = new()
@@ -120,7 +119,7 @@ public class CountersAggregator : IServerComponent
 
 					// now - remove the raw counters
 					string ids = string.Join(",", data.Counters.Select(c => $"'{c.Id}'").ToArray());
-					string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Counter} AND doc.counterType = {(int)CounterTypes.Raw} AND doc.id IN ({ids})";
+					string query = $"SELECT * FROM doc WHERE doc.counterType = {(int)CounterTypes.Raw} AND doc.id IN ({ids})";
 					int deleted = storage.Container.ExecuteDeleteDocuments(query, partitionKey);
 					logger.Trace($"Total [{deleted}] records from the ['Counter:{key}'] were aggregated.");
 				}

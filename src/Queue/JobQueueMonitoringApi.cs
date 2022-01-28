@@ -29,8 +29,7 @@ public class JobQueueMonitoringApi : IPersistentJobQueueMonitoringApi
 			// if cached and not expired return the cached item
 			if (queuesCache.Count != 0 && cacheUpdated.Add(queuesCacheTimeout) >= DateTime.UtcNow) return queuesCache.ToList();
 
-			QueryDefinition sql = new QueryDefinition("SELECT DISTINCT VALUE doc['name'] FROM doc WHERE doc.type = @type")
-				.WithParameter("@type", (int)DocumentTypes.Queue);
+			QueryDefinition sql = new("SELECT DISTINCT VALUE doc['name'] FROM doc");
 
 			List<string> result = storage.Container.GetItemQueryIterator<string>(sql, requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
 				.ToQueryResult()
@@ -46,9 +45,8 @@ public class JobQueueMonitoringApi : IPersistentJobQueueMonitoringApi
 
 	public int GetEnqueuedCount(string queue)
 	{
-		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.name = @name AND NOT IS_DEFINED(doc.fetched_at) ")
-			.WithParameter("@name", queue)
-			.WithParameter("@type", (int)DocumentTypes.Queue);
+		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.name = @name AND NOT IS_DEFINED(doc.fetched_at)")
+			.WithParameter("@name", queue);
 
 		return storage.Container.GetItemQueryIterator<int>(sql, requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
 			.ToQueryResult()
@@ -56,7 +54,7 @@ public class JobQueueMonitoringApi : IPersistentJobQueueMonitoringApi
 	}
 
 	public IEnumerable<string> GetEnqueuedJobIds(string queue, int from, int perPage) => storage.Container.GetItemLinqQueryable<Documents.Queue>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
-		.Where(q => q.DocumentType == DocumentTypes.Queue && q.Name == queue && q.FetchedAt.IsDefined() == false)
+		.Where(q => q.Name == queue && q.FetchedAt.IsDefined() == false)
 		.OrderBy(q => q.CreatedOn)
 		.Skip(from).Take(perPage)
 		.Select(q => q.JobId)
@@ -64,7 +62,7 @@ public class JobQueueMonitoringApi : IPersistentJobQueueMonitoringApi
 		.ToList();
 
 	public IEnumerable<string> GetFetchedJobIds(string queue, int from, int perPage) => storage.Container.GetItemLinqQueryable<Documents.Queue>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
-		.Where(q => q.DocumentType == DocumentTypes.Queue && q.Name == queue && q.FetchedAt.IsDefined())
+		.Where(q => q.Name == queue && q.FetchedAt.IsDefined())
 		.OrderBy(q => q.CreatedOn)
 		.Skip(from).Take(perPage)
 		.Select(q => q.JobId)
@@ -74,7 +72,7 @@ public class JobQueueMonitoringApi : IPersistentJobQueueMonitoringApi
 	public (int? EnqueuedCount, int? FetchedCount) GetEnqueuedAndFetchedCount(string queue)
 	{
 		(int EnqueuedCount, int FetchedCount) result = storage.Container.GetItemLinqQueryable<Documents.Queue>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
-			.Where(q => q.DocumentType == DocumentTypes.Queue && q.Name == queue)
+			.Where(q => q.Name == queue)
 			.Select(q => new { q.Name, EnqueuedCount = q.FetchedAt.IsDefined() ? 0 : 1, FetchedCount = q.FetchedAt.IsDefined() ? 1 : 0 })
 			.ToQueryResult()
 			.GroupBy(q => q.Name)

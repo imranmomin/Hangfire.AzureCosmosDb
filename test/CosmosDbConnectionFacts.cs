@@ -467,7 +467,9 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		Job job = Job.FromExpression(() => SampleMethod("wrong"));
 		Dictionary<string, string> parameters = new()
 		{
-			{ "name", "value" }
+			{ "name", "value" },
+			{ "name1", "value1" },
+			{ "name2", "value2" }
 		};
 		string? id = connection.CreateExpiredJob(job, parameters, DateTime.UtcNow, TimeSpan.Zero);
 

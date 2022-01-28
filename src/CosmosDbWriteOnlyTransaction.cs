@@ -132,14 +132,14 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 		QueueCommand(() =>
 		{
-			string queryJobs = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Job} AND doc.id = '{jobId}'";
+			string queryJobs = $"SELECT * FROM doc WHERE doc.id = '{jobId}'";
 			connection.Storage.Container.ExecuteExpireDocuments(queryJobs, epoch, new PartitionKey((int)DocumentTypes.Job));
 		});
 
 		// we need to also remove the state documents
 		QueueCommand(() =>
 		{
-			string queryStates = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.State} AND doc.job_id = '{jobId}'";
+			string queryStates = $"SELECT * FROM doc WHERE doc.job_id = '{jobId}'";
 			connection.Storage.Container.ExecuteExpireDocuments(queryStates, epoch, new PartitionKey((int)DocumentTypes.State));
 		});
 	}
@@ -226,7 +226,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		{
 			PartitionKey partitionKey = new((int)DocumentTypes.Set);
 			string[] sets = connection.Storage.Container.GetItemLinqQueryable<List>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
-				.Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
+				.Where(s => s.Key == key)
 				.Select(s => new { s.Id, s.Value })
 				.ToQueryResult()
 				.Where(s => s.Value == value) // value may contain json string.. which interfere with query 
@@ -236,7 +236,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 			if (sets.Length == 0) return;
 
 			string ids = string.Join(",", sets.Select(s => $"'{s}'"));
-			string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Set} AND doc.id IN ({ids})";
+			string query = $"SELECT doc._self FROM doc WHERE doc.id IN ({ids})";
 			connection.Storage.Container.ExecuteDeleteDocuments(query, partitionKey);
 		});
 	}
@@ -252,7 +252,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		{
 			PartitionKey partitionKey = new((int)DocumentTypes.Set);
 			List<Set> sets = connection.Storage.Container.GetItemLinqQueryable<Set>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
-				.Where(s => s.DocumentType == DocumentTypes.Set && s.Key == key)
+				.Where(s => s.Key == key)
 				.ToQueryResult()
 				.Where(s => s.Value == value) // value may contain json string.. which interfere with query 
 				.ToList();
@@ -282,7 +282,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 		QueueCommand(() =>
 		{
-			string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Set} AND doc.key = '{key}'";
+			string query = $"SELECT * FROM doc WHERE doc.key = '{key}'";
 			connection.Storage.Container.ExecutePersistDocuments(query, new PartitionKey((int)DocumentTypes.Set));
 		});
 	}
@@ -293,7 +293,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 		QueueCommand(() =>
 		{
-			string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Set} AND doc.key = '{key}'";
+			string query = $"SELECT * FROM doc WHERE doc.key = '{key}'";
 			int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
 			connection.Storage.Container.ExecuteExpireDocuments(query, epoch, new PartitionKey((int)DocumentTypes.Set));
 		});
@@ -325,7 +325,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 		QueueCommand(() =>
 		{
-			string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Set} AND doc.key = '{key}'";
+			string query = $"SELECT doc._self FROM doc WHERE doc.key = '{key}'";
 			connection.Storage.Container.ExecuteDeleteDocuments(query, new PartitionKey((int)DocumentTypes.Set));
 		});
 	}
@@ -340,7 +340,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 		QueueCommand(() =>
 		{
-			string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.Hash} AND doc.key = '{key}'";
+			string query = $"SELECT doc._self FROM doc WHERE doc.key = '{key}'";
 			connection.Storage.Container.ExecuteDeleteDocuments(query, new PartitionKey((int)DocumentTypes.Hash));
 		});
 	}
@@ -356,7 +356,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 			PartitionKey partitionKey = new((int)DocumentTypes.Hash);
 			List<Hash> hashes = connection.Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
-				.Where(h => h.DocumentType == DocumentTypes.Hash && h.Key == key)
+				.Where(h => h.Key == key)
 				.ToQueryResult()
 				.ToList();
 
@@ -381,7 +381,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 						hash.Value = source.Value;
 						data.Items.Add(hash);
 
-						string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Hash} AND doc.key = '{hash.Key}' AND doc.field = '{hash.Field}' AND doc.id != '{hash.Id}'";
+						string query = $"SELECT * FROM doc WHERE doc.key = '{hash.Key}' AND doc.field = '{hash.Field}' AND doc.id != '{hash.Id}'";
 						connection.Storage.Container.ExecuteDeleteDocuments(query, partitionKey);
 						break;
 					}
@@ -411,7 +411,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 		QueueCommand(() =>
 		{
-			string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Hash} AND doc.key = '{key}'";
+			string query = $"SELECT * FROM doc WHERE doc.key = '{key}'";
 			int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
 			connection.Storage.Container.ExecuteExpireDocuments(query, epoch, new PartitionKey((int)DocumentTypes.Hash));
 		});
@@ -423,7 +423,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 		QueueCommand(() =>
 		{
-			string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Hash} AND doc.key = '{key}'";
+			string query = $"SELECT * FROM doc WHERE doc.key = '{key}'";
 			connection.Storage.Container.ExecutePersistDocuments(query, new PartitionKey((int)DocumentTypes.Hash));
 		});
 	}
@@ -460,7 +460,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		{
 			PartitionKey partitionKey = new((int)DocumentTypes.List);
 			string[] lists = connection.Storage.Container.GetItemLinqQueryable<List>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
-				.Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
+				.Where(l => l.Key == key)
 				.Select(l => new { l.Id, l.Value })
 				.ToQueryResult()
 				.Where(l => l.Value == value)
@@ -470,7 +470,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 			if (lists.Length == 0) return;
 
 			string ids = string.Join(",", lists.Select(l => $"'{l}'"));
-			string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.List} AND doc.id IN ({ids})";
+			string query = $"SELECT doc._self FROM doc WHERE doc.id IN ({ids})";
 			connection.Storage.Container.ExecuteDeleteDocuments(query, partitionKey);
 		});
 	}
@@ -483,7 +483,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		{
 			PartitionKey partitionKey = new((int)DocumentTypes.List);
 			string[] lists = connection.Storage.Container.GetItemLinqQueryable<List>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
-				.Where(l => l.DocumentType == DocumentTypes.List && l.Key == key)
+				.Where(l => l.Key == key)
 				.OrderByDescending(l => l.CreatedOn)
 				.Select(l => l.Id)
 				.ToQueryResult()
@@ -495,7 +495,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 			if (lists.Length == 0) return;
 
 			string ids = string.Join(",", lists.Select(l => $"'{l}'"));
-			string query = $"SELECT doc._self FROM doc WHERE doc.type = {(int)DocumentTypes.List} AND doc.id IN ({ids})";
+			string query = $"SELECT doc._self FROM doc WHERE doc.id IN ({ids})";
 			connection.Storage.Container.ExecuteDeleteDocuments(query, partitionKey);
 		});
 	}
@@ -506,7 +506,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 		QueueCommand(() =>
 		{
-			string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.List} AND doc.key = '{key}'";
+			string query = $"SELECT * FROM doc WHERE doc.key = '{key}'";
 			int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
 			connection.Storage.Container.ExecuteExpireDocuments(query, epoch, new PartitionKey((int)DocumentTypes.List));
 		});
@@ -518,7 +518,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 		QueueCommand(() =>
 		{
-			string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.List} AND doc.key = '{key}'";
+			string query = $"SELECT * FROM doc WHERE doc.key = '{key}'";
 			connection.Storage.Container.ExecutePersistDocuments(query, new PartitionKey((int)DocumentTypes.List));
 		});
 	}

@@ -59,7 +59,6 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 	}
 
 	public IList<ServerDto> Servers() => storage.Container.GetItemLinqQueryable<Documents.Server>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Server) })
-		.Where(s => s.DocumentType == DocumentTypes.Server)
 		.OrderByDescending(s => s.CreatedOn)
 		.ToQueryResult()
 		.Select(server => new ServerDto
@@ -67,7 +66,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 			Name = server.Id,
 			Heartbeat = server.LastHeartbeat.ToLocalTime(),
 			Queues = server.Queues,
-			StartedAt = server.CreatedOn,
+			StartedAt = server.CreatedOn.ToLocalTime(),
 			WorkersCount = server.Workers
 		})
 		.ToList();
@@ -87,7 +86,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 		invocationData.Arguments = job.Arguments;
 
 		List<StateHistoryDto> states = storage.Container.GetItemLinqQueryable<State>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.State) })
-			.Where(s => s.DocumentType == DocumentTypes.State && s.JobId == jobId)
+			.Where(s => s.JobId == jobId)
 			.OrderByDescending(s => s.CreatedOn)
 			.ToQueryResult()
 			.Select(s => new StateHistoryDto
@@ -117,10 +116,8 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 			if (cacheStatisticsDto != null && cacheUpdated.Add(cacheTimeout) >= DateTime.UtcNow) return cacheStatisticsDto;
 
 			// get counts of jobs on state
-			QueryDefinition sql = new("SELECT doc.state_name AS state, COUNT(1) AS stateCount FROM doc WHERE doc.type = @type AND IS_DEFINED(doc.state_name) " +
+			QueryDefinition sql = new("SELECT doc.state_name AS state, COUNT(1) AS stateCount FROM doc WHERE IS_DEFINED(doc.state_name) " +
 			                          $"AND doc.state_name IN ({string.Join(",", stateNames)}) GROUP BY doc.state_name");
-
-			sql.WithParameter("@type", (int)DocumentTypes.Job);
 
 			List<(string state, int stateCount)> states = storage.Container.GetItemQueryIterator<JObject>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Job) })
 				.ToQueryResult()
@@ -130,8 +127,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 			Dictionary<string, long> results = states.ToDictionary<(string state, int stateCount), string, long>(state => state.state.ToLower(), state => state.stateCount);
 
 			// get counts of servers
-			sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type")
-				.WithParameter("@type", (int)DocumentTypes.Server);
+			sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc");
 
 			long servers = storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Server) })
 				.ToQueryResult()
@@ -141,8 +137,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 
 			// get sum of stats:succeeded / stats:deleted counters
 			string[] keys = { "'stats:succeeded'", "'stats:deleted'" };
-			sql = new QueryDefinition($"SELECT doc.key, SUM(doc['value']) AS total FROM doc WHERE doc.type = @type AND doc.key IN ({string.Join(",", keys)}) GROUP BY doc.key")
-				.WithParameter("@type", (int)DocumentTypes.Counter);
+			sql = new QueryDefinition($"SELECT doc.key, SUM(doc['value']) AS total FROM doc WHERE doc.key IN ({string.Join(",", keys)}) GROUP BY doc.key");
 
 			List<(string key, int total)> counters = storage.Container.GetItemQueryIterator<JObject>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Counter) })
 				.ToQueryResult()
@@ -154,9 +149,8 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 				results.Add(key, total);
 			}
 
-			sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type AND doc.key = @key")
-				.WithParameter("@key", "recurring-jobs")
-				.WithParameter("@type", (int)DocumentTypes.Set);
+			sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.key = @key")
+				.WithParameter("@key", "recurring-jobs");
 
 			long jobs = storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Set) })
 				.ToQueryResult()
@@ -193,7 +187,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 
 	public JobList<EnqueuedJobDto> EnqueuedJobs(string queue, int from, int perPage)
 	{
-		string queryText = $"SELECT * FROM doc WHERE doc.type = @type AND doc.name = @name AND NOT IS_DEFINED(doc.fetched_at) ORDER BY doc.created_on OFFSET {from} LIMIT {perPage}";
+		string queryText = $"SELECT * FROM doc WHERE doc.name = @name AND NOT IS_DEFINED(doc.fetched_at) ORDER BY doc.created_on OFFSET {from} LIMIT {perPage}";
 		return GetJobsOnQueue(queryText, queue, (state, job, _) => new EnqueuedJobDto
 		{
 			Job = job,
@@ -205,7 +199,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 
 	public JobList<FetchedJobDto> FetchedJobs(string queue, int from, int perPage)
 	{
-		string queryText = $"SELECT * FROM doc WHERE doc.type = @type AND doc.name = @name AND IS_DEFINED(doc.fetched_at) ORDER BY doc.created_on OFFSET {from} LIMIT {perPage}";
+		string queryText = $"SELECT * FROM doc WHERE doc.name = @name AND IS_DEFINED(doc.fetched_at) ORDER BY doc.created_on OFFSET {from} LIMIT {perPage}";
 		return GetJobsOnQueue(queryText, queue, (state, job, fetchedAt) => new FetchedJobDto
 		{
 			Job = job,
@@ -264,7 +258,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 		List<KeyValuePair<string, T>> jobs = new();
 
 		List<Documents.Job> filterJobs = storage.Container.GetItemLinqQueryable<Documents.Job>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Job) })
-			.Where(j => j.DocumentType == DocumentTypes.Job && j.StateName == stateName)
+			.Where(j => j.StateName == stateName)
 			.OrderByDescending(j => j.CreatedOn)
 			.Skip(from).Take(count)
 			.ToQueryResult()
@@ -295,7 +289,6 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 		List<KeyValuePair<string, T>> jobs = new();
 
 		QueryDefinition sql = new QueryDefinition(queryText)
-			.WithParameter("@type", (int)DocumentTypes.Queue)
 			.WithParameter("@name", queue);
 
 		List<Documents.Queue> queues = storage.Container.GetItemQueryIterator<Documents.Queue>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Queue) })
@@ -365,8 +358,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 
 	private long GetNumberOfJobsByStateName(string state)
 	{
-		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.type = @type AND IS_DEFINED(doc.state_name) AND doc.state_name = @state")
-			.WithParameter("@type", (int)DocumentTypes.Job)
+		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE IS_DEFINED(doc.state_name) AND doc.state_name = @state")
 			.WithParameter("@state", state);
 
 		return storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Job) })
@@ -415,8 +407,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 		Dictionary<DateTime, long> result = keys.ToDictionary(k => k.Value, _ => default(long));
 		string[] filter = keys.Keys.Select(x => $"'{x}'").ToArray();
 
-		QueryDefinition sql = new QueryDefinition($"SELECT doc.key, SUM(doc['value']) AS total FROM doc WHERE doc.type = @type AND doc.key IN ({string.Join(",", filter)}) GROUP BY doc.key")
-			.WithParameter("@type", (int)DocumentTypes.Counter);
+		QueryDefinition sql = new($"SELECT doc.key, SUM(doc['value']) AS total FROM doc WHERE doc.key IN ({string.Join(",", filter)}) GROUP BY doc.key");
 
 		List<(string key, int total)> data = storage.Container.GetItemQueryIterator<JObject>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Counter) })
 			.ToQueryResult()
