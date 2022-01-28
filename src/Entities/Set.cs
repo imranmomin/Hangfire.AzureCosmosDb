@@ -14,7 +14,7 @@ public class Set : DocumentBase
 	public string Value { get; set; } = null!;
 
 	[JsonProperty("score")]
-	public double? Score { get; set; }
+	public double Score { get; set; }
 
 	[JsonProperty("created_on")]
 	[JsonConverter(typeof(UnixDateTimeConverter))]

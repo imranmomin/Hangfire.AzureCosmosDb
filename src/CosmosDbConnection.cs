@@ -222,14 +222,16 @@ public sealed class CosmosDbConnection : JobStorageConnection
 	{
 		if (key == null) throw new ArgumentNullException(nameof(key));
 
-		endingAt += 1 - startingFrom;
-
-		return Storage.Container.GetItemLinqQueryable<Set>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Set) })
+		List<Set> result = Storage.Container.GetItemLinqQueryable<Set>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Set) })
 			.Where(s => s.Key == key)
-			.OrderBy(s => s.Score)
-			.Skip(startingFrom).Take(endingAt)
-			.Select(s => s.Value)
 			.ToQueryResult()
+			.ToList();
+
+		return result
+			.OrderBy(x => x.Score)
+			.Select((x, i) => new { x.Value, row = i + 1 })
+			.Where(x => x.row >= startingFrom + 1 && x.row <= endingAt + 1)
+			.Select(s => s.Value)
 			.ToList();
 	}
 
@@ -357,15 +359,17 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 	#region Hash
 
-	public override Dictionary<string, string?> GetAllEntriesFromHash(string key)
+	public override Dictionary<string, string?>? GetAllEntriesFromHash(string key)
 	{
 		if (key == null) throw new ArgumentNullException(nameof(key));
 
-		return Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Hash) })
+		Dictionary<string, string?> result = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Hash) })
 			.Where(h => h.Key == key)
 			.Select(h => new { h.Field, h.Value })
 			.ToQueryResult()
 			.ToDictionary(h => h.Field, h => h.Value);
+
+		return result.Count > 0 ? result : null;
 	}
 
 	public override void SetRangeInHash(string key, IEnumerable<KeyValuePair<string, string>> keyValuePairs)

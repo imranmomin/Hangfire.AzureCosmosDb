@@ -709,7 +709,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		IStorageConnection connection = Storage.GetConnection();
 
 		// act
-		var exception = Assert.Throws<ArgumentNullException>(() => connection.AnnounceServer(null, new ServerContext()));
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => connection.AnnounceServer(null, new ServerContext()));
 
 		//assert
 		Assert.Equal("serverId", exception.ParamName);
@@ -722,7 +722,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		IStorageConnection connection = Storage.GetConnection();
 
 		// act
-		var exception = Assert.Throws<ArgumentNullException>(() => connection.AnnounceServer("server", null));
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => connection.AnnounceServer("server", null));
 
 		//assert
 		Assert.Equal("context", exception.ParamName);
@@ -800,8 +800,11 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 
 		// act
 		connection.RemoveServer("server1");
-
-		Documents.Server server = Storage.Container.GetItemLinqQueryable<Documents.Server>()
+		QueryRequestOptions queryRequestOptions = new()
+		{
+			PartitionKey = new PartitionKey((int)DocumentTypes.Server)
+		};
+		Documents.Server server = Storage.Container.GetItemLinqQueryable<Documents.Server>(requestOptions: queryRequestOptions)
 			.ToQueryResult()
 			.Single();
 
@@ -831,18 +834,8 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		// arrange
 		List<Documents.Server> servers = new()
 		{
-			new Documents.Server
-			{
-				Id = "server1",
-				CreatedOn = DateTime.UtcNow,
-				LastHeartbeat = new DateTime(2021, 1, 1)
-			},
-			new Documents.Server
-			{
-				Id = "server2",
-				CreatedOn = DateTime.UtcNow,
-				LastHeartbeat = new DateTime(2021, 1, 1)
-			}
+			new Documents.Server { Id = "server1", CreatedOn = DateTime.UtcNow, LastHeartbeat = new DateTime(2021, 1, 1) },
+			new Documents.Server { Id = "server2", CreatedOn = DateTime.UtcNow, LastHeartbeat = new DateTime(2021, 1, 1) }
 		};
 		Data<Documents.Server> data = new(servers);
 		Storage.Container.ExecuteUpsertDocuments(data, new PartitionKey((int)DocumentTypes.Server));
@@ -851,7 +844,11 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		IStorageConnection connection = Storage.GetConnection();
 		connection.Heartbeat("server1");
 
-		Dictionary<string, DateTime> result = Storage.Container.GetItemLinqQueryable<Documents.Server>()
+		QueryRequestOptions queryRequestOptions = new()
+		{
+			PartitionKey = new PartitionKey((int)DocumentTypes.Server)
+		};
+		Dictionary<string, DateTime> result = Storage.Container.GetItemLinqQueryable<Documents.Server>(requestOptions: queryRequestOptions)
 			.ToQueryResult()
 			.ToDictionary(k => k.Id, v => v.LastHeartbeat.ToLocalTime());
 
@@ -881,18 +878,8 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		// arrange
 		List<Documents.Server> servers = new()
 		{
-			new Documents.Server
-			{
-				Id = "server1",
-				CreatedOn = DateTime.UtcNow,
-				LastHeartbeat = DateTime.UtcNow.AddDays(-1)
-			},
-			new Documents.Server
-			{
-				Id = "server2",
-				CreatedOn = DateTime.UtcNow,
-				LastHeartbeat = DateTime.UtcNow.AddHours(-12)
-			}
+			new Documents.Server { Id = "server1", CreatedOn = DateTime.UtcNow, LastHeartbeat = DateTime.UtcNow.AddDays(-1) },
+			new Documents.Server { Id = "server2", CreatedOn = DateTime.UtcNow, LastHeartbeat = DateTime.UtcNow.AddHours(-12) }
 		};
 		Data<Documents.Server> data = new(servers);
 		Storage.Container.ExecuteUpsertDocuments(data, new PartitionKey((int)DocumentTypes.Server));
@@ -901,11 +888,452 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		IStorageConnection connection = Storage.GetConnection();
 		connection.RemoveTimedOutServers(TimeSpan.FromHours(15));
 
-		Documents.Server result = Storage.Container.GetItemLinqQueryable<Documents.Server>()
+		QueryRequestOptions queryRequestOptions = new()
+		{
+			PartitionKey = new PartitionKey((int)DocumentTypes.Server)
+		};
+		Documents.Server result = Storage.Container.GetItemLinqQueryable<Documents.Server>(requestOptions: queryRequestOptions)
 			.ToQueryResult()
 			.Single();
 
 		Assert.Equal("server2", result.Id);
+	}
+
+	[Fact]
+	public void GetAllItemsFromSet_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		IStorageConnection connection = Storage.GetConnection();
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => connection.GetAllItemsFromSet(null));
+
+		//assert
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void GetAllItemsFromSet_ReturnsEmptyCollection_WhenKeyDoesNotExist()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		IStorageConnection connection = Storage.GetConnection();
+
+		// act
+		HashSet<string> result = connection.GetAllItemsFromSet("some-set");
+
+		//assert
+		Assert.NotNull(result);
+		Assert.Empty(result);
+	}
+
+	[Fact]
+	public void GetAllItemsFromSet_ReturnsAllItems()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		IStorageConnection connection = Storage.GetConnection();
+		IWriteOnlyTransaction transaction = connection.CreateWriteTransaction();
+		transaction.AddToSet("key", "1.0", 1.0);
+		transaction.AddToSet("key", "-1.0", -1.0);
+		transaction.AddToSet("key", "-5.0", -5.0);
+		transaction.AddToSet("another-key", "-2.0", -2.0);
+		transaction.Commit();
+
+		// act
+		HashSet<string> result = connection.GetAllItemsFromSet("key");
+
+		//assert
+		Assert.Equal(3, result.Count);
+		Assert.Contains("1.0", result);
+		Assert.Contains("-1.0", result);
+		Assert.Contains("-5.0", result);
+	}
+
+	[Fact]
+	public void SetRangeInHash_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		IStorageConnection connection = Storage.GetConnection();
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => connection.SetRangeInHash(null, new Dictionary<string, string>()));
+
+		//assert
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void SetRangeInHash_ThrowsAnException_WhenKeyValuePairsArgumentIsNull()
+	{
+		// arrange
+		IStorageConnection connection = Storage.GetConnection();
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => connection.SetRangeInHash("some-hash", null));
+
+		//assert
+		Assert.Equal("keyValuePairs", exception.ParamName);
+	}
+
+	[Fact]
+	public void SetRangeInHash_MergesAllRecords()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		IStorageConnection connection = Storage.GetConnection();
+		connection.SetRangeInHash("some-hash", new Dictionary<string, string>
+		{
+			{ "Key1", "Value1" },
+			{ "Key2", "Value2" }
+		});
+
+		// act
+		QueryRequestOptions queryRequestOptions = new()
+		{
+			PartitionKey = new PartitionKey((int)DocumentTypes.Hash)
+		};
+		Dictionary<string, string?> result = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: queryRequestOptions)
+			.ToQueryResult()
+			.ToDictionary(x => x.Field, x => x.Value);
+
+		//assert
+		Assert.Equal(2, result.Count);
+		Assert.Equal("Value1", result["Key1"]);
+		Assert.Equal("Value2", result["Key2"]);
+	}
+
+	[Fact]
+	public void SetRangeInHash_CanCreateFieldsWithNullValues()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		IStorageConnection connection = Storage.GetConnection();
+
+		// act
+		connection.SetRangeInHash("some-hash", new Dictionary<string, string?>
+		{
+			{ "Key1", null },
+			{ "Key2", "Value2" }
+		});
+
+		QueryRequestOptions queryRequestOptions = new()
+		{
+			PartitionKey = new PartitionKey((int)DocumentTypes.Hash)
+		};
+		Dictionary<string, string?> result = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: queryRequestOptions)
+			.ToQueryResult()
+			.ToDictionary(x => x.Field, x => x.Value);
+
+		//assert
+		Assert.Equal(2, result.Count);
+		Assert.Null(result["Key1"]);
+		Assert.Equal("Value2", result["Key2"]);
+	}
+
+	[Fact]
+	public void SetRangeInHash_UpdatesExistingValue()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<Hash> hashes = new()
+		{
+			new Hash { Key = "some-hash", Field = "key1", Value = "value1" },
+			new Hash { Key = "some-hash", Field = "key2", Value = "value2" },
+			new Hash { Key = "some-hash", Field = "key3", Value = "value3" },
+			new Hash { Key = "some-other-hash", Field = "key1", Value = "value1" }
+		};
+		Data<Hash> data = new(hashes);
+		Storage.Container.ExecuteUpsertDocuments(data, new PartitionKey((int)DocumentTypes.Hash));
+
+		// act
+		IStorageConnection connection = Storage.GetConnection();
+		connection.SetRangeInHash("some-hash", new Dictionary<string, string?>
+		{
+			{ "key1", "VALUE-1" }
+		});
+
+		QueryRequestOptions queryRequestOptions = new()
+		{
+			PartitionKey = new PartitionKey((int)DocumentTypes.Hash)
+		};
+		Dictionary<string, string?> result = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: queryRequestOptions)
+			.Where(x => x.Key == "some-hash")
+			.ToQueryResult()
+			.ToDictionary(x => x.Field, x => x.Value);
+
+		Dictionary<string, string?> result2 = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: queryRequestOptions)
+			.Where(x => x.Key == "some-other-hash")
+			.ToQueryResult()
+			.ToDictionary(x => x.Field, x => x.Value);
+
+		//assert
+		Assert.Equal(3, result.Count);
+		Assert.Equal("VALUE-1", result["key1"]);
+		Assert.Equal("value2", result["key2"]);
+		Assert.Equal("value3", result["key3"]);
+
+		Assert.Single(result2);
+		Assert.Equal("value1", result2["key1"]);
+	}
+
+	[Fact]
+	public void SetRangeInHash_UpdatesExistingValueAndRemoveDuplicate_WhenAlreadyHasMultipleFieldForAKey()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<Hash> hashes = new()
+		{
+			new Hash { Key = "some-hash", Field = "key1", Value = "value1" },
+			new Hash { Key = "some-hash", Field = "key1", Value = "value2" },
+			new Hash { Key = "some-hash", Field = "key3", Value = "value3" },
+			new Hash { Key = "some-other-hash", Field = "key1", Value = "value1" }
+		};
+		Data<Hash> data = new(hashes);
+		Storage.Container.ExecuteUpsertDocuments(data, new PartitionKey((int)DocumentTypes.Hash));
+
+		// act
+		IStorageConnection connection = Storage.GetConnection();
+		connection.SetRangeInHash("some-hash", new Dictionary<string, string?>
+		{
+			{ "key1", "VALUE-1" }
+		});
+
+		QueryRequestOptions queryRequestOptions = new()
+		{
+			PartitionKey = new PartitionKey((int)DocumentTypes.Hash)
+		};
+		Dictionary<string, string?> result = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: queryRequestOptions)
+			.Where(x => x.Key == "some-hash")
+			.ToQueryResult()
+			.ToDictionary(x => x.Field, x => x.Value);
+
+		Dictionary<string, string?> result2 = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: queryRequestOptions)
+			.Where(x => x.Key == "some-other-hash")
+			.ToQueryResult()
+			.ToDictionary(x => x.Field, x => x.Value);
+
+		//assert
+		Assert.Equal(2, result.Count);
+		Assert.Equal("VALUE-1", result["key1"]);
+		Assert.Equal("value3", result["key3"]);
+
+		Assert.Single(result2);
+		Assert.Equal("value1", result2["key1"]);
+	}
+
+	[Fact]
+	public void GetAllEntriesFromHash_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		IStorageConnection connection = Storage.GetConnection();
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => connection.GetAllEntriesFromHash(null));
+
+		//assert
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void GetAllEntriesFromHash_ReturnsNull_IfHashDoesNotExist()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		IStorageConnection connection = Storage.GetConnection();
+
+		// act
+		Dictionary<string, string> result = connection.GetAllEntriesFromHash("some-hash");
+
+		// assert
+		Assert.Null(result);
+	}
+
+	[Fact]
+	public void GetAllEntriesFromHash_ReturnsAllKeysAndTheirValues()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<Hash> hashes = new()
+		{
+			new Hash { Key = "some-hash", Field = "key1", Value = "value1" },
+			new Hash { Key = "some-hash", Field = "key2", Value = "value2" },
+			new Hash { Key = "some-hash", Field = "key3", Value = "value3" },
+			new Hash { Key = "some-other-hash", Field = "key1", Value = "value1" }
+		};
+		Data<Hash> data = new(hashes);
+		Storage.Container.ExecuteUpsertDocuments(data, new PartitionKey((int)DocumentTypes.Hash));
+
+		// act
+		IStorageConnection connection = Storage.GetConnection();
+		Dictionary<string, string> result = connection.GetAllEntriesFromHash("some-hash");
+
+		// assert
+		Assert.NotNull(result);
+		Assert.Equal(3, result.Count);
+		Assert.Equal("value1", result["key1"]);
+		Assert.Equal("value2", result["key2"]);
+		Assert.Equal("value3", result["key3"]);
+	}
+
+	[Fact]
+	public void GetSetCount_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => connection.GetSetCount(null));
+
+		// assert
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void GetSetCount_ReturnsZero_WhenSetDoesNotExist()
+	{
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act
+		long result = connection.GetSetCount("my-set");
+
+		// assert
+		Assert.Equal(0, result);
+	}
+
+	[Fact]
+	public void GetSetCount_ReturnsNumberOfElements_InASet()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<Set> sets = new()
+		{
+			new Set { Key = "set-1", Value = "value1", CreatedOn = DateTime.UtcNow },
+			new Set { Key = "set-2", Value = "value2", CreatedOn = DateTime.UtcNow },
+			new Set { Key = "set-3", Value = "value3", CreatedOn = DateTime.UtcNow },
+			new Set { Key = "set-1", Value = "value1", CreatedOn = DateTime.UtcNow }
+		};
+		Data<Set> data = new(sets);
+		Storage.Container.ExecuteUpsertDocuments(data, new PartitionKey((int)DocumentTypes.Set));
+
+		// act
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+		long result = connection.GetSetCount("set-1");
+
+		// assert
+		Assert.Equal(2, result);
+	}
+
+	[Fact]
+	public void GetRangeFromSet_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => connection.GetRangeFromSet(null, 0, 1));
+
+		// assert
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void GetRangeFromSet_ReturnsPagedElements()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<Set> sets = new()
+		{
+			new Set { Key = "set-1", Value = "1", CreatedOn = DateTime.UtcNow },
+			new Set { Key = "set-1", Value = "2", CreatedOn = DateTime.UtcNow },
+			new Set { Key = "set-1", Value = "3", CreatedOn = DateTime.UtcNow },
+			new Set { Key = "set-1", Value = "4", CreatedOn = DateTime.UtcNow },
+			new Set { Key = "set-2", Value = "4", CreatedOn = DateTime.UtcNow },
+			new Set { Key = "set-1", Value = "5", CreatedOn = DateTime.UtcNow }
+		};
+		Data<Set> data = new(sets);
+		Storage.Container.ExecuteUpsertDocuments(data, new PartitionKey((int)DocumentTypes.Set));
+
+		// act
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+		List<string> result = connection.GetRangeFromSet("set-1", 2, 3);
+
+		// assert
+		Assert.Equal(new[] { "3", "4" }, result);
+	}
+
+	[Fact]
+	public void GetCounter_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => connection.GetCounter(null));
+
+		// assert
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void GetCounter_ReturnsZero_WhenKeyDoesNotExist()
+	{
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act
+		long result = connection.GetCounter("my-counter");
+
+		// assert
+		Assert.Equal(0, result);
+	}
+
+	[Fact]
+	public void GetCounter_ReturnsSumOfValues_InRawAndAggregate()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<Counter> counters = new()
+		{
+			new Counter { Key = "counter-1", Value = 1, Type = CounterTypes.Raw },
+			new Counter { Key = "counter-2", Value = 1, Type = CounterTypes.Raw },
+			new Counter { Key = "counter-1", Value = 1, Type = CounterTypes.Aggregate },
+			new Counter { Key = "counter-1", Value = 1, Type = CounterTypes.Aggregate },
+			new Counter { Key = "counter-2", Value = 1, Type = CounterTypes.Raw },
+			new Counter { Key = "counter-1", Value = 1, Type = CounterTypes.Raw },
+		};
+		Data<Counter> data = new(counters);
+		Storage.Container.ExecuteUpsertDocuments(data, new PartitionKey((int)DocumentTypes.Counter));
+
+		// act
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+		long result = connection.GetCounter("counter-1");
+
+		// assert
+		Assert.Equal(4, result);
 	}
 
 #pragma warning disable xUnit1013
