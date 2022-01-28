@@ -27,7 +27,11 @@ public sealed class CosmosDbConnection : JobStorageConnection
 	public CosmosDbStorage Storage { get; }
 	public PersistentJobQueueProviderCollection QueueProviders { get; }
 
-	public override IDisposable AcquireDistributedLock(string resource, TimeSpan timeout) => new CosmosDbDistributedLock(resource, timeout, Storage);
+	public override IDisposable AcquireDistributedLock(string resource, TimeSpan timeout)
+	{
+		if (string.IsNullOrWhiteSpace(resource)) throw new ArgumentNullException(nameof(resource));
+		return new CosmosDbDistributedLock(resource, timeout, Storage);
+	}
 
 	public override IWriteOnlyTransaction CreateWriteTransaction() => new CosmosDbWriteOnlyTransaction(this);
 
@@ -154,8 +158,8 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 	public override string? GetJobParameter(string id, string name)
 	{
-		if (id == null) throw new ArgumentNullException(nameof(id));
-		if (name == null) throw new ArgumentNullException(nameof(name));
+		if (string.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
+		if (string.IsNullOrWhiteSpace(name)) throw new ArgumentNullException(nameof(name));
 		if (Guid.TryParse(id, out Guid _) == false) return null;
 
 		try
@@ -176,9 +180,8 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 	public override void SetJobParameter(string id, string name, string value)
 	{
-		if (id == null) throw new ArgumentNullException(nameof(id));
-		if (name == null) throw new ArgumentNullException(nameof(name));
-		if (Guid.TryParse(id, out Guid _) == false) return;
+		if (string.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
+		if (string.IsNullOrWhiteSpace(name)) throw new ArgumentNullException(nameof(name));
 
 		Task<ItemResponse<Documents.Job>> readTask = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(id, PartitionKeys.Job);
 		readTask.Wait();
@@ -206,7 +209,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 	public override TimeSpan GetSetTtl(string key)
 	{
-		if (key == null) throw new ArgumentNullException(nameof(key));
+		if (string.IsNullOrWhiteSpace(key)) throw new ArgumentNullException(nameof(key));
 
 		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE MIN(doc['expire_on']) FROM doc WHERE doc.key = @key")
 			.WithParameter("@key", key);
@@ -220,7 +223,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 	public override List<string> GetRangeFromSet(string key, int startingFrom, int endingAt)
 	{
-		if (key == null) throw new ArgumentNullException(nameof(key));
+		if (string.IsNullOrWhiteSpace(key)) throw new ArgumentNullException(nameof(key));
 
 		List<Set> result = Storage.Container.GetItemLinqQueryable<Set>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Set })
 			.Where(s => s.Key == key)
@@ -237,7 +240,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 	public override long GetCounter(string key)
 	{
-		if (key == null) throw new ArgumentNullException(nameof(key));
+		if (string.IsNullOrWhiteSpace(key)) throw new ArgumentNullException(nameof(key));
 
 		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE SUM(doc['value']) FROM doc WHERE doc.key = @key")
 			.WithParameter("@key", key);
@@ -249,7 +252,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 	public override long GetSetCount(string key)
 	{
-		if (key == null) throw new ArgumentNullException(nameof(key));
+		if (string.IsNullOrWhiteSpace(key)) throw new ArgumentNullException(nameof(key));
 
 		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.key = @key")
 			.WithParameter("@key", key);
@@ -261,7 +264,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 	public override HashSet<string> GetAllItemsFromSet(string key)
 	{
-		if (key == null) throw new ArgumentNullException(nameof(key));
+		if (string.IsNullOrWhiteSpace(key)) throw new ArgumentNullException(nameof(key));
 
 		IEnumerable<string> sets = Storage.Container.GetItemLinqQueryable<Set>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Set })
 			.Where(s => s.Key == key)
@@ -275,7 +278,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 	public override List<string> GetFirstByLowestScoreFromSet(string key, double fromScore, double toScore, int count)
 	{
-		if (key == null) throw new ArgumentNullException(nameof(key));
+		if (string.IsNullOrWhiteSpace(key)) throw new ArgumentNullException(nameof(key));
 		if (count <= 0) throw new ArgumentException("The value must be a positive number", nameof(count));
 		if (toScore < fromScore) throw new ArgumentException("The `toScore` value must be higher or equal to the `fromScore` value.", nameof(toScore));
 
@@ -361,7 +364,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 	public override Dictionary<string, string?>? GetAllEntriesFromHash(string key)
 	{
-		if (key == null) throw new ArgumentNullException(nameof(key));
+		if (string.IsNullOrWhiteSpace(key)) throw new ArgumentNullException(nameof(key));
 
 		Dictionary<string, string?> result = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Hash })
 			.Where(h => h.Key == key)
@@ -374,7 +377,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 	public override void SetRangeInHash(string key, IEnumerable<KeyValuePair<string, string>> keyValuePairs)
 	{
-		if (key == null) throw new ArgumentNullException(nameof(key));
+		if (string.IsNullOrWhiteSpace(key)) throw new ArgumentNullException(nameof(key));
 		if (keyValuePairs == null) throw new ArgumentNullException(nameof(keyValuePairs));
 
 		Data<Hash> data = new();
@@ -431,7 +434,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 	public override long GetHashCount(string key)
 	{
-		if (key == null) throw new ArgumentNullException(nameof(key));
+		if (string.IsNullOrWhiteSpace(key)) throw new ArgumentNullException(nameof(key));
 
 		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.key = @key")
 			.WithParameter("@key", key);
@@ -443,8 +446,8 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 	public override string? GetValueFromHash(string key, string name)
 	{
-		if (key == null) throw new ArgumentNullException(nameof(key));
-		if (name == null) throw new ArgumentNullException(nameof(name));
+		if (string.IsNullOrWhiteSpace(key)) throw new ArgumentNullException(nameof(key));
+		if (string.IsNullOrWhiteSpace(name)) throw new ArgumentNullException(nameof(name));
 
 		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE doc['value'] FROM doc WHERE doc.key = @key AND doc.field = @field")
 			.WithParameter("@key", key)
@@ -457,7 +460,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 	public override TimeSpan GetHashTtl(string key)
 	{
-		if (key == null) throw new ArgumentNullException(nameof(key));
+		if (string.IsNullOrWhiteSpace(key)) throw new ArgumentNullException(nameof(key));
 
 		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE MIN(doc['expire_on']) FROM doc WHERE doc.key = @key")
 			.WithParameter("@key", key);
@@ -475,7 +478,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 	public override List<string> GetAllItemsFromList(string key)
 	{
-		if (key == null) throw new ArgumentNullException(nameof(key));
+		if (string.IsNullOrWhiteSpace(key)) throw new ArgumentNullException(nameof(key));
 
 		return Storage.Container.GetItemLinqQueryable<List>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.List })
 			.Where(l => l.Key == key)
@@ -487,23 +490,24 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 	public override List<string> GetRangeFromList(string key, int startingFrom, int endingAt)
 	{
-		if (key == null) throw new ArgumentNullException(nameof(key));
+		if (string.IsNullOrWhiteSpace(key)) throw new ArgumentNullException(nameof(key));
 
-		endingAt += 1 - startingFrom;
-
-		return Storage.Container.GetItemLinqQueryable<List>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.List })
+		List<List> result = Storage.Container.GetItemLinqQueryable<List>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.List })
 			.Where(l => l.Key == key)
 			.ToQueryResult()
-			.GroupBy(l => l.Value)
-			.SelectMany(l => l.OrderBy(x => x.CreatedOn).Select((x, i) => new { x.Value, row = i + 1 }))
-			.Where(l => l.row >= startingFrom && l.row <= endingAt)
-			.Select(l => l.Value)
+			.ToList();
+
+		return result
+			.OrderByDescending(x => x.CreatedOn)
+			.Select((x, i) => new { x.Value, row = i + 1 })
+			.Where(x => x.row >= startingFrom + 1 && x.row <= endingAt + 1)
+			.Select(s => s.Value)
 			.ToList();
 	}
 
 	public override TimeSpan GetListTtl(string key)
 	{
-		if (key == null) throw new ArgumentNullException(nameof(key));
+		if (string.IsNullOrWhiteSpace(key)) throw new ArgumentNullException(nameof(key));
 
 		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE MIN(doc['expire_on']) FROM doc WHERE doc.key = @key")
 			.WithParameter("@key", key);
@@ -517,7 +521,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 	public override long GetListCount(string key)
 	{
-		if (key == null) throw new ArgumentNullException(nameof(key));
+		if (string.IsNullOrWhiteSpace(key)) throw new ArgumentNullException(nameof(key));
 
 		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.key = @key")
 			.WithParameter("@key", key);

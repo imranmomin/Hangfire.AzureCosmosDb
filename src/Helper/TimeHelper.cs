@@ -23,7 +23,7 @@ public static class TimeHelper
 		if (s == null) return null;
 		if (string.IsNullOrWhiteSpace(s)) return null;
 
-		return DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime date)
+		return DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out DateTime date)
 			? date.ToEpoch().ToString(CultureInfo.InvariantCulture)
 			: s;
 	}

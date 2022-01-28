@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Helper;
+using Hangfire.Azure.Queue;
 using Hangfire.Azure.Tests.Fixtures;
 using Hangfire.Server;
 using Hangfire.States;
@@ -813,6 +815,29 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 	}
 
 	[Fact]
+	public void RemoveServer_RemovesAServerRecord_WhenDoesNotGate()
+	{
+		//clean
+		ContainerFixture.Clean();
+
+		// arrange
+		IStorageConnection connection = Storage.GetConnection();
+		connection.RemoveServer("server1");
+
+		// act
+		QueryRequestOptions queryRequestOptions = new()
+		{
+			PartitionKey = PartitionKeys.Server
+		};
+		List<Documents.Server> results = Storage.Container.GetItemLinqQueryable<Documents.Server>(requestOptions: queryRequestOptions)
+			.ToQueryResult()
+			.ToList();
+
+		//assert
+		Assert.Empty(results);
+	}
+
+	[Fact]
 	public void Heartbeat_ThrowsAnException_WhenServerIdIsNull()
 	{
 		// arrange
@@ -854,6 +879,27 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 
 		Assert.NotEqual(2021, result["server1"].Year);
 		Assert.Equal(2021, result["server2"].Year);
+	}
+
+	[Fact]
+	public void Heartbeat_UpdatesLastHeartbeat_OfTheServerWithGivenIdDoesNotExists()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// act
+		IStorageConnection connection = Storage.GetConnection();
+		connection.Heartbeat("server1");
+
+		QueryRequestOptions queryRequestOptions = new()
+		{
+			PartitionKey = PartitionKeys.Server
+		};
+		Dictionary<string, DateTime> result = Storage.Container.GetItemLinqQueryable<Documents.Server>(requestOptions: queryRequestOptions)
+			.ToQueryResult()
+			.ToDictionary(k => k.Id, v => v.LastHeartbeat.ToLocalTime());
+
+		Assert.Empty(result);
 	}
 
 	[Fact]
@@ -1335,6 +1381,514 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		// assert
 		Assert.Equal(4, result);
 	}
+
+	[Fact]
+	public void GetHashCount_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act 
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => connection.GetHashCount(null));
+
+		// assert
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void GetHashCount_ReturnsZero_WhenKeyDoesNotExist()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act 
+		long result = connection.GetHashCount("my-hash");
+
+		// assert
+		Assert.Equal(0, result);
+	}
+
+	[Fact]
+	public void GetHashCount_ReturnsNumber_OfHashFields()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<Hash> hashes = new()
+		{
+			new Hash { Key = "some-hash", Field = "key1", Value = "value1" },
+			new Hash { Key = "some-hash", Field = "key2", Value = "value2" },
+			new Hash { Key = "some-hash", Field = "key3", Value = "value3" },
+			new Hash { Key = "some-other-hash", Field = "key1", Value = "value1" }
+		};
+		Data<Hash> data = new(hashes);
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Hash);
+
+		// Act
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+		long result = connection.GetHashCount("some-hash");
+
+		// Assert
+		Assert.Equal(3, result);
+	}
+
+	[Fact]
+	public void GetHashTtl_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act 
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => connection.GetHashTtl(null));
+
+		// assert
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void GetHashTtl_ReturnsNegativeValue_WhenHashDoesNotExist()
+	{
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act 
+		TimeSpan result = connection.GetHashTtl("my-hash");
+
+		// assert
+		Assert.True(result < TimeSpan.Zero);
+	}
+
+	[Fact]
+	public void GetHashTtl_ReturnsExpirationTimeForHash()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<Hash> hashes = new()
+		{
+			new Hash { Key = "some-hash", Field = "key1", Value = "value1", ExpireOn = DateTime.UtcNow.AddHours(1) },
+			new Hash { Key = "some-other-hash", Field = "key1", Value = "value1" }
+		};
+		Data<Hash> data = new(hashes);
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Hash);
+
+		// Act
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+		TimeSpan result = connection.GetHashTtl("some-hash");
+
+		// Assert
+		Assert.True(TimeSpan.FromMinutes(59) < result);
+		Assert.True(result < TimeSpan.FromMinutes(61));
+	}
+
+	[Fact]
+	public void GetListCount_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act 
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => connection.GetListCount(null));
+
+		// assert
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void GetListCount_ReturnsZero_WhenListDoesNotExist()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act 
+		long result = connection.GetListCount("my-list");
+
+		// assert
+		Assert.Equal(0, result);
+	}
+
+	[Fact]
+	public void GetListCount_ReturnsTheNumberOfListElements()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<List> lists = new()
+		{
+			new List { Key = "list-1", CreatedOn = DateTime.UtcNow },
+			new List { Key = "list-1", CreatedOn = DateTime.UtcNow }
+		};
+		Data<List> data = new(lists);
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.List);
+
+		// Act
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+		long result = connection.GetListCount("list-1");
+
+		// assert
+		Assert.Equal(2, result);
+	}
+
+	[Fact]
+	public void GetListTtl_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act 
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => connection.GetListTtl(null));
+
+		// assert
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void GetListTtl_ReturnsNegativeValue_WhenListDoesNotExist()
+	{
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act 
+		TimeSpan result = connection.GetListTtl("my-list");
+
+		// assert
+		Assert.True(result < TimeSpan.Zero);
+	}
+
+	[Fact]
+	public void GetListTtl_ReturnsExpirationTimeForList()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<List> lists = new()
+		{
+			new List { Key = "list-1", CreatedOn = DateTime.UtcNow, ExpireOn = DateTime.UtcNow.AddHours(1) },
+			new List { Key = "list-1", CreatedOn = DateTime.UtcNow }
+		};
+		Data<List> data = new(lists);
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.List);
+
+		// Act
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+		TimeSpan result = connection.GetListTtl("list-1");
+
+		// Assert
+		Assert.True(TimeSpan.FromMinutes(59) < result);
+		Assert.True(result < TimeSpan.FromMinutes(61));
+	}
+
+	[Fact]
+	public void GetValueFromHash_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act 
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => connection.GetValueFromHash(null, "name"));
+
+		// assert
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void GetValueFromHash_ThrowsAnException_WhenNameIsNull()
+	{
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act 
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => connection.GetValueFromHash("key", null));
+
+		// assert
+		Assert.Equal("name", exception.ParamName);
+	}
+
+	[Fact]
+	public void GetValueFromHash_ReturnsNull_WhenHashDoesNotExist()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act 
+		string? result = connection.GetValueFromHash("my-hash", "name");
+
+		// assert
+		Assert.Null(result);
+	}
+
+	[Fact]
+	public void GetValueFromHash_ReturnsValue_OfAGivenField()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<Hash> hashes = new()
+		{
+			new Hash { Key = "some-hash", Field = "key1", Value = "value1" },
+			new Hash { Key = "some-hash", Field = "key2", Value = "value2" },
+			new Hash { Key = "some-other-hash", Field = "key1", Value = "value1" }
+		};
+		Data<Hash> data = new(hashes);
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Hash);
+
+		// act
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+		string? result = connection.GetValueFromHash("some-hash", "key1");
+
+		// Assert
+		Assert.Equal("value1", result);
+	}
+
+	[Fact]
+	public void GetRangeFromList_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act 
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => connection.GetRangeFromList(null, 0, 1));
+
+		// assert
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void GetRangeFromList_ReturnsAnEmptyList_WhenListDoesNotExist()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act 
+		List<string> result = connection.GetRangeFromList("my-list", 0, 1);
+
+		// assert
+		Assert.Empty(result);
+	}
+
+	[Fact]
+	public void GetRangeFromList_ReturnsAllEntries_WithinGivenBounds()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<List> lists = new()
+		{
+			new List { Key = "list-1", Value = "1", CreatedOn = DateTime.UtcNow.AddSeconds(1) },
+			new List { Key = "list-1", Value = "2", CreatedOn = DateTime.UtcNow.AddSeconds(2) },
+			new List { Key = "list-1", Value = "3", CreatedOn = DateTime.UtcNow.AddSeconds(3) },
+			new List { Key = "list-1", Value = "4", CreatedOn = DateTime.UtcNow.AddSeconds(4) },
+			new List { Key = "list-1", Value = "5", CreatedOn = DateTime.UtcNow.AddSeconds(5) }
+		};
+		Data<List> data = new(lists);
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.List);
+
+		// Act
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+		List<string> result = connection.GetRangeFromList("list-1", 1, 2);
+
+		//assert
+		Assert.Equal(new[] { "4", "3" }, result);
+	}
+
+	[Fact]
+	public void GetAllItemsFromList_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act 
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => connection.GetAllItemsFromList(null));
+
+		// assert
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void GetAllItemsFromList_ReturnsAnEmptyList_WhenListDoesNotExist()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act 
+		List<string> result = connection.GetAllItemsFromList("my-list");
+
+		// assert
+		Assert.Empty(result);
+	}
+
+	[Fact]
+	public void GetAllItemsFromList_ReturnsAllItems_FromAGivenList()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<List> lists = new()
+		{
+			new List { Key = "list-1", Value = "1", CreatedOn = DateTime.UtcNow.AddSeconds(10) },
+			new List { Key = "list-1", Value = "2", CreatedOn = DateTime.UtcNow.AddSeconds(2) },
+			new List { Key = "list-1", Value = "3", CreatedOn = DateTime.UtcNow.AddSeconds(3) },
+			new List { Key = "list-2", Value = "4", CreatedOn = DateTime.UtcNow.AddSeconds(4) },
+			new List { Key = "list-1", Value = "5", CreatedOn = DateTime.UtcNow.AddSeconds(5) }
+		};
+		Data<List> data = new(lists);
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.List);
+
+		// Act
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+		var result = connection.GetAllItemsFromList("list-1");
+
+		// assert
+		Assert.Equal(new[] { "1", "5", "3", "2" }, result);
+	}
+
+	[Fact]
+	public void GetSetTtl_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act 
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => connection.GetSetTtl(null));
+
+		// assert
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void GetSetTtl_ReturnsNegativeValue_WhenSetDoesNotExist()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act 
+		TimeSpan result = connection.GetSetTtl("my-set");
+
+		// assert
+		Assert.True(result < TimeSpan.Zero);
+	}
+
+	[Fact]
+	public void GetSetTtl_ReturnsExpirationTime_OfAGivenSet()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<Set> sets = new()
+		{
+			new Set { Key = "set-1", Value = "value1", CreatedOn = DateTime.UtcNow, ExpireOn = DateTime.UtcNow.AddHours(1) },
+			new Set { Key = "set-2", Value = "value2", CreatedOn = DateTime.UtcNow }
+		};
+		Data<Set> data = new(sets);
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Set);
+
+		// act
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+		TimeSpan result = connection.GetSetTtl("set-1");
+
+		// assert
+		Assert.True(TimeSpan.FromMinutes(59) < result);
+		Assert.True(result < TimeSpan.FromMinutes(61));
+	}
+
+	[Theory]
+	[InlineData("default", "c8732989-96e1-40e5-af16-dcf4d79cb4d6")]
+	[InlineData("high", "4c5f2c17-54ad-4e9e-ae38-c9ff750febd9")]
+	public void FetchNextJob_DelegatesItsExecution_ToTheQueue(string queue, string jobId)
+	{
+		// clean all the documents for the container
+		ContainerFixture.Clean();
+
+		//arrange 
+		JobQueue jobQueue = new(Storage);
+		jobQueue.Enqueue("high", queue.Equals("high") ? jobId : Guid.NewGuid().ToString());
+		jobQueue.Enqueue("default", queue.Equals("default") ? jobId : Guid.NewGuid().ToString());
+
+		//act
+		IStorageConnection connection = Storage.GetConnection();
+		FetchedJob job = (FetchedJob)connection.FetchNextJob(new[] { queue }, CancellationToken.None);
+
+		//assert
+		Assert.Equal(jobId, job.JobId);
+		Assert.Equal(queue, job.Queue);
+	}
+
+	[Fact]
+	public void FetchNextJob_ThrowsAnException_WhenQueueIsNull()
+	{
+		//act
+		IStorageConnection connection = Storage.GetConnection();
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => (FetchedJob)connection.FetchNextJob(null, CancellationToken.None));
+
+		//assert
+		Assert.Equal("queues", exception.ParamName);
+	}
+
+	[Fact]
+	public void FetchNextJob_ThrowsAnException_WhenQueueIsEmpty()
+	{
+		//act
+		IStorageConnection connection = Storage.GetConnection();
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => (FetchedJob)connection.FetchNextJob(Array.Empty<string>(), CancellationToken.None));
+
+		//assert
+		Assert.Equal("queues", exception.ParamName);
+	}
+
+	[Fact]
+	public void AcquireDistributedLock_ThrowsAnException_WhenResourceIsNullOrEmpty()
+	{
+		// arrange
+		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
+
+		// act 
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => connection.AcquireDistributedLock(null, TimeSpan.Zero));
+
+		// assert
+		Assert.Equal("resource", exception.ParamName);
+	}
+
+	[Fact]
+	public void AcquireLock_ReturnsNonNullInstance()
+	{
+		//clean
+		ContainerFixture.Clean();
+
+		//arrange 
+		IStorageConnection connection = Storage.GetConnection();
+
+		// act & assert
+		using IDisposable @lock = connection.AcquireDistributedLock("dequeue:lock", TimeSpan.Zero);
+		Assert.NotNull(@lock);
+		@lock.Dispose();
+	}
+
 
 #pragma warning disable xUnit1013
 	// ReSharper disable once MemberCanBePrivate.Global
