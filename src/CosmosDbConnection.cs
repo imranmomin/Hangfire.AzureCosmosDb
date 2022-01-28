@@ -52,7 +52,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 			}).ToArray()
 		};
 
-		Task<ItemResponse<Documents.Job>> task = Storage.Container.CreateItemWithRetriesAsync(entityJob, new PartitionKey((int)DocumentTypes.Job));
+		Task<ItemResponse<Documents.Job>> task = Storage.Container.CreateItemWithRetriesAsync(entityJob, PartitionKeys.Job);
 		task.Wait();
 
 		return entityJob.Id;
@@ -81,7 +81,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 		try
 		{
-			Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, new PartitionKey((int)DocumentTypes.Job));
+			Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, PartitionKeys.Job);
 			task.Wait();
 
 			Documents.Job data = task.Result.Resource;
@@ -123,13 +123,13 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 		try
 		{
-			Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, new PartitionKey((int)DocumentTypes.Job));
+			Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, PartitionKeys.Job);
 			task.Wait();
 
 			Documents.Job job = task.Result.Resource;
 
 			// get the state document
-			Task<ItemResponse<State>> stateTask = Storage.Container.ReadItemWithRetriesAsync<State>(job.StateId, new PartitionKey((int)DocumentTypes.State));
+			Task<ItemResponse<State>> stateTask = Storage.Container.ReadItemWithRetriesAsync<State>(job.StateId, PartitionKeys.State);
 			stateTask.Wait();
 
 			State state = stateTask.Result.Resource;
@@ -160,7 +160,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 		try
 		{
-			Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(id, new PartitionKey((int)DocumentTypes.Job));
+			Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(id, PartitionKeys.Job);
 			task.Wait();
 
 			Documents.Job data = task.Result.Resource;
@@ -180,7 +180,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 		if (name == null) throw new ArgumentNullException(nameof(name));
 		if (Guid.TryParse(id, out Guid _) == false) return;
 
-		Task<ItemResponse<Documents.Job>> readTask = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(id, new PartitionKey((int)DocumentTypes.Job));
+		Task<ItemResponse<Documents.Job>> readTask = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(id, PartitionKeys.Job);
 		readTask.Wait();
 
 		Documents.Job data = readTask.Result.Resource;
@@ -196,7 +196,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 			IfMatchEtag = data.ETag
 		};
 
-		Task<ItemResponse<Documents.Job>> task = Storage.Container.PatchItemWithRetriesAsync<Documents.Job>(id, new PartitionKey((int)DocumentTypes.Job), patchOperations, patchItemRequestOptions);
+		Task<ItemResponse<Documents.Job>> task = Storage.Container.PatchItemWithRetriesAsync<Documents.Job>(id, PartitionKeys.Job, patchOperations, patchItemRequestOptions);
 		task.Wait();
 	}
 
@@ -211,7 +211,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE MIN(doc['expire_on']) FROM doc WHERE doc.key = @key")
 			.WithParameter("@key", key);
 
-		int? expireOn = Storage.Container.GetItemQueryIterator<int?>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Set) })
+		int? expireOn = Storage.Container.GetItemQueryIterator<int?>(sql, requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Set })
 			.ToQueryResult()
 			.FirstOrDefault();
 
@@ -222,7 +222,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 	{
 		if (key == null) throw new ArgumentNullException(nameof(key));
 
-		List<Set> result = Storage.Container.GetItemLinqQueryable<Set>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Set) })
+		List<Set> result = Storage.Container.GetItemLinqQueryable<Set>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Set })
 			.Where(s => s.Key == key)
 			.ToQueryResult()
 			.ToList();
@@ -242,7 +242,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE SUM(doc['value']) FROM doc WHERE doc.key = @key")
 			.WithParameter("@key", key);
 
-		return Storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Counter) })
+		return Storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Counter })
 			.ToQueryResult()
 			.FirstOrDefault();
 	}
@@ -254,7 +254,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.key = @key")
 			.WithParameter("@key", key);
 
-		return Storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Set) })
+		return Storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Set })
 			.ToQueryResult()
 			.FirstOrDefault();
 	}
@@ -263,7 +263,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 	{
 		if (key == null) throw new ArgumentNullException(nameof(key));
 
-		IEnumerable<string> sets = Storage.Container.GetItemLinqQueryable<Set>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Set) })
+		IEnumerable<string> sets = Storage.Container.GetItemLinqQueryable<Set>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Set })
 			.Where(s => s.Key == key)
 			.Select(s => s.Value)
 			.ToQueryResult();
@@ -284,7 +284,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 			.WithParameter("@from", (int)fromScore)
 			.WithParameter("@to", (int)toScore);
 
-		return Storage.Container.GetItemQueryIterator<string>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Set) })
+		return Storage.Container.GetItemQueryIterator<string>(sql, requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Set })
 			.ToQueryResult()
 			.ToList();
 	}
@@ -307,7 +307,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 			LastHeartbeat = DateTime.UtcNow
 		};
 
-		Task<ItemResponse<Documents.Server>> task = Storage.Container.UpsertItemWithRetriesAsync(server, new PartitionKey((int)DocumentTypes.Server));
+		Task<ItemResponse<Documents.Server>> task = Storage.Container.UpsertItemWithRetriesAsync(server, PartitionKeys.Server);
 		task.Wait();
 	}
 
@@ -321,7 +321,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 			{
 				PatchOperation.Set("/last_heartbeat", DateTime.UtcNow.ToEpoch())
 			};
-			Task<ItemResponse<Documents.Server>> task = Storage.Container.PatchItemWithRetriesAsync<Documents.Server>(serverId, new PartitionKey((int)DocumentTypes.Server), patchOperations);
+			Task<ItemResponse<Documents.Server>> task = Storage.Container.PatchItemWithRetriesAsync<Documents.Server>(serverId, PartitionKeys.Server, patchOperations);
 			task.Wait();
 		}
 		catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
@@ -336,7 +336,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 		try
 		{
-			Task<ItemResponse<Documents.Server>> task = Storage.Container.DeleteItemWithRetriesAsync<Documents.Server>(serverId, new PartitionKey((int)DocumentTypes.Server));
+			Task<ItemResponse<Documents.Server>> task = Storage.Container.DeleteItemWithRetriesAsync<Documents.Server>(serverId, PartitionKeys.Server);
 			task.Wait();
 		}
 		catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
@@ -352,7 +352,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 		int lastHeartbeat = DateTime.UtcNow.Add(timeOut.Negate()).ToEpoch();
 		string query = $"SELECT * FROM doc WHERE IS_DEFINED(doc.last_heartbeat) AND doc.last_heartbeat <= {lastHeartbeat}";
 
-		return Storage.Container.ExecuteDeleteDocuments(query, new PartitionKey((int)DocumentTypes.Server));
+		return Storage.Container.ExecuteDeleteDocuments(query, PartitionKeys.Server);
 	}
 
 	#endregion
@@ -363,7 +363,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 	{
 		if (key == null) throw new ArgumentNullException(nameof(key));
 
-		Dictionary<string, string?> result = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Hash) })
+		Dictionary<string, string?> result = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Hash })
 			.Where(h => h.Key == key)
 			.Select(h => new { h.Field, h.Value })
 			.ToQueryResult()
@@ -436,7 +436,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.key = @key")
 			.WithParameter("@key", key);
 
-		return Storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Hash) })
+		return Storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Hash })
 			.ToQueryResult()
 			.FirstOrDefault();
 	}
@@ -450,7 +450,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 			.WithParameter("@key", key)
 			.WithParameter("@field", name);
 
-		return Storage.Container.GetItemQueryIterator<string>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Hash) })
+		return Storage.Container.GetItemQueryIterator<string>(sql, requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Hash })
 			.ToQueryResult()
 			.FirstOrDefault();
 	}
@@ -462,7 +462,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE MIN(doc['expire_on']) FROM doc WHERE doc.key = @key")
 			.WithParameter("@key", key);
 
-		int? expireOn = Storage.Container.GetItemQueryIterator<int?>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Hash) })
+		int? expireOn = Storage.Container.GetItemQueryIterator<int?>(sql, requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Hash })
 			.ToQueryResult()
 			.FirstOrDefault();
 
@@ -477,7 +477,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 	{
 		if (key == null) throw new ArgumentNullException(nameof(key));
 
-		return Storage.Container.GetItemLinqQueryable<List>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.List) })
+		return Storage.Container.GetItemLinqQueryable<List>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.List })
 			.Where(l => l.Key == key)
 			.OrderByDescending(l => l.CreatedOn)
 			.Select(l => l.Value)
@@ -491,7 +491,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 		endingAt += 1 - startingFrom;
 
-		return Storage.Container.GetItemLinqQueryable<List>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.List) })
+		return Storage.Container.GetItemLinqQueryable<List>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.List })
 			.Where(l => l.Key == key)
 			.ToQueryResult()
 			.GroupBy(l => l.Value)
@@ -508,7 +508,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE MIN(doc['expire_on']) FROM doc WHERE doc.key = @key")
 			.WithParameter("@key", key);
 
-		int? expireOn = Storage.Container.GetItemQueryIterator<int?>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.List) })
+		int? expireOn = Storage.Container.GetItemQueryIterator<int?>(sql, requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.List })
 			.ToQueryResult()
 			.FirstOrDefault();
 
@@ -522,7 +522,7 @@ public sealed class CosmosDbConnection : JobStorageConnection
 		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.key = @key")
 			.WithParameter("@key", key);
 
-		return Storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.List) })
+		return Storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.List })
 			.ToQueryResult()
 			.FirstOrDefault();
 	}

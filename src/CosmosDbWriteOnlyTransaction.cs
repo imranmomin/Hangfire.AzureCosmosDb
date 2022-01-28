@@ -57,7 +57,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 				Value = -1
 			};
 
-			Task<ItemResponse<Counter>> task = connection.Storage.Container.CreateItemAsync(data, new PartitionKey((int)DocumentTypes.Counter));
+			Task<ItemResponse<Counter>> task = connection.Storage.Container.CreateItemAsync(data, PartitionKeys.Counter);
 			task.Wait();
 		});
 	}
@@ -77,7 +77,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 				ExpireOn = DateTime.UtcNow.Add(expireIn)
 			};
 
-			Task<ItemResponse<Counter>> task = connection.Storage.Container.CreateItemAsync(data, new PartitionKey((int)DocumentTypes.Counter));
+			Task<ItemResponse<Counter>> task = connection.Storage.Container.CreateItemAsync(data, PartitionKeys.Counter);
 			task.Wait();
 		});
 	}
@@ -95,7 +95,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 				Value = 1
 			};
 
-			Task<ItemResponse<Counter>> task = connection.Storage.Container.CreateItemAsync(data, new PartitionKey((int)DocumentTypes.Counter));
+			Task<ItemResponse<Counter>> task = connection.Storage.Container.CreateItemAsync(data, PartitionKeys.Counter);
 			task.Wait();
 		});
 	}
@@ -115,7 +115,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 				ExpireOn = DateTime.UtcNow.Add(expireIn)
 			};
 
-			Task<ItemResponse<Counter>> task = connection.Storage.Container.CreateItemAsync(data, new PartitionKey((int)DocumentTypes.Counter));
+			Task<ItemResponse<Counter>> task = connection.Storage.Container.CreateItemAsync(data, PartitionKeys.Counter);
 			task.Wait();
 		});
 	}
@@ -133,14 +133,14 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		QueueCommand(() =>
 		{
 			string queryJobs = $"SELECT * FROM doc WHERE doc.id = '{jobId}'";
-			connection.Storage.Container.ExecuteExpireDocuments(queryJobs, epoch, new PartitionKey((int)DocumentTypes.Job));
+			connection.Storage.Container.ExecuteExpireDocuments(queryJobs, epoch, PartitionKeys.Job);
 		});
 
 		// we need to also remove the state documents
 		QueueCommand(() =>
 		{
 			string queryStates = $"SELECT * FROM doc WHERE doc.job_id = '{jobId}'";
-			connection.Storage.Container.ExecuteExpireDocuments(queryStates, epoch, new PartitionKey((int)DocumentTypes.State));
+			connection.Storage.Container.ExecuteExpireDocuments(queryStates, epoch, PartitionKeys.State);
 		});
 	}
 
@@ -154,7 +154,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 			{
 				PatchOperation.Remove("/expire_on")
 			};
-			connection.Storage.Container.PatchItemWithRetriesAsync<Job>(jobId, new PartitionKey((int)DocumentTypes.Job), patchOperations);
+			connection.Storage.Container.PatchItemWithRetriesAsync<Job>(jobId, PartitionKeys.Job, patchOperations);
 		});
 	}
 
@@ -178,7 +178,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 				Data = state.SerializeData()
 			};
 
-			Task<ItemResponse<State>> task = connection.Storage.Container.CreateItemAsync(data, new PartitionKey((int)DocumentTypes.State));
+			Task<ItemResponse<State>> task = connection.Storage.Container.CreateItemAsync(data, PartitionKeys.State);
 			Task<ItemResponse<Job>> spTask = task.ContinueWith(_ =>
 			{
 				PatchOperation[] patchOperations =
@@ -186,7 +186,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 					PatchOperation.Set("/state_id", data.Id),
 					PatchOperation.Set("/state_name", data.Name)
 				};
-				return connection.Storage.Container.PatchItemWithRetriesAsync<Job>(jobId, new PartitionKey((int)DocumentTypes.Job), patchOperations);
+				return connection.Storage.Container.PatchItemWithRetriesAsync<Job>(jobId, PartitionKeys.Job, patchOperations);
 			}, TaskContinuationOptions.NotOnFaulted).Unwrap();
 			spTask.Wait();
 		});
@@ -208,7 +208,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 				Data = state.SerializeData()
 			};
 
-			Task<ItemResponse<State>> task = connection.Storage.Container.CreateItemAsync(data, new PartitionKey((int)DocumentTypes.State));
+			Task<ItemResponse<State>> task = connection.Storage.Container.CreateItemAsync(data, PartitionKeys.State);
 			task.Wait();
 		});
 	}
@@ -283,7 +283,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		QueueCommand(() =>
 		{
 			string query = $"SELECT * FROM doc WHERE doc.key = '{key}'";
-			connection.Storage.Container.ExecutePersistDocuments(query, new PartitionKey((int)DocumentTypes.Set));
+			connection.Storage.Container.ExecutePersistDocuments(query, PartitionKeys.Set);
 		});
 	}
 
@@ -295,7 +295,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		{
 			string query = $"SELECT * FROM doc WHERE doc.key = '{key}'";
 			int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
-			connection.Storage.Container.ExecuteExpireDocuments(query, epoch, new PartitionKey((int)DocumentTypes.Set));
+			connection.Storage.Container.ExecuteExpireDocuments(query, epoch, PartitionKeys.Set);
 		});
 	}
 
@@ -315,7 +315,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 			}).ToList();
 
 			Data<Set> data = new(sets);
-			connection.Storage.Container.ExecuteUpsertDocuments(data, new PartitionKey((int)DocumentTypes.Set));
+			connection.Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Set);
 		});
 	}
 
@@ -326,7 +326,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		QueueCommand(() =>
 		{
 			string query = $"SELECT doc._self FROM doc WHERE doc.key = '{key}'";
-			connection.Storage.Container.ExecuteDeleteDocuments(query, new PartitionKey((int)DocumentTypes.Set));
+			connection.Storage.Container.ExecuteDeleteDocuments(query, PartitionKeys.Set);
 		});
 	}
 
@@ -341,7 +341,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		QueueCommand(() =>
 		{
 			string query = $"SELECT doc._self FROM doc WHERE doc.key = '{key}'";
-			connection.Storage.Container.ExecuteDeleteDocuments(query, new PartitionKey((int)DocumentTypes.Hash));
+			connection.Storage.Container.ExecuteDeleteDocuments(query, PartitionKeys.Hash);
 		});
 	}
 
@@ -413,7 +413,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		{
 			string query = $"SELECT * FROM doc WHERE doc.key = '{key}'";
 			int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
-			connection.Storage.Container.ExecuteExpireDocuments(query, epoch, new PartitionKey((int)DocumentTypes.Hash));
+			connection.Storage.Container.ExecuteExpireDocuments(query, epoch, PartitionKeys.Hash);
 		});
 	}
 
@@ -424,7 +424,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		QueueCommand(() =>
 		{
 			string query = $"SELECT * FROM doc WHERE doc.key = '{key}'";
-			connection.Storage.Container.ExecutePersistDocuments(query, new PartitionKey((int)DocumentTypes.Hash));
+			connection.Storage.Container.ExecutePersistDocuments(query, PartitionKeys.Hash);
 		});
 	}
 
@@ -446,7 +446,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 				CreatedOn = DateTime.UtcNow
 			};
 
-			Task<ItemResponse<List>> task = connection.Storage.Container.CreateItemAsync(data, new PartitionKey((int)DocumentTypes.List));
+			Task<ItemResponse<List>> task = connection.Storage.Container.CreateItemAsync(data, PartitionKeys.List);
 			task.Wait();
 		});
 	}
@@ -508,7 +508,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		{
 			string query = $"SELECT * FROM doc WHERE doc.key = '{key}'";
 			int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
-			connection.Storage.Container.ExecuteExpireDocuments(query, epoch, new PartitionKey((int)DocumentTypes.List));
+			connection.Storage.Container.ExecuteExpireDocuments(query, epoch, PartitionKeys.List);
 		});
 	}
 
@@ -519,7 +519,7 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		QueueCommand(() =>
 		{
 			string query = $"SELECT * FROM doc WHERE doc.key = '{key}'";
-			connection.Storage.Container.ExecutePersistDocuments(query, new PartitionKey((int)DocumentTypes.List));
+			connection.Storage.Container.ExecutePersistDocuments(query, PartitionKeys.List);
 		});
 	}
 

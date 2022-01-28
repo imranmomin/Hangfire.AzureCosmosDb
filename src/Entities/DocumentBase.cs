@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using Microsoft.Azure.Cosmos;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
@@ -63,4 +64,16 @@ public class Data<T>
 	}
 
 	[JsonProperty("items")] public List<T> Items { get; set; }
+}
+
+public static class PartitionKeys
+{
+	public static PartitionKey Server { get; } = new((int)DocumentTypes.Server);
+	public static PartitionKey Job { get; } = new((int)DocumentTypes.Job);
+	public static PartitionKey State { get; } = new((int)DocumentTypes.State);
+	public static PartitionKey Set { get; } = new((int)DocumentTypes.Set);
+	public static PartitionKey Counter { get; } = new((int)DocumentTypes.Counter);
+	public static PartitionKey Hash { get; } = new((int)DocumentTypes.Hash);
+	public static PartitionKey List { get; } = new((int)DocumentTypes.List);
+	public static PartitionKey Queue { get; } = new((int)DocumentTypes.Queue);
 }

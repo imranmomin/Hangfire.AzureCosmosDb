@@ -88,7 +88,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		Assert.NotNull(jobId);
 		Assert.NotEmpty(jobId);
 
-		Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, new PartitionKey((int)DocumentTypes.Job));
+		Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, PartitionKeys.Job);
 		Documents.Job? sqlJob = task.Result.Resource;
 
 		Assert.Equal(jobId, sqlJob.Id);
@@ -135,7 +135,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		Assert.NotNull(jobId);
 		Assert.NotEmpty(jobId);
 
-		Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, new PartitionKey((int)DocumentTypes.Job));
+		Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, PartitionKeys.Job);
 		Documents.Job? sqlJob = task.Result.Resource;
 
 		Assert.Null(sqlJob.Parameters.SingleOrDefault(x => x.Name == "Key1")?.Value);
@@ -161,7 +161,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		Assert.NotNull(jobId);
 		Assert.NotEmpty(jobId);
 
-		Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, new PartitionKey((int)DocumentTypes.Job));
+		Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, PartitionKeys.Job);
 		Documents.Job? sqlJob = task.Result.Resource;
 
 		Assert.Empty(sqlJob.Parameters);
@@ -247,7 +247,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 			StateId = Guid.NewGuid().ToString(),
 			StateName = SucceededState.StateName
 		};
-		Task<ItemResponse<Documents.Job>> task = Storage.Container.CreateItemWithRetriesAsync(entityJob, new PartitionKey((int)DocumentTypes.Job));
+		Task<ItemResponse<Documents.Job>> task = Storage.Container.CreateItemWithRetriesAsync(entityJob, PartitionKeys.Job);
 		task.Wait();
 
 		// act
@@ -293,7 +293,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 			StateId = Guid.NewGuid().ToString(),
 			StateName = SucceededState.StateName
 		};
-		Task<ItemResponse<Documents.Job>> task = Storage.Container.CreateItemWithRetriesAsync(entityJob, new PartitionKey((int)DocumentTypes.Job));
+		Task<ItemResponse<Documents.Job>> task = Storage.Container.CreateItemWithRetriesAsync(entityJob, PartitionKeys.Job);
 		task.Wait();
 
 		// act
@@ -364,7 +364,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 			CreatedOn = DateTime.UtcNow,
 			StateId = Guid.NewGuid().ToString()
 		};
-		Task<ItemResponse<Documents.Job>> task = Storage.Container.CreateItemWithRetriesAsync(entityJob, new PartitionKey((int)DocumentTypes.Job));
+		Task<ItemResponse<Documents.Job>> task = Storage.Container.CreateItemWithRetriesAsync(entityJob, PartitionKeys.Job);
 		task.Wait();
 
 		// act 
@@ -387,7 +387,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 			CreatedOn = DateTime.UtcNow,
 			StateId = Guid.NewGuid().ToString()
 		};
-		Task<ItemResponse<Documents.Job>> task = Storage.Container.CreateItemWithRetriesAsync(entityJob, new PartitionKey((int)DocumentTypes.Job));
+		Task<ItemResponse<Documents.Job>> task = Storage.Container.CreateItemWithRetriesAsync(entityJob, PartitionKeys.Job);
 		task.Wait();
 
 		// set the job state
@@ -745,7 +745,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		};
 		connection.AnnounceServer("server", context1);
 
-		Task<ItemResponse<Documents.Server>> readTask = Storage.Container.ReadItemWithRetriesAsync<Documents.Server>("server", new PartitionKey((int)DocumentTypes.Server));
+		Task<ItemResponse<Documents.Server>> readTask = Storage.Container.ReadItemWithRetriesAsync<Documents.Server>("server", PartitionKeys.Server);
 		readTask.Wait();
 		Documents.Server? server = readTask.Result.Resource;
 
@@ -763,7 +763,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		};
 		connection.AnnounceServer("server", context2);
 
-		readTask = Storage.Container.ReadItemWithRetriesAsync<Documents.Server>("server", new PartitionKey((int)DocumentTypes.Server));
+		readTask = Storage.Container.ReadItemWithRetriesAsync<Documents.Server>("server", PartitionKeys.Server);
 		readTask.Wait();
 		Documents.Server? sameServer = readTask.Result.Resource;
 
@@ -802,7 +802,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		connection.RemoveServer("server1");
 		QueryRequestOptions queryRequestOptions = new()
 		{
-			PartitionKey = new PartitionKey((int)DocumentTypes.Server)
+			PartitionKey = PartitionKeys.Server
 		};
 		Documents.Server server = Storage.Container.GetItemLinqQueryable<Documents.Server>(requestOptions: queryRequestOptions)
 			.ToQueryResult()
@@ -838,7 +838,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 			new Documents.Server { Id = "server2", CreatedOn = DateTime.UtcNow, LastHeartbeat = new DateTime(2021, 1, 1) }
 		};
 		Data<Documents.Server> data = new(servers);
-		Storage.Container.ExecuteUpsertDocuments(data, new PartitionKey((int)DocumentTypes.Server));
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Server);
 
 		// act
 		IStorageConnection connection = Storage.GetConnection();
@@ -846,7 +846,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 
 		QueryRequestOptions queryRequestOptions = new()
 		{
-			PartitionKey = new PartitionKey((int)DocumentTypes.Server)
+			PartitionKey = PartitionKeys.Server
 		};
 		Dictionary<string, DateTime> result = Storage.Container.GetItemLinqQueryable<Documents.Server>(requestOptions: queryRequestOptions)
 			.ToQueryResult()
@@ -882,7 +882,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 			new Documents.Server { Id = "server2", CreatedOn = DateTime.UtcNow, LastHeartbeat = DateTime.UtcNow.AddHours(-12) }
 		};
 		Data<Documents.Server> data = new(servers);
-		Storage.Container.ExecuteUpsertDocuments(data, new PartitionKey((int)DocumentTypes.Server));
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Server);
 
 		// act
 		IStorageConnection connection = Storage.GetConnection();
@@ -890,7 +890,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 
 		QueryRequestOptions queryRequestOptions = new()
 		{
-			PartitionKey = new PartitionKey((int)DocumentTypes.Server)
+			PartitionKey = PartitionKeys.Server
 		};
 		Documents.Server result = Storage.Container.GetItemLinqQueryable<Documents.Server>(requestOptions: queryRequestOptions)
 			.ToQueryResult()
@@ -997,7 +997,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		// act
 		QueryRequestOptions queryRequestOptions = new()
 		{
-			PartitionKey = new PartitionKey((int)DocumentTypes.Hash)
+			PartitionKey = PartitionKeys.Hash
 		};
 		Dictionary<string, string?> result = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: queryRequestOptions)
 			.ToQueryResult()
@@ -1027,7 +1027,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 
 		QueryRequestOptions queryRequestOptions = new()
 		{
-			PartitionKey = new PartitionKey((int)DocumentTypes.Hash)
+			PartitionKey = PartitionKeys.Hash
 		};
 		Dictionary<string, string?> result = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: queryRequestOptions)
 			.ToQueryResult()
@@ -1054,7 +1054,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 			new Hash { Key = "some-other-hash", Field = "key1", Value = "value1" }
 		};
 		Data<Hash> data = new(hashes);
-		Storage.Container.ExecuteUpsertDocuments(data, new PartitionKey((int)DocumentTypes.Hash));
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Hash);
 
 		// act
 		IStorageConnection connection = Storage.GetConnection();
@@ -1065,7 +1065,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 
 		QueryRequestOptions queryRequestOptions = new()
 		{
-			PartitionKey = new PartitionKey((int)DocumentTypes.Hash)
+			PartitionKey = PartitionKeys.Hash
 		};
 		Dictionary<string, string?> result = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: queryRequestOptions)
 			.Where(x => x.Key == "some-hash")
@@ -1102,7 +1102,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 			new Hash { Key = "some-other-hash", Field = "key1", Value = "value1" }
 		};
 		Data<Hash> data = new(hashes);
-		Storage.Container.ExecuteUpsertDocuments(data, new PartitionKey((int)DocumentTypes.Hash));
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Hash);
 
 		// act
 		IStorageConnection connection = Storage.GetConnection();
@@ -1113,7 +1113,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 
 		QueryRequestOptions queryRequestOptions = new()
 		{
-			PartitionKey = new PartitionKey((int)DocumentTypes.Hash)
+			PartitionKey = PartitionKeys.Hash
 		};
 		Dictionary<string, string?> result = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: queryRequestOptions)
 			.Where(x => x.Key == "some-hash")
@@ -1178,7 +1178,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 			new Hash { Key = "some-other-hash", Field = "key1", Value = "value1" }
 		};
 		Data<Hash> data = new(hashes);
-		Storage.Container.ExecuteUpsertDocuments(data, new PartitionKey((int)DocumentTypes.Hash));
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Hash);
 
 		// act
 		IStorageConnection connection = Storage.GetConnection();
@@ -1233,7 +1233,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 			new Set { Key = "set-1", Value = "value1", CreatedOn = DateTime.UtcNow }
 		};
 		Data<Set> data = new(sets);
-		Storage.Container.ExecuteUpsertDocuments(data, new PartitionKey((int)DocumentTypes.Set));
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Set);
 
 		// act
 		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
@@ -1273,7 +1273,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 			new Set { Key = "set-1", Value = "5", CreatedOn = DateTime.UtcNow }
 		};
 		Data<Set> data = new(sets);
-		Storage.Container.ExecuteUpsertDocuments(data, new PartitionKey((int)DocumentTypes.Set));
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Set);
 
 		// act
 		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
@@ -1326,7 +1326,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 			new Counter { Key = "counter-1", Value = 1, Type = CounterTypes.Raw },
 		};
 		Data<Counter> data = new(counters);
-		Storage.Container.ExecuteUpsertDocuments(data, new PartitionKey((int)DocumentTypes.Counter));
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Counter);
 
 		// act
 		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();

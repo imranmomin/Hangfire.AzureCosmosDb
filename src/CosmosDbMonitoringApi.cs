@@ -58,7 +58,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 		return queueJobs;
 	}
 
-	public IList<ServerDto> Servers() => storage.Container.GetItemLinqQueryable<Documents.Server>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Server) })
+	public IList<ServerDto> Servers() => storage.Container.GetItemLinqQueryable<Documents.Server>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Server })
 		.OrderByDescending(s => s.CreatedOn)
 		.ToQueryResult()
 		.Select(server => new ServerDto
@@ -75,7 +75,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 	{
 		if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
 
-		Task<ItemResponse<Documents.Job>> task = storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, new PartitionKey((int)DocumentTypes.Job));
+		Task<ItemResponse<Documents.Job>> task = storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, PartitionKeys.Job);
 		task.Wait();
 
 		// if the resource is not found return null;
@@ -85,7 +85,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 		InvocationData invocationData = job.InvocationData;
 		invocationData.Arguments = job.Arguments;
 
-		List<StateHistoryDto> states = storage.Container.GetItemLinqQueryable<State>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.State) })
+		List<StateHistoryDto> states = storage.Container.GetItemLinqQueryable<State>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.State })
 			.Where(s => s.JobId == jobId)
 			.OrderByDescending(s => s.CreatedOn)
 			.ToQueryResult()
@@ -119,7 +119,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 			QueryDefinition sql = new("SELECT doc.state_name AS state, COUNT(1) AS stateCount FROM doc WHERE IS_DEFINED(doc.state_name) " +
 			                          $"AND doc.state_name IN ({string.Join(",", stateNames)}) GROUP BY doc.state_name");
 
-			List<(string state, int stateCount)> states = storage.Container.GetItemQueryIterator<JObject>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Job) })
+			List<(string state, int stateCount)> states = storage.Container.GetItemQueryIterator<JObject>(sql, requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Job })
 				.ToQueryResult()
 				.Select(x => (x.Value<string>("state"), x.Value<int>("stateCount")))
 				.ToList()!;
@@ -129,7 +129,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 			// get counts of servers
 			sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc");
 
-			long servers = storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Server) })
+			long servers = storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Server })
 				.ToQueryResult()
 				.FirstOrDefault();
 
@@ -139,7 +139,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 			string[] keys = { "'stats:succeeded'", "'stats:deleted'" };
 			sql = new QueryDefinition($"SELECT doc.key, SUM(doc['value']) AS total FROM doc WHERE doc.key IN ({string.Join(",", keys)}) GROUP BY doc.key");
 
-			List<(string key, int total)> counters = storage.Container.GetItemQueryIterator<JObject>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Counter) })
+			List<(string key, int total)> counters = storage.Container.GetItemQueryIterator<JObject>(sql, requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Counter })
 				.ToQueryResult()
 				.Select(x => (x.Value<string>("key"), x.Value<int>("total")))
 				.ToList()!;
@@ -152,7 +152,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 			sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.key = @key")
 				.WithParameter("@key", "recurring-jobs");
 
-			long jobs = storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Set) })
+			long jobs = storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Set })
 				.ToQueryResult()
 				.FirstOrDefault();
 
@@ -257,7 +257,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 	{
 		List<KeyValuePair<string, T>> jobs = new();
 
-		List<Documents.Job> filterJobs = storage.Container.GetItemLinqQueryable<Documents.Job>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Job) })
+		List<Documents.Job> filterJobs = storage.Container.GetItemLinqQueryable<Documents.Job>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Job })
 			.Where(j => j.StateName == stateName)
 			.OrderByDescending(j => j.CreatedOn)
 			.Skip(from).Take(count)
@@ -265,7 +265,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 			.ToList();
 
 		string[] ids = filterJobs.Select(x => x.StateId).ToArray();
-		List<State> states = storage.Container.GetItemLinqQueryable<State>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.State) })
+		List<State> states = storage.Container.GetItemLinqQueryable<State>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.State })
 			.Where(x => ids.Contains(x.Id))
 			.ToQueryResult()
 			.ToList();
@@ -291,18 +291,18 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 		QueryDefinition sql = new QueryDefinition(queryText)
 			.WithParameter("@name", queue);
 
-		List<Documents.Queue> queues = storage.Container.GetItemQueryIterator<Documents.Queue>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Queue) })
+		List<Documents.Queue> queues = storage.Container.GetItemQueryIterator<Documents.Queue>(sql, requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Queue })
 			.ToQueryResult()
 			.ToList();
 
 		string[] queueJobIds = queues.Select(x => x.JobId).ToArray();
-		List<Documents.Job> filterJobs = storage.Container.GetItemLinqQueryable<Documents.Job>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Job) })
+		List<Documents.Job> filterJobs = storage.Container.GetItemLinqQueryable<Documents.Job>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Job })
 			.Where(x => queueJobIds.Contains(x.Id))
 			.ToQueryResult()
 			.ToList();
 
 		string[] filteredJobIds = filterJobs.Select(x => x.StateId).ToArray();
-		List<State> states = storage.Container.GetItemLinqQueryable<State>(requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.State) })
+		List<State> states = storage.Container.GetItemLinqQueryable<State>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.State })
 			.Where(x => filteredJobIds.Contains(x.Id))
 			.ToQueryResult()
 			.ToList();
@@ -361,7 +361,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE IS_DEFINED(doc.state_name) AND doc.state_name = @state")
 			.WithParameter("@state", state);
 
-		return storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Job) })
+		return storage.Container.GetItemQueryIterator<long>(sql, requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Job })
 			.ToQueryResult()
 			.FirstOrDefault();
 	}
@@ -409,7 +409,7 @@ public sealed class CosmosDbMonitoringApi : IMonitoringApi
 
 		QueryDefinition sql = new($"SELECT doc.key, SUM(doc['value']) AS total FROM doc WHERE doc.key IN ({string.Join(",", filter)}) GROUP BY doc.key");
 
-		List<(string key, int total)> data = storage.Container.GetItemQueryIterator<JObject>(sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey((int)DocumentTypes.Counter) })
+		List<(string key, int total)> data = storage.Container.GetItemQueryIterator<JObject>(sql, requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Counter })
 			.ToQueryResult()
 			.Select(x => (x.Value<string>("key"), x.Value<int>("total")))
 			.ToList()!;
