@@ -247,7 +247,7 @@ public class JobQueueFacts : IClassFixture<ContainerFixture>
 		cancellationSource.Cancel();
 
 		// assert
-		Assert.Throws<OperationCanceledException>(() => jobQueue.Dequeue(defaultQueues, cancellationSource.Token));
+		OperationCanceledException exception = Assert.Throws<OperationCanceledException>(() => jobQueue.Dequeue(defaultQueues, cancellationSource.Token));
 		distributedLock.Dispose();
 	}
 }

@@ -5,6 +5,7 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using Hangfire.Azure.Documents;
+using Hangfire.Azure.Documents.Helper;
 using Hangfire.Azure.Helper;
 using Hangfire.Logging;
 using Hangfire.Server;
@@ -15,8 +16,7 @@ namespace Hangfire.Azure;
 public class CountersAggregator : IServerComponent
 #pragma warning restore 618
 {
-	private const string DISTRIBUTED_LOCK_KEY = "locks:counters:aggragator";
-	private readonly TimeSpan defaultLockTimeout;
+	private const string DISTRIBUTED_LOCK_KEY = "locks:counters:aggregator";
 	private readonly ILog logger = LogProvider.For<CountersAggregator>();
 	private readonly PartitionKey partitionKey = new((int)DocumentTypes.Counter);
 	private readonly CosmosDbStorage storage;
@@ -24,121 +24,112 @@ public class CountersAggregator : IServerComponent
 	public CountersAggregator(CosmosDbStorage storage)
 	{
 		this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
-		defaultLockTimeout = TimeSpan.FromSeconds(30).Add(storage.StorageOptions.CountersAggregateInterval);
 	}
 
 	public void Execute(CancellationToken cancellationToken)
 	{
-		bool isCompleted = false;
+		CosmosDbDistributedLock? distributedLock = null;
 
-		while (cancellationToken.IsCancellationRequested == false && isCompleted == false)
+		try
 		{
-			CosmosDbDistributedLock? distributedLock = null;
+			// check if the token was cancelled
+			cancellationToken.ThrowIfCancellationRequested();
 
-			try
+			// get the distributed lock
+			distributedLock = new CosmosDbDistributedLock(DISTRIBUTED_LOCK_KEY, storage.StorageOptions.CountersAggregateInterval, storage);
+
+			logger.Trace("Aggregating records in [Counter] table.");
+
+			QueryRequestOptions queryRequestOptions = new()
 			{
-				// check if the token was cancelled
+				PartitionKey = partitionKey,
+				MaxItemCount = 100
+			};
+
+			List<Counter> rawCounters = storage.Container.GetItemLinqQueryable<Counter>(requestOptions: queryRequestOptions)
+				.Where(x => x.Type == CounterTypes.Raw)
+				.OrderBy(x => x.ExpireOn)
+				.ToQueryResult()
+				.ToList();
+
+			Dictionary<string, (int Value, DateTime? ExpireOn, List<Counter> Counters)> counters = rawCounters.GroupBy(c => c.Key)
+				.ToDictionary(k => k.Key, v => (Value: v.Sum(c => c.Value), ExpireOn: v.Max(c => c.ExpireOn), Counters: v.ToList()));
+
+			foreach (string key in counters.Keys)
+			{
 				cancellationToken.ThrowIfCancellationRequested();
 
-				// get the distributed lock
-				distributedLock = new CosmosDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage);
+				if (!counters.TryGetValue(key, out (int Value, DateTime? ExpireOn, List<Counter> Counters) data)) continue;
 
-				logger.Trace("Aggregating records in [Counter] table.");
+				string id = $"{key}:{CounterTypes.Aggregate}".GenerateHash();
+				Task<ItemResponse<Counter>> task;
 
-				QueryDefinition sql = new QueryDefinition("SELECT * FROM doc WHERE AND doc.counterType = @counterType")
-					.WithParameter("@counterType", (int)CounterTypes.Raw);
-
-				QueryRequestOptions queryRequestOptions = new()
+				try
 				{
-					PartitionKey = partitionKey,
-					MaxItemCount = 100
-				};
+					// ReSharper disable once MethodSupportsCancellation
+					Task<ItemResponse<Counter>> readTask = storage.Container.ReadItemWithRetriesAsync<Counter>(id, partitionKey);
+					// ReSharper disable once MethodSupportsCancellation
+					readTask.Wait();
 
-				List<Counter> rawCounters = storage.Container.GetItemQueryIterator<Counter>(sql, requestOptions: queryRequestOptions)
-					.ToQueryResult()
-					.ToList();
+					Counter aggregated = readTask.Result.Resource;
 
-				if (rawCounters.Count == 0) break;
+					DateTime? expireOn = new[] { aggregated.ExpireOn, data.ExpireOn }.Max();
+					int? expireOnEpoch = expireOn?.ToEpoch();
 
-				Dictionary<string, (int Value, DateTime? ExpireOn, List<Counter> Counters)> counters = rawCounters.GroupBy(c => c.Key)
-					.ToDictionary(k => k.Key, v => (Value: v.Sum(c => c.Value), ExpireOn: v.Max(c => c.ExpireOn), Counters: v.ToList()));
-
-				foreach (string key in counters.Keys)
-				{
-					cancellationToken.ThrowIfCancellationRequested();
-
-					if (!counters.TryGetValue(key, out (int Value, DateTime? ExpireOn, List<Counter> Counters) data)) continue;
-
-					string id = $"{key}:{CounterTypes.Aggregate}".GenerateHash();
-					Task<ItemResponse<Counter>> task;
-
-					try
+					PatchOperation[] patchOperations =
 					{
-						Task<ItemResponse<Counter>> readTask = storage.Container.ReadItemWithRetriesAsync<Counter>(id, partitionKey, cancellationToken: cancellationToken);
-						// ReSharper disable once MethodSupportsCancellation
-						readTask.Wait();
+						PatchOperation.Increment("/value", data.Value),
+						PatchOperation.Set("/expire_on", expireOnEpoch)
+					};
 
-						Counter aggregated = readTask.Result.Resource;
-
-						PatchOperation[] patchOperations =
-						{
-							PatchOperation.Increment("/value", data.Value),
-							PatchOperation.Set("/expire_on", new[] { aggregated.ExpireOn, data.ExpireOn }.Max())
-						};
-
-						PatchItemRequestOptions patchItemRequestOptions = new()
-						{
-							IfMatchEtag = aggregated.ETag
-						};
-
-						// ReSharper disable once MethodSupportsCancellation
-						task = storage.Container.PatchItemWithRetriesAsync<Counter>(aggregated.Id, partitionKey, patchOperations, patchItemRequestOptions);
-					}
-					catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
+					PatchItemRequestOptions patchItemRequestOptions = new()
 					{
-						Counter aggregated = new()
-						{
-							Id = id,
-							Key = key,
-							Type = CounterTypes.Aggregate,
-							Value = data.Value,
-							ExpireOn = data.ExpireOn
-						};
-
-						// ReSharper disable once MethodSupportsCancellation
-						task = storage.Container.CreateItemWithRetriesAsync(aggregated, partitionKey);
-					}
-					catch (AggregateException ex) when (ex.InnerException is CosmosException)
-					{
-						logger.ErrorException("Error while reading document", ex);
-						continue;
-					}
+						IfMatchEtag = aggregated.ETag
+					};
 
 					// ReSharper disable once MethodSupportsCancellation
-					task.Wait();
+					task = storage.Container.PatchItemWithRetriesAsync<Counter>(aggregated.Id, partitionKey, patchOperations, patchItemRequestOptions);
+				}
+				catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
+				{
+					Counter aggregated = new()
+					{
+						Id = id,
+						Key = key,
+						Type = CounterTypes.Aggregate,
+						Value = data.Value,
+						ExpireOn = data.ExpireOn
+					};
 
-					// now - remove the raw counters
-					string ids = string.Join(",", data.Counters.Select(c => $"'{c.Id}'").ToArray());
-					string query = $"SELECT * FROM doc WHERE doc.counterType = {(int)CounterTypes.Raw} AND doc.id IN ({ids})";
-					int deleted = storage.Container.ExecuteDeleteDocuments(query, partitionKey);
-					logger.Trace($"Total [{deleted}] records from the ['Counter:{key}'] were aggregated.");
+					// ReSharper disable once MethodSupportsCancellation
+					task = storage.Container.CreateItemWithRetriesAsync(aggregated, partitionKey);
+				}
+				catch (AggregateException ex) when (ex.InnerException is CosmosException)
+				{
+					logger.ErrorException("Error while reading document", ex);
+					continue;
 				}
 
-				logger.Trace($"Records [{rawCounters.Count}] from the [Counter] table aggregated.");
-				isCompleted = true;
-			}
-			catch (CosmosDbDistributedLockException exception) when (exception.Key == DISTRIBUTED_LOCK_KEY)
-			{
-				logger.Debug($@"An exception was thrown during acquiring distributed lock on the [{DISTRIBUTED_LOCK_KEY}] resource within [{defaultLockTimeout.TotalSeconds}] seconds." +
-				             @"Counter records were not aggregated. It will be retried in [5] seconds.");
+				// ReSharper disable once MethodSupportsCancellation
+				task.Wait();
 
-				// will wait for 5 seconds
-				Thread.Sleep(5000);
+				// now - remove the raw counters
+				string ids = string.Join(",", data.Counters.Select(c => $"'{c.Id}'").ToArray());
+				string query = $"SELECT * FROM doc WHERE doc.counterType = {(int)CounterTypes.Raw} AND doc.id IN ({ids})";
+				int deleted = storage.Container.ExecuteDeleteDocuments(query, partitionKey);
+				logger.Trace($"Total [{deleted}] records from the ['Counter:{key}'] were aggregated.");
 			}
-			finally
-			{
-				distributedLock?.Dispose();
-			}
+
+			logger.Trace($"Records [{rawCounters.Count}] from the [Counter] table aggregated.");
+		}
+		catch (CosmosDbDistributedLockException exception) when (exception.Key == DISTRIBUTED_LOCK_KEY)
+		{
+			logger.Debug($@"An exception was thrown during acquiring distributed lock on the [{DISTRIBUTED_LOCK_KEY}] resource within [{storage.StorageOptions.CountersAggregateInterval.TotalSeconds}] seconds." +
+			             $@"Counter records were not aggregated. It will be retried in [{storage.StorageOptions.CountersAggregateInterval.TotalSeconds}] seconds.");
+		}
+		finally
+		{
+			distributedLock?.Dispose();
 		}
 
 		// wait for the interval specified
