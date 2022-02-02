@@ -14,7 +14,6 @@ public class ExpirationManager : IServerComponent
 #pragma warning restore 618
 {
 	private const string DISTRIBUTED_LOCK_KEY = "locks:expiration:manager";
-	private static readonly TimeSpan defaultLockTimeout = TimeSpan.FromMinutes(5);
 	private readonly DocumentTypes[] documents = { DocumentTypes.Lock, DocumentTypes.Job, DocumentTypes.List, DocumentTypes.Set, DocumentTypes.Hash, DocumentTypes.Counter, DocumentTypes.State };
 	private readonly ILog logger = LogProvider.For<ExpirationManager>();
 	private readonly CosmosDbStorage storage;
@@ -26,51 +25,41 @@ public class ExpirationManager : IServerComponent
 
 	public void Execute(CancellationToken cancellationToken)
 	{
-		bool isComplete = false;
+		CosmosDbDistributedLock? distributedLock = null;
+		int expireOn = DateTime.UtcNow.ToEpoch();
 
-		while (cancellationToken.IsCancellationRequested == false && isComplete == false)
+		try
 		{
-			CosmosDbDistributedLock? distributedLock = null;
+			// check if the token was cancelled
+			cancellationToken.ThrowIfCancellationRequested();
 
-			try
+			// get the distributed lock
+			distributedLock = new CosmosDbDistributedLock(DISTRIBUTED_LOCK_KEY, storage.StorageOptions.ExpirationCheckInterval, storage);
+
+			foreach (DocumentTypes type in documents)
 			{
-				// check if the token was cancelled
 				cancellationToken.ThrowIfCancellationRequested();
 
-				// get the distributed lock
-				distributedLock = new CosmosDbDistributedLock(DISTRIBUTED_LOCK_KEY, defaultLockTimeout, storage);
+				logger.Trace($"Removing outdated records from the [{type}] table.");
 
-				foreach (DocumentTypes type in documents)
-				{
-					cancellationToken.ThrowIfCancellationRequested();
+				string query = $"SELECT * FROM doc WHERE IS_DEFINED(doc.expire_on) AND doc.expire_on < {expireOn}";
 
-					logger.Trace($"Removing outdated records from the [{type}] document.");
+				// remove only the aggregate counters when the type is Counter
+				if (type == DocumentTypes.Counter) query += $" AND doc.counterType = {(int)CounterTypes.Aggregate}";
 
-					int expireOn = DateTime.UtcNow.ToEpoch();
-					string query = $"SELECT * FROM doc WHERE IS_DEFINED(doc.expire_on) AND doc.expire_on < {expireOn}";
+				int deleted = storage.Container.ExecuteDeleteDocuments(query, new PartitionKey((int)type));
 
-					// remove only the aggregate counters when the type is Counter
-					if (type == DocumentTypes.Counter) query += $" AND doc.counterType = {(int)CounterTypes.Aggregate}";
-
-					int deleted = storage.Container.ExecuteDeleteDocuments(query, new PartitionKey((int)type));
-
-					logger.Trace($"Outdated [{deleted}] records removed from the [{type}] document.");
-				}
-
-				isComplete = true;
+				logger.Trace($"Outdated [{deleted}] records removed from the [{type}] table.");
 			}
-			catch (CosmosDbDistributedLockException exception) when (exception.Key == DISTRIBUTED_LOCK_KEY)
-			{
-				logger.Debug($@"An exception was thrown during acquiring distributed lock on the [{DISTRIBUTED_LOCK_KEY}] resource within [{defaultLockTimeout.TotalSeconds}] seconds." +
-				             @"Outdated records were not removed. It will be retried in [5] seconds.");
-
-				// wait for 5 seconds
-				Thread.Sleep(5000);
-			}
-			finally
-			{
-				distributedLock?.Dispose();
-			}
+		}
+		catch (CosmosDbDistributedLockException exception) when (exception.Key == DISTRIBUTED_LOCK_KEY)
+		{
+			logger.Debug($@"An exception was thrown during acquiring distributed lock on the [{DISTRIBUTED_LOCK_KEY}] resource within [{storage.StorageOptions.ExpirationCheckInterval.TotalSeconds}] seconds." +
+			             $@"Outdated records were not removed. It will be retried in [{storage.StorageOptions.ExpirationCheckInterval.TotalSeconds}] seconds.");
+		}
+		finally
+		{
+			distributedLock?.Dispose();
 		}
 
 		// wait for the interval specified
