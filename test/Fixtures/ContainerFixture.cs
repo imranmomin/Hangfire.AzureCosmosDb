@@ -26,7 +26,7 @@ public class ContainerFixture : IDisposable
 		string database = section.GetValue<string>("Database");
 		string container = section.GetValue<string>("Container");
 
-		CosmosDbStorageOptions option = new() { CountersAggregateInterval = TimeSpan.Zero, ExpirationCheckInterval = TimeSpan.Zero, QueuePollInterval = TimeSpan.Zero };
+		CosmosDbStorageOptions option = new() { CountersAggregateInterval = TimeSpan.Zero, ExpirationCheckInterval = TimeSpan.Zero, QueuePollInterval = TimeSpan.Zero, CountersAggregateMaxItemCount = 1 };
 
 		Storage = CosmosDbStorage.Create(url, secret, database, container, storageOptions: option);
 		Clean();
