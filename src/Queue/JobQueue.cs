@@ -36,10 +36,9 @@ public class JobQueue : IPersistentJobQueue
 		lock (syncLock)
 		{
 			IEnumerable<string> queueParams = Enumerable.Range(0, queues.Length).Select((_, i) => $"@queue_{i}");
-			string query = $"SELECT TOP 1 * FROM doc WHERE doc.name IN ({string.Join(", ", queueParams)}) " +
-			               "AND (NOT IS_DEFINED(doc.fetched_at) OR doc.fetched_at < @timeout) ORDER BY doc.name ASC, doc.created_on ASC";
 
-			QueryDefinition sql = new(query);
+			QueryDefinition sql = new($"SELECT TOP 1 * FROM doc WHERE doc.name IN ({string.Join(", ", queueParams)}) " +
+			                          "AND (NOT IS_DEFINED(doc.fetched_at) OR doc.fetched_at < @timeout) ORDER BY doc.name ASC, doc.created_on ASC");
 
 			for (int index = 0; index < queues.Length; index++)
 			{
@@ -60,13 +59,7 @@ public class JobQueue : IPersistentJobQueue
 					int invisibilityTimeoutEpoch = DateTime.UtcNow.Add(invisibilityTimeout.Negate()).ToEpoch();
 					sql.WithParameter("@timeout", invisibilityTimeoutEpoch);
 
-					QueryRequestOptions queryRequestOptions = new()
-					{
-						PartitionKey = partitionKey,
-						MaxItemCount = 1
-					};
-
-					Documents.Queue? data = storage.Container.GetItemQueryIterator<Documents.Queue>(sql, requestOptions: queryRequestOptions)
+					Documents.Queue? data = storage.Container.GetItemQueryIterator<Documents.Queue>(sql, requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
 						.ToQueryResult()
 						.FirstOrDefault();
 
