@@ -18,7 +18,7 @@ namespace Hangfire.Azure
         private readonly ILog logger = LogProvider.For<ExpirationManager>();
         private const string DISTRIBUTED_LOCK_KEY = "locks:expiration:manager";
         private readonly TimeSpan defaultLockTimeout;
-        private readonly DocumentTypes[] documents = { DocumentTypes.Lock, DocumentTypes.Job, DocumentTypes.List, DocumentTypes.Set, DocumentTypes.Hash, DocumentTypes.Counter };
+        private readonly DocumentTypes[] documents = { DocumentTypes.Lock, DocumentTypes.Job, DocumentTypes.List, DocumentTypes.Set, DocumentTypes.Hash, DocumentTypes.Counter, DocumentTypes.State };
         private readonly CosmosDbStorage storage;
 
         public ExpirationManager(CosmosDbStorage storage)

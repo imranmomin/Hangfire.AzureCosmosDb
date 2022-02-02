@@ -126,12 +126,17 @@ namespace Hangfire.Azure
         {
             if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
             if (expireIn.Duration() != expireIn) throw new ArgumentException(@"The `expireIn` value must be positive.", nameof(expireIn));
+            int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
 
             QueueCommand(() =>
             {
-                int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
-                string query = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Job} AND doc.id = '{jobId}'";
-                connection.Storage.Container.ExecuteExpireDocuments(query, epoch, new PartitionKey((int)DocumentTypes.Job));
+                string queryJobs = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.Job} AND doc.id = '{jobId}'";
+                connection.Storage.Container.ExecuteExpireDocuments(queryJobs, epoch, new PartitionKey((int)DocumentTypes.Job));
+            });
+            QueueCommand(() =>
+            {
+                string queryStates = $"SELECT * FROM doc WHERE doc.type = {(int)DocumentTypes.State} AND doc.job_id = '{jobId}'";
+                connection.Storage.Container.ExecuteExpireDocuments(queryStates, epoch, new PartitionKey((int)DocumentTypes.State));
             });
         }
 
@@ -351,7 +356,7 @@ namespace Hangfire.Azure
 
                 foreach (Hash source in sources)
                 {
-                    Hash hash = hashes.SingleOrDefault(h => h.Field == source.Field);
+                    Hash hash = hashes.FirstOrDefault(h => h.Field == source.Field);
                     if (hash == null)
                     {
                         data.Items.Add(source);
