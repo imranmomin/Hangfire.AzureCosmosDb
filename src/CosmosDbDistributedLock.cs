@@ -98,7 +98,8 @@ public class CosmosDbDistributedLock : IDisposable
 		period = period.TotalSeconds < 1 ? TimeSpan.FromSeconds(1) : period;
 		timer = new Timer(KeepLockAlive, null, period, period);
 
-		logger.Trace($"Acquired lock for [{resource}] for [{timeout.TotalSeconds}] seconds; in [{acquireStart.Elapsed.TotalMilliseconds:#.##}] ms. Keep-alive query will be send every {period.TotalSeconds} seconds");
+		logger.Trace($"Acquired lock for [{resource}] for [{timeout.TotalSeconds}] seconds; in [{acquireStart.Elapsed.TotalMilliseconds:#.##}] ms. " +
+		             $"Keep-alive query will be sent every {period.TotalSeconds} seconds until disposed");
 	}
 
 	/// <summary>

@@ -1181,6 +1181,45 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 	}
 
 	[Fact]
+	public void SetRangeInHash_Handles_DistributedLock()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<Hash> hashes = new()
+		{
+			new Hash { Key = "some-hash", Field = "key1", Value = "value1" }
+		};
+		Data<Hash> data = new(hashes);
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Hash);
+
+		// act
+		IStorageConnection connection = Storage.GetConnection();
+
+		// create a lock and dispose after 5 seconds
+		Task.Run(async () =>
+		{
+			CosmosDbDistributedLock distributedLock = new("locks:set:hash", TimeSpan.FromMinutes(2), Storage);
+			await Task.Delay(5000);
+			distributedLock.Dispose();
+		});
+
+		// lets set the range
+		connection.SetRangeInHash("some-hash", new Dictionary<string, string?> { { "key1", "VALUE-1" } });
+
+		//assert
+		QueryRequestOptions queryRequestOptions = new() { PartitionKey = PartitionKeys.Hash };
+		Dictionary<string, string?> result = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: queryRequestOptions)
+			.Where(x => x.Key == "some-hash")
+			.ToQueryResult()
+			.ToDictionary(x => x.Field, x => x.Value);
+
+		Assert.Single(result);
+		Assert.Equal("VALUE-1", result["key1"]);
+	}
+
+	[Fact]
 	public void GetAllEntriesFromHash_ThrowsAnException_WhenKeyIsNull()
 	{
 		// arrange

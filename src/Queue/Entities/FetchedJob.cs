@@ -31,7 +31,7 @@ public class FetchedJob : IFetchedJob
 
 		TimeSpan keepAliveInterval = TimeSpan.FromSeconds(15);
 		timer = new Timer(KeepAliveJobCallback, data, keepAliveInterval, keepAliveInterval);
-		logger.Trace($"Job [{data.JobId}] will send a Keep-Alive query every [{keepAliveInterval.TotalSeconds}] seconds");
+		logger.Trace($"Job [{data.JobId}] will send a Keep-Alive query every [{keepAliveInterval.TotalSeconds}] seconds until disposed");
 	}
 
 	public string Queue => data.Name;

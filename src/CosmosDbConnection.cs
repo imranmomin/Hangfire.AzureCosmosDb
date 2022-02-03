@@ -9,6 +9,7 @@ using Hangfire.Azure.Documents.Helper;
 using Hangfire.Azure.Helper;
 using Hangfire.Azure.Queue;
 using Hangfire.Common;
+using Hangfire.Logging;
 using Hangfire.Server;
 using Hangfire.Storage;
 using Microsoft.Azure.Cosmos;
@@ -18,6 +19,8 @@ namespace Hangfire.Azure;
 
 public sealed class CosmosDbConnection : JobStorageConnection
 {
+	private readonly ILog logger = LogProvider.For<CosmosDbConnection>();
+
 	public CosmosDbConnection(CosmosDbStorage storage)
 	{
 		Storage = storage ?? throw new ArgumentNullException(nameof(storage));
@@ -284,8 +287,8 @@ public sealed class CosmosDbConnection : JobStorageConnection
 
 		QueryDefinition sql = new QueryDefinition($"SELECT TOP {count} VALUE doc['value'] FROM doc WHERE doc.key = @key AND (doc.score BETWEEN @from AND @to) ORDER BY doc.score")
 			.WithParameter("@key", key)
-			.WithParameter("@from", (int)fromScore)
-			.WithParameter("@to", (int)toScore);
+			.WithParameter("@from", fromScore)
+			.WithParameter("@to", toScore);
 
 		return Storage.Container.GetItemQueryIterator<string>(sql, requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Set })
 			.ToQueryResult()
@@ -380,56 +383,80 @@ public sealed class CosmosDbConnection : JobStorageConnection
 		if (string.IsNullOrWhiteSpace(key)) throw new ArgumentNullException(nameof(key));
 		if (keyValuePairs == null) throw new ArgumentNullException(nameof(keyValuePairs));
 
-		Data<Hash> data = new();
+		const string resource = "locks:set:hash";
+		CosmosDbDistributedLock? distributedLock = null;
+		TimeSpan timeout = TimeSpan.FromSeconds(15);
 
-		PartitionKey partitionKey = new((int)DocumentTypes.Hash);
-		List<Hash> hashes = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
-			.Where(h => h.Key == key)
-			.ToQueryResult()
-			.ToList();
-
-		Hash[] sources = keyValuePairs.Select(k => new Hash
+		while (true)
 		{
-			Key = key,
-			Field = k.Key,
-			Value = k.Value.TryParseToEpoch()
-		}).ToArray();
-
-		foreach (Hash source in sources)
-		{
-			int count = hashes.Count(x => x.Field == source.Field);
-
-			switch (count)
+			try
 			{
-				// if for some reason we find more than 1 document for the same field
-				// lets remove all the documents except one
-				case > 1:
-				{
-					Hash hash = hashes.First(x => x.Field == source.Field);
-					hash.Value = source.Value;
-					data.Items.Add(hash);
+				distributedLock = new CosmosDbDistributedLock(resource, timeout, Storage);
 
-					string query = $"SELECT * FROM doc WHERE doc.key = '{hash.Key}' AND doc.field = '{hash.Field}' AND doc.id != '{hash.Id}'";
-					Storage.Container.ExecuteDeleteDocuments(query, partitionKey);
-					break;
-				}
-				case 1:
+				Data<Hash> data = new();
+				List<Hash> hashes = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Hash })
+					.Where(h => h.Key == key)
+					.ToQueryResult()
+					.ToList();
+
+				// ReSharper disable once PossibleMultipleEnumeration
+				Hash[] sources = keyValuePairs.Select(k => new Hash
 				{
-					Hash hash = hashes.Single(x => x.Field == source.Field);
-					if (string.Equals(hash.Value, source.Value, StringComparison.InvariantCultureIgnoreCase) == false)
+					Key = key,
+					Field = k.Key,
+					Value = k.Value.TryParseToEpoch()
+				}).ToArray();
+
+				foreach (Hash source in sources)
+				{
+					int count = hashes.Count(x => x.Field == source.Field);
+
+					switch (count)
 					{
-						hash.Value = source.Value;
-						data.Items.Add(hash);
+						// if for some reason we find more than 1 document for the same field
+						// lets remove all the documents except one
+						case > 1:
+						{
+							Hash hash = hashes.First(x => x.Field == source.Field);
+							hash.Value = source.Value;
+							data.Items.Add(hash);
+
+							string query = $"SELECT * FROM doc WHERE doc.key = '{hash.Key}' AND doc.field = '{hash.Field}' AND doc.id != '{hash.Id}'";
+							Storage.Container.ExecuteDeleteDocuments(query, PartitionKeys.Hash);
+							break;
+						}
+						case 1:
+						{
+							Hash hash = hashes.Single(x => x.Field == source.Field);
+							if (string.Equals(hash.Value, source.Value, StringComparison.InvariantCultureIgnoreCase) == false)
+							{
+								hash.Value = source.Value;
+								data.Items.Add(hash);
+							}
+							break;
+						}
+						case 0:
+							data.Items.Add(source);
+							break;
 					}
-					break;
 				}
-				case 0:
-					data.Items.Add(source);
-					break;
+
+				Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Hash);
+				break;
+			}
+			catch (CosmosDbDistributedLockException exception) when (exception.Key == resource)
+			{
+				logger.Debug($@"An exception was thrown during acquiring distributed lock on the [{resource}] resource within [{timeout.TotalSeconds}] seconds." +
+				             $@"Counter records were not aggregated. It will be retried in [{timeout.TotalSeconds}] seconds.");
+
+				// sleep
+				Thread.Sleep(timeout);
+			}
+			finally
+			{
+				distributedLock?.Dispose();
 			}
 		}
-
-		Storage.Container.ExecuteUpsertDocuments(data, partitionKey);
 	}
 
 	public override long GetHashCount(string key)
