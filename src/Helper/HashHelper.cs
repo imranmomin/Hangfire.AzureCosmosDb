@@ -4,9 +4,9 @@ using System.Text;
 
 namespace Hangfire.Azure.Helper;
 
-public static class HashHelper
+internal static class HashHelper
 {
-	public static string GenerateHash(this string input)
+	internal static string GenerateHash(this string input)
 	{
 		if (string.IsNullOrWhiteSpace(input)) throw new ArgumentNullException(nameof(input));
 

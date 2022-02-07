@@ -8,7 +8,7 @@ using Microsoft.Azure.Cosmos.Linq;
 
 namespace Hangfire.Azure.Queue;
 
-public class JobQueueMonitoringApi : IPersistentJobQueueMonitoringApi
+internal class JobQueueMonitoringApi : IPersistentJobQueueMonitoringApi
 {
 	private static readonly TimeSpan queuesCacheTimeout = TimeSpan.FromSeconds(5);
 	private readonly object cacheLock = new();

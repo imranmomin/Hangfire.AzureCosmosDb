@@ -7,7 +7,7 @@ using Microsoft.Azure.Cosmos;
 
 namespace Hangfire.Azure.Helper;
 
-public static class ClientHelper
+internal static class ClientHelper
 {
 	/// <summary>
 	///     Creates a document as an asynchronous operation in the Azure Cosmos DB service.
@@ -18,7 +18,7 @@ public static class ClientHelper
 	/// <param name="requestOptions"></param>
 	/// <param name="cancellationToken">(Optional) <see cref="T:System.Threading.CancellationToken" /> representing request cancellation.</param>
 	/// <returns></returns>
-	public static Task<ItemResponse<T>> CreateItemWithRetriesAsync<T>(this Container container, T document, PartitionKey partitionKey, ItemRequestOptions? requestOptions = null, CancellationToken cancellationToken = default) =>
+	internal static Task<ItemResponse<T>> CreateItemWithRetriesAsync<T>(this Container container, T document, PartitionKey partitionKey, ItemRequestOptions? requestOptions = null, CancellationToken cancellationToken = default) =>
 		container.ExecuteWithRetries(x => x.CreateItemAsync(document, partitionKey, requestOptions, cancellationToken));
 
 	/// <summary>
@@ -31,7 +31,7 @@ public static class ClientHelper
 	/// <param name="requestOptions"></param>
 	/// <param name="cancellationToken">(Optional) <see cref="T:System.Threading.CancellationToken" /> representing request cancellation.</param>
 	/// <returns></returns>
-	public static Task<ItemResponse<T>> ReadItemWithRetriesAsync<T>(this Container container, string id, PartitionKey partitionKey, ItemRequestOptions? requestOptions = null, CancellationToken cancellationToken = default) =>
+	internal static Task<ItemResponse<T>> ReadItemWithRetriesAsync<T>(this Container container, string id, PartitionKey partitionKey, ItemRequestOptions? requestOptions = null, CancellationToken cancellationToken = default) =>
 		container.ExecuteWithRetries(x => x.ReadItemAsync<T>(id, partitionKey, requestOptions, cancellationToken));
 
 	/// <summary>
@@ -42,7 +42,7 @@ public static class ClientHelper
 	/// <param name="requestOptions"></param>
 	/// <param name="cancellationToken">(Optional) <see cref="T:System.Threading.CancellationToken" /> representing request cancellation.</param>
 	/// <param name="partitionKey"></param>
-	public static Task<ItemResponse<T>> UpsertItemWithRetriesAsync<T>(this Container container, T document, PartitionKey partitionKey, ItemRequestOptions? requestOptions = null, CancellationToken cancellationToken = default) =>
+	internal static Task<ItemResponse<T>> UpsertItemWithRetriesAsync<T>(this Container container, T document, PartitionKey partitionKey, ItemRequestOptions? requestOptions = null, CancellationToken cancellationToken = default) =>
 		container.ExecuteWithRetries(x => x.UpsertItemAsync(document, partitionKey, requestOptions, cancellationToken));
 
 	/// <summary>
@@ -53,7 +53,7 @@ public static class ClientHelper
 	/// <param name="cancellationToken">(Optional) <see cref="T:System.Threading.CancellationToken" /> representing request cancellation.</param>
 	/// <param name="id"></param>
 	/// <param name="partitionKey"></param>
-	public static Task<ItemResponse<T>> DeleteItemWithRetriesAsync<T>(this Container container, string id, PartitionKey partitionKey, ItemRequestOptions? requestOptions = null, CancellationToken cancellationToken = default) =>
+	internal static Task<ItemResponse<T>> DeleteItemWithRetriesAsync<T>(this Container container, string id, PartitionKey partitionKey, ItemRequestOptions? requestOptions = null, CancellationToken cancellationToken = default) =>
 		container.ExecuteWithRetries(x => x.DeleteItemAsync<T>(id, partitionKey, requestOptions, cancellationToken));
 
 	/// <summary>
@@ -66,7 +66,7 @@ public static class ClientHelper
 	/// <param name="id"></param>
 	/// <param name="partitionKey"></param>
 	/// <returns></returns>
-	public static Task<ItemResponse<T>> PatchItemWithRetriesAsync<T>(this Container container, string id, PartitionKey partitionKey, IReadOnlyList<PatchOperation> patchOperations,
+	internal static Task<ItemResponse<T>> PatchItemWithRetriesAsync<T>(this Container container, string id, PartitionKey partitionKey, IReadOnlyList<PatchOperation> patchOperations,
 		PatchItemRequestOptions? patchItemRequestOptions = null,
 		CancellationToken cancellationToken = default) => container.ExecuteWithRetries(x => x.PatchItemAsync<T>(id, partitionKey, patchOperations, patchItemRequestOptions, cancellationToken));
 

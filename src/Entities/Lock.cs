@@ -5,7 +5,7 @@ using Newtonsoft.Json.Converters;
 // ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents;
 
-public class Lock : DocumentBase
+internal class Lock : DocumentBase
 {
 	[JsonProperty("last_heartbeat")]
 	[JsonConverter(typeof(UnixDateTimeConverter))]

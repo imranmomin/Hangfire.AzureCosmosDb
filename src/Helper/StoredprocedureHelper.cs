@@ -7,10 +7,10 @@ using Microsoft.Azure.Cosmos.Scripts;
 
 namespace Hangfire.Azure.Helper;
 
-public static class StoredprocedureHelper
+internal static class StoredprocedureHelper
 {
 	// ReSharper disable once UnusedMethodReturnValue.Global
-	public static int ExecuteUpsertDocuments<T>(this Container container, Data<T> data, PartitionKey partitionKey, CancellationToken cancellationToken = default)
+	internal static int ExecuteUpsertDocuments<T>(this Container container, Data<T> data, PartitionKey partitionKey, CancellationToken cancellationToken = default)
 	{
 		int affected = 0;
 		Data<T> records = new(data.Items);
@@ -24,7 +24,7 @@ public static class StoredprocedureHelper
 		return affected;
 	}
 
-	public static int ExecuteDeleteDocuments(this Container container, string query, PartitionKey partitionKey, CancellationToken cancellationToken = default)
+	internal static int ExecuteDeleteDocuments(this Container container, string query, PartitionKey partitionKey, CancellationToken cancellationToken = default)
 	{
 		int affected = 0;
 		ProcedureResponse response;
@@ -38,7 +38,7 @@ public static class StoredprocedureHelper
 		return affected;
 	}
 
-	public static void ExecutePersistDocuments(this Container container, string query, PartitionKey partitionKey, CancellationToken cancellationToken = default)
+	internal static void ExecutePersistDocuments(this Container container, string query, PartitionKey partitionKey, CancellationToken cancellationToken = default)
 	{
 		ProcedureResponse response;
 		do
@@ -49,7 +49,7 @@ public static class StoredprocedureHelper
 		} while (response.Continuation);
 	}
 
-	public static void ExecuteExpireDocuments(this Container container, string query, int epoch, PartitionKey partitionKey, CancellationToken cancellationToken = default)
+	internal static void ExecuteExpireDocuments(this Container container, string query, int epoch, PartitionKey partitionKey, CancellationToken cancellationToken = default)
 	{
 		ProcedureResponse response;
 		do

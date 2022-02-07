@@ -7,7 +7,7 @@ using Newtonsoft.Json.Converters;
 // ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents;
 
-public abstract class DocumentBase
+internal abstract class DocumentBase
 {
 	[JsonProperty("id")]
 	public string Id { get; set; } = Guid.NewGuid().ToString();
@@ -29,7 +29,7 @@ public abstract class DocumentBase
 	public string? ETag { get; set; }
 }
 
-public enum DocumentTypes
+internal enum DocumentTypes
 {
 	Server = 1,
 	Job = 2,
@@ -42,7 +42,7 @@ public enum DocumentTypes
 	Lock = 9
 }
 
-public class ProcedureResponse
+internal class ProcedureResponse
 {
 	[JsonProperty("affected")]
 	public int Affected { get; set; }
@@ -51,7 +51,7 @@ public class ProcedureResponse
 	public bool Continuation { get; set; }
 }
 
-public class Data<T>
+internal class Data<T>
 {
 	public Data()
 	{
@@ -66,7 +66,7 @@ public class Data<T>
 	[JsonProperty("items")] public List<T> Items { get; set; }
 }
 
-public static class PartitionKeys
+internal static class PartitionKeys
 {
 	public static PartitionKey Server { get; } = new((int)DocumentTypes.Server);
 	public static PartitionKey Job { get; } = new((int)DocumentTypes.Job);

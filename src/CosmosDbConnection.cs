@@ -17,7 +17,7 @@ using Job = Hangfire.Common.Job;
 
 namespace Hangfire.Azure;
 
-public sealed class CosmosDbConnection : JobStorageConnection
+internal sealed class CosmosDbConnection : JobStorageConnection
 {
 	private readonly ILog logger = LogProvider.For<CosmosDbConnection>();
 

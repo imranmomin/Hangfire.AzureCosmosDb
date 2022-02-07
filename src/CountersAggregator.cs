@@ -13,7 +13,7 @@ using Microsoft.Azure.Cosmos;
 
 namespace Hangfire.Azure;
 #pragma warning disable 618
-public class CountersAggregator : IServerComponent
+internal class CountersAggregator : IServerComponent
 #pragma warning restore 618
 {
 	private const string DISTRIBUTED_LOCK_KEY = "locks:counters:aggregator";

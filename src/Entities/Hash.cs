@@ -3,7 +3,7 @@
 // ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents;
 
-public class Hash : DocumentBase
+internal class Hash : DocumentBase
 {
 	[JsonProperty("key")]
 	public string Key { get; set; } = null!;

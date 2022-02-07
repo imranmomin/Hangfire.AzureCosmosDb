@@ -5,7 +5,7 @@ using Newtonsoft.Json;
 
 namespace Hangfire.Azure;
 
-public class CosmosJsonSerializer : CosmosSerializer
+internal class CosmosJsonSerializer : CosmosSerializer
 {
 	private static readonly Encoding defaultEncoding = new UTF8Encoding(false, true);
 	private readonly JsonSerializer serializer;

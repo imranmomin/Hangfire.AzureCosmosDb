@@ -11,7 +11,7 @@ using Microsoft.Azure.Cosmos;
 
 namespace Hangfire.Azure;
 
-public class CosmosDbDistributedLock : IDisposable
+internal class CosmosDbDistributedLock : IDisposable
 {
 	private readonly ILog logger = LogProvider.For<CosmosDbDistributedLock>();
 	private readonly PartitionKey partitionKey = new((int)DocumentTypes.Lock);

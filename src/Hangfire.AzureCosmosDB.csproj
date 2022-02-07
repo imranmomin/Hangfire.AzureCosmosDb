@@ -57,4 +57,9 @@
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.1"/>
 		<PackageReference Include="System.ValueTuple" Version="4.5.0"/>
 	</ItemGroup>
+	<ItemGroup>
+		<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+			<_Parameter1>Hangfire.AzureCosmosDB.Tests</_Parameter1>
+		</AssemblyAttribute>
+	</ItemGroup>
 </Project>

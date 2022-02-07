@@ -5,7 +5,7 @@ using Newtonsoft.Json.Converters;
 // ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents;
 
-public class Queue : DocumentBase
+internal class Queue : DocumentBase
 {
 	[JsonProperty("name")]
 	public string Name { get; set; } = null!;

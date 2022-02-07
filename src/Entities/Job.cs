@@ -6,7 +6,7 @@ using Newtonsoft.Json.Converters;
 // ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents;
 
-public class Job : DocumentBase
+internal class Job : DocumentBase
 {
 	[JsonProperty("data")]
 	public InvocationData InvocationData { get; set; } = null!;

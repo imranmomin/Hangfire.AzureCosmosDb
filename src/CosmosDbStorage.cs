@@ -23,11 +23,11 @@ namespace Hangfire.Azure;
 ///     CosmosDbStorage extend the storage option for Hangfire.
 /// </summary>
 [SuppressMessage("Microsoft.Design", "CA1001:TypesThatOwnDisposableFieldsShouldBeDisposable")]
-public sealed class CosmosDbStorage : JobStorage, IDisposable
+internal sealed class CosmosDbStorage : JobStorage, IDisposable
 {
 	private readonly string containerName;
-
 	private readonly string databaseName;
+	private readonly ILog logger = LogProvider.For<CosmosDbStorage>();
 
 	private readonly JsonSerializerSettings settings = new()
 	{
@@ -65,13 +65,13 @@ public sealed class CosmosDbStorage : JobStorage, IDisposable
 		Client = new CosmosClient(url, authSecret, options);
 	}
 
-	public PersistentJobQueueProviderCollection QueueProviders { get; }
+	internal PersistentJobQueueProviderCollection QueueProviders { get; }
 
-	internal CosmosDbStorageOptions StorageOptions { get; }
+	internal CosmosDbStorageOptions StorageOptions { get; set; }
 
 	private CosmosClient Client { get; }
 
-	public Container Container { get; private set; } = null!;
+	internal Container Container { get; private set; } = null!;
 
 	public void Dispose()
 	{
@@ -159,8 +159,6 @@ public sealed class CosmosDbStorage : JobStorage, IDisposable
 
 	private async Task InitializeAsync(CancellationToken cancellationToken = default)
 	{
-		ILog logger = LogProvider.For<CosmosDbStorage>();
-
 		// create database
 		logger.Info($"Creating database : [{databaseName}]");
 		DatabaseResponse databaseResponse = await Client.CreateDatabaseIfNotExistsAsync(databaseName, cancellationToken: cancellationToken);
@@ -199,8 +197,8 @@ public sealed class CosmosDbStorage : JobStorage, IDisposable
 			// if the stream is null skip and continue to next resource
 			if (stream == null) continue;
 
-			using MemoryStream memoryStream = new();
-			await stream.CopyToAsync(memoryStream);
+			await using MemoryStream memoryStream = new();
+			await stream.CopyToAsync(memoryStream, cancellationToken);
 
 			StoredProcedureProperties sp = new()
 			{

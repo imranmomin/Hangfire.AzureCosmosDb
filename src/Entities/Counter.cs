@@ -3,7 +3,7 @@
 // ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents;
 
-public class Counter : DocumentBase
+internal class Counter : DocumentBase
 {
 	[JsonProperty("key")]
 	public string Key { get; set; } = null!;
@@ -17,7 +17,7 @@ public class Counter : DocumentBase
 	public override DocumentTypes DocumentType => DocumentTypes.Counter;
 }
 
-public enum CounterTypes
+internal enum CounterTypes
 {
 	Raw = 1,
 	Aggregate = 2

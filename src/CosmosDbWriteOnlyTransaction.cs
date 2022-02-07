@@ -12,7 +12,7 @@ using Microsoft.Azure.Cosmos;
 
 namespace Hangfire.Azure;
 
-public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
+internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 {
 	private readonly List<Action> commands = new();
 	private readonly CosmosDbConnection connection;
@@ -24,7 +24,10 @@ public class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 	private void QueueCommand(Action command) => commands.Add(command);
 
-	public override void Commit() => commands.ForEach(command => command());
+	public override void Commit()
+	{
+		commands.ForEach(command => command());
+	}
 
 	public override void Dispose() { }
 

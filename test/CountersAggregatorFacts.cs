@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Helper;
 using Hangfire.Azure.Tests.Fixtures;
@@ -119,8 +120,46 @@ public class CountersAggregatorFacts : IClassFixture<ContainerFixture>
 		Data<Counter> data = new(counters);
 		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Counter);
 
+		// add a lock
 		const string lockKey = "locks:counters:aggregator";
 		CosmosDbDistributedLock distributedLock = new(lockKey, TimeSpan.FromSeconds(2), Storage);
+
+		Task.Run(async () =>
+		{
+			await Task.Delay(5000);
+			distributedLock.Dispose();
+		});
+
+		// get the aggregator
+		CountersAggregator aggregator = new(Storage);
+		CancellationTokenSource cts = new();
+
+		// act
+		aggregator.Execute(cts.Token);
+
+		// assert
+		QueryRequestOptions queryRequestOptions = new() { PartitionKey = PartitionKeys.Counter };
+		List<Counter> results = Storage.Container.GetItemLinqQueryable<Counter>(requestOptions: queryRequestOptions)
+			.ToQueryResult()
+			.ToList();
+
+		Assert.Equal(3, results.Count);
+	}
+
+	[Fact]
+	public void CountersAggregatorExecutesProperly_WhenRawCounterAreInLargeNumbers()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		Storage.StorageOptions.CountersAggregateMaxItemCount = 100;
+
+		// arrange
+		List<Counter> counters = Enumerable.Range(0, 1000)
+			.Select(_ => new Counter { Key = "key", Value = 1, ExpireOn = DateTime.UtcNow.AddHours(1), Type = CounterTypes.Raw })
+			.ToList();
+		Data<Counter> data = new(counters);
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Counter);
 
 		CountersAggregator aggregator = new(Storage);
 		CancellationTokenSource cts = new();
@@ -133,13 +172,15 @@ public class CountersAggregatorFacts : IClassFixture<ContainerFixture>
 		{
 			PartitionKey = PartitionKeys.Counter
 		};
-		List<Counter> results = Storage.Container.GetItemLinqQueryable<Counter>(requestOptions: queryRequestOptions)
+		Counter counter = Storage.Container.GetItemLinqQueryable<Counter>(requestOptions: queryRequestOptions)
+			.Where(x => x.Type == CounterTypes.Aggregate)
 			.ToQueryResult()
-			.ToList();
+			.Single();
 
-		Assert.Equal(3, results.Count);
+		Assert.Equal(1000, counter.Value);
+		Assert.Equal(CounterTypes.Aggregate, counter.Type);
 
-		// clean up
-		distributedLock.Dispose();
+		// reset
+		Storage.StorageOptions.CountersAggregateMaxItemCount = 1;
 	}
 }

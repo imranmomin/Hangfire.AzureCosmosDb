@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace Hangfire.Azure.Queue;
 
-public sealed class PersistentJobQueueProviderCollection : IEnumerable<IPersistentJobQueueProvider>
+internal sealed class PersistentJobQueueProviderCollection : IEnumerable<IPersistentJobQueueProvider>
 {
 	private readonly IPersistentJobQueueProvider provider;
 	private readonly List<IPersistentJobQueueProvider> providers = new();

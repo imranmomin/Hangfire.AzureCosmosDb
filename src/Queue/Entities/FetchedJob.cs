@@ -12,7 +12,7 @@ using Microsoft.Azure.Cosmos;
 // ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Queue;
 
-public class FetchedJob : IFetchedJob
+internal class FetchedJob : IFetchedJob
 {
 	private readonly ILog logger = LogProvider.GetLogger(typeof(FetchedJob));
 	private readonly PartitionKey partitionKey = new((int)DocumentTypes.Queue);

@@ -5,7 +5,7 @@ using Newtonsoft.Json.Converters;
 // ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents;
 
-public class List : DocumentBase
+internal class List : DocumentBase
 {
 	[JsonProperty("key")]
 	public string Key { get; set; } = null!;

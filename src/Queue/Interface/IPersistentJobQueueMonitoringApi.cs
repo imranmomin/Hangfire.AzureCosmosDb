@@ -5,7 +5,7 @@
 // ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Queue;
 
-public interface IPersistentJobQueueMonitoringApi
+internal interface IPersistentJobQueueMonitoringApi
 {
 	IEnumerable<string> GetQueues();
 	IEnumerable<string> GetEnqueuedJobIds(string queue, int from, int perPage);

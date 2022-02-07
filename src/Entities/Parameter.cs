@@ -3,7 +3,7 @@
 // ReSharper disable once CheckNamespace
 namespace Hangfire.Azure.Documents;
 
-public class Parameter
+internal class Parameter
 {
 	[JsonProperty("name")]
 	public string Name { get; set; } = null!;

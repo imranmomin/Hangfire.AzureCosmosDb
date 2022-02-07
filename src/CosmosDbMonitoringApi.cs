@@ -16,7 +16,7 @@ using Job = Hangfire.Common.Job;
 
 namespace Hangfire.Azure;
 
-public sealed class CosmosDbMonitoringApi : IMonitoringApi
+internal sealed class CosmosDbMonitoringApi : IMonitoringApi
 {
 	private static readonly TimeSpan cacheTimeout = TimeSpan.FromSeconds(2);
 	private static DateTime cacheUpdated;

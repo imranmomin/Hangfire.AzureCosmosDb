@@ -12,7 +12,7 @@ using Microsoft.Azure.Cosmos;
 
 namespace Hangfire.Azure.Queue;
 
-public class JobQueue : IPersistentJobQueue
+internal class JobQueue : IPersistentJobQueue
 {
 	private const string DISTRIBUTED_LOCK_KEY = "locks:job:dequeue";
 	private readonly TimeSpan defaultLockTimeout;

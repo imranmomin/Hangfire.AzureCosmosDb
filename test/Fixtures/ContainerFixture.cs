@@ -1,6 +1,7 @@
 ﻿using System;
 using Hangfire.Azure.Helper;
 using Hangfire.Logging;
+using Hangfire.Logging.LogProviders;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
 using Xunit.Abstractions;
@@ -11,10 +12,12 @@ namespace Hangfire.Azure.Tests.Fixtures;
 public class ContainerFixture : IDisposable
 {
 	private bool disposed;
-	public CosmosDbStorage Storage { get; }
+	internal CosmosDbStorage Storage { get; }
 
 	public ContainerFixture()
 	{
+		LogProvider.SetCurrentLogProvider(null);
+
 		IConfiguration configuration = new ConfigurationBuilder()
 			.AddJsonFile("appsettings.json", false, false)
 			.AddEnvironmentVariables()
@@ -29,7 +32,6 @@ public class ContainerFixture : IDisposable
 		CosmosDbStorageOptions option = new() { CountersAggregateInterval = TimeSpan.Zero, ExpirationCheckInterval = TimeSpan.Zero, QueuePollInterval = TimeSpan.Zero, CountersAggregateMaxItemCount = 1 };
 
 		Storage = CosmosDbStorage.Create(url, secret, database, container, storageOptions: option);
-		Clean();
 	}
 
 	public void SetupLogger(ITestOutputHelper testOutputHelper) => LogProvider.SetCurrentLogProvider(new TestLogger(testOutputHelper));
@@ -66,7 +68,7 @@ public class ContainerFixture : IDisposable
 
 	private class TestLog : ILog
 	{
-		private readonly ITestOutputHelper testOutputHelper;
+		private readonly ITestOutputHelper? testOutputHelper;
 
 		public TestLog(ITestOutputHelper testOutputHelper)
 		{
@@ -75,7 +77,7 @@ public class ContainerFixture : IDisposable
 
 		public bool Log(LogLevel logLevel, Func<string>? messageFunc, Exception? exception = null)
 		{
-			if (messageFunc != null) testOutputHelper.WriteLine("[{0}] - [{1}] - {2} {3}", DateTime.UtcNow, logLevel, messageFunc(), exception?.Message);
+			if (messageFunc != null && testOutputHelper != null) testOutputHelper.WriteLine("[{0}] - [{1}] - {2} {3}", DateTime.UtcNow, logLevel, messageFunc(), exception?.Message);
 			return true;
 		}
 	}
