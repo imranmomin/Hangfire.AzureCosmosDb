@@ -124,7 +124,7 @@ internal class CosmosDbDistributedLock : IDisposable
 		// set the timer for the KeepLockAlive callbacks
 		TimeSpan period = TimeSpan.FromSeconds(ttl).Divide(2);
 		period = period.TotalSeconds < 1 ? TimeSpan.FromSeconds(1) : period;
-		timer = new Timer(KeepLockAlive, @lock, period, period);
+		timer = new Timer(KeepLockAlive, @lock, TimeSpan.FromSeconds(1), period);
 
 		// add the resource to the local 
 		acquiredLocks.Value.Add(resource, 1);
