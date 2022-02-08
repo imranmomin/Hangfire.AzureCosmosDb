@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net;
 using System.Threading;
@@ -14,45 +15,69 @@ namespace Hangfire.Azure;
 internal class CosmosDbDistributedLock : IDisposable
 {
 	private readonly ILog logger = LogProvider.For<CosmosDbDistributedLock>();
-	private readonly PartitionKey partitionKey = new((int)DocumentTypes.Lock);
 	private readonly string resource;
 	private readonly CosmosDbStorage storage;
 	private bool disposed;
+	private static readonly ThreadLocal<Dictionary<string, int>> acquiredLocks = new(() => new Dictionary<string, int>());
+	private readonly object syncLock = new();
 
 	private Lock? @lock;
 	private Timer? timer;
 
 	public CosmosDbDistributedLock(string resource, TimeSpan timeout, CosmosDbStorage storage)
 	{
-		this.resource = resource;
-		this.storage = storage;
+		this.resource = string.IsNullOrWhiteSpace(resource) ? throw new ArgumentNullException(nameof(resource)) : resource;
+		this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
 		Acquire(timeout);
 	}
 
 	public void Dispose()
 	{
 		if (disposed) return;
-		if (@lock == null) return;
+		disposed = true;
 
-		try
+		if (acquiredLocks.Value.ContainsKey(resource) == false) return;
+		acquiredLocks.Value[resource] -= 1;
+		if (acquiredLocks.Value[resource] > 0) return;
+
+		lock (syncLock)
 		{
-			Task task = storage.Container.DeleteItemWithRetriesAsync<Lock>(@lock.Id, partitionKey);
-			task.Wait();
-		}
-		catch (Exception exception)
-		{
-			logger.ErrorException($"Unable to release the lock for [{resource}]", exception);
-		}
-		finally
-		{
-			disposed = true;
-			timer?.Dispose();
-			logger.Trace($"Lock released for [{resource}]");
+			try
+			{
+				Task task = storage.Container.DeleteItemWithRetriesAsync<Lock>(resource, PartitionKeys.Lock);
+				task.Wait();
+			}
+			catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
+			{
+				logger.Trace($"Unable to release the lock for resource [{resource}]. Status - 404 Not Found");
+			}
+			catch (Exception exception)
+			{
+				logger.ErrorException($"Unable to release the lock for [{resource}]", exception);
+			}
+			finally
+			{
+				acquiredLocks.Value.Remove(resource);
+				timer?.Dispose();
+				@lock = null;
+				logger.Trace($"Lock released for [{resource}]");
+			}
 		}
 	}
 
 	private void Acquire(TimeSpan timeout)
 	{
+		lock (syncLock)
+		{
+			if (acquiredLocks.Value.ContainsKey(resource))
+			{
+				logger.Trace($"Lock for [{resource}] already exists from the local thread. Will use the same lock");
+
+				acquiredLocks.Value[resource] += 1;
+				return;
+			}
+		}
+
 		logger.Trace($"Trying to acquire lock for [{resource}] within [{timeout.TotalSeconds}] seconds");
 
 		Stopwatch acquireStart = new();
@@ -67,18 +92,21 @@ internal class CosmosDbDistributedLock : IDisposable
 			Lock data = new()
 			{
 				Id = resource,
-				ExpireOn = DateTime.UtcNow.Add(timeout),
 				LastHeartBeat = DateTime.UtcNow,
 				TimeToLive = (int)ttl
 			};
 
 			try
 			{
-				Task<ItemResponse<Lock>> createTask = storage.Container.CreateItemWithRetriesAsync(data, partitionKey);
+				Task<ItemResponse<Lock>> createTask = storage.Container.CreateItemWithRetriesAsync(data, PartitionKeys.Lock);
 				createTask.Wait();
 
 				@lock = createTask.Result.Resource;
 				break;
+			}
+			catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.Conflict })
+			{
+				logger.Trace($"Unable to create a lock for resource [{resource}]. Status - 409 Conflict");
 			}
 			catch (Exception ex)
 			{
@@ -96,7 +124,10 @@ internal class CosmosDbDistributedLock : IDisposable
 		// set the timer for the KeepLockAlive callbacks
 		TimeSpan period = TimeSpan.FromSeconds(ttl).Divide(2);
 		period = period.TotalSeconds < 1 ? TimeSpan.FromSeconds(1) : period;
-		timer = new Timer(KeepLockAlive, null, period, period);
+		timer = new Timer(KeepLockAlive, @lock, period, period);
+
+		// add the resource to the local 
+		acquiredLocks.Value.Add(resource, 1);
 
 		logger.Trace($"Acquired lock for [{resource}] for [{timeout.TotalSeconds}] seconds; in [{acquireStart.Elapsed.TotalMilliseconds:#.##}] ms. " +
 		             $"Keep-alive query will be sent every {period.TotalSeconds} seconds until disposed");
@@ -107,37 +138,41 @@ internal class CosmosDbDistributedLock : IDisposable
 	/// </summary>
 	private void KeepLockAlive(object data)
 	{
-		if (@lock == null) return;
 		if (disposed) return;
 
-		try
+		lock (syncLock)
 		{
-			logger.Trace($"Preparing the Keep-alive query for lock: [{@lock.Id}]");
+			if (data is not Lock temp) return;
 
-			PatchOperation[] patchOperations =
+			try
 			{
-				PatchOperation.Set("/last_heartbeat", DateTime.UtcNow.ToEpoch())
-			};
+				logger.Trace($"Preparing the Keep-alive query for lock: [{temp.Id}]");
 
-			PatchItemRequestOptions patchItemRequestOptions = new()
+				PatchOperation[] patchOperations =
+				{
+					PatchOperation.Set("/last_heartbeat", DateTime.UtcNow.ToEpoch())
+				};
+
+				PatchItemRequestOptions patchItemRequestOptions = new()
+				{
+					IfMatchEtag = temp.ETag
+				};
+
+				Task<ItemResponse<Lock>> task = storage.Container.PatchItemWithRetriesAsync<Lock>(temp.Id, PartitionKeys.Lock, patchOperations, patchItemRequestOptions);
+				task.Wait();
+
+				@lock = task.Result;
+
+				logger.Trace($"Keep-alive query for lock: [{temp.Id}] sent");
+			}
+			catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
 			{
-				IfMatchEtag = @lock.ETag
-			};
-
-			Task<ItemResponse<Lock>> task = storage.Container.PatchItemWithRetriesAsync<Lock>(@lock.Id, partitionKey, patchOperations, patchItemRequestOptions);
-			task.Wait();
-
-			@lock = task.Result;
-
-			logger.Trace($"Keep-alive query for lock: [{@lock.Id}] sent");
-		}
-		catch (AggregateException aggregateException) when (aggregateException.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
-		{
-			/* ignore */
-		}
-		catch (Exception ex)
-		{
-			logger.DebugException($"Unable to execute keep-alive query for the lock: [{@lock.Id}]", ex);
+				/* ignore */
+			}
+			catch (Exception ex)
+			{
+				logger.DebugException($"Unable to execute keep-alive query for the lock: [{temp.Id}]", ex);
+			}
 		}
 	}
 }

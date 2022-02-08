@@ -139,7 +139,7 @@ internal class CountersAggregator : IServerComponent
 		}
 		catch (CosmosDbDistributedLockException exception) when (exception.Key == DISTRIBUTED_LOCK_KEY)
 		{
-			logger.Debug($@"An exception was thrown during acquiring distributed lock on the [{DISTRIBUTED_LOCK_KEY}] resource within [{storage.StorageOptions.CountersAggregateInterval.TotalSeconds}] seconds." +
+			logger.Debug($@"An exception was thrown during acquiring distributed lock on the [{DISTRIBUTED_LOCK_KEY}] resource within [{storage.StorageOptions.CountersAggregateInterval.TotalSeconds}] seconds. " +
 			             $@"Counter records were not aggregated. It will be retried in [{storage.StorageOptions.CountersAggregateInterval.TotalSeconds}] seconds.");
 		}
 		finally

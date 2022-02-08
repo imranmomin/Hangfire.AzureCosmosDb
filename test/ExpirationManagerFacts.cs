@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Helper;
 using Hangfire.Azure.Tests.Fixtures;
@@ -341,39 +342,6 @@ public class ExpirationManagerFacts : IClassFixture<ContainerFixture>
 	}
 
 	[Fact]
-	public void Execute_Processes_LockTable()
-	{
-		// clean
-		ContainerFixture.Clean();
-
-		// arrange
-		List<Lock> lists = new()
-		{
-			new Lock { ExpireOn = DateTime.UtcNow.AddMonths(-1) },
-			new Lock { ExpireOn = DateTime.UtcNow.AddMonths(-1) }
-		};
-		Data<Lock> data = new(lists);
-		Storage.Container.ExecuteUpsertDocuments(data, new PartitionKey((int)DocumentTypes.Lock));
-
-		ExpirationManager manager = new(Storage);
-		CancellationTokenSource cts = new();
-
-		// act
-		manager.Execute(cts.Token);
-
-		// assert
-		QueryRequestOptions queryRequestOptions = new()
-		{
-			PartitionKey = new PartitionKey((int)DocumentTypes.Lock)
-		};
-		int result = Storage.Container.GetItemLinqQueryable<Lock>(requestOptions: queryRequestOptions)
-			.ToQueryResult()
-			.Count();
-
-		Assert.Equal(0, result);
-	}
-
-	[Fact]
 	public void Execute_HandlesLockException_WhenAggregateCounterExists()
 	{
 		// clean
@@ -390,7 +358,8 @@ public class ExpirationManagerFacts : IClassFixture<ContainerFixture>
 		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Counter);
 
 		const string lockKey = "locks:expiration:manager";
-		CosmosDbDistributedLock distributedLock = new(lockKey, TimeSpan.FromSeconds(2), Storage);
+		Task<ItemResponse<Lock>> task = Storage.Container.CreateItemWithRetriesAsync(new Lock { Id = lockKey, TimeToLive = (int)TimeSpan.FromMinutes(1).TotalSeconds }, PartitionKeys.Lock);
+		task.Wait();
 
 		ExpirationManager manager = new(Storage);
 		CancellationTokenSource cts = new();
@@ -399,17 +368,11 @@ public class ExpirationManagerFacts : IClassFixture<ContainerFixture>
 		manager.Execute(cts.Token);
 
 		// assert
-		QueryRequestOptions queryRequestOptions = new()
-		{
-			PartitionKey = PartitionKeys.Counter
-		};
+		QueryRequestOptions queryRequestOptions = new() { PartitionKey = PartitionKeys.Counter };
 		int result = Storage.Container.GetItemLinqQueryable<Counter>(requestOptions: queryRequestOptions)
 			.ToQueryResult()
 			.Count();
 
 		Assert.Equal(3, result);
-
-		// clean up
-		distributedLock.Dispose();
 	}
 }

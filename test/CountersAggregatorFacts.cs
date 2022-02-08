@@ -122,13 +122,8 @@ public class CountersAggregatorFacts : IClassFixture<ContainerFixture>
 
 		// add a lock
 		const string lockKey = "locks:counters:aggregator";
-		CosmosDbDistributedLock distributedLock = new(lockKey, TimeSpan.FromSeconds(2), Storage);
-
-		Task.Run(async () =>
-		{
-			await Task.Delay(5000);
-			distributedLock.Dispose();
-		});
+		Task<ItemResponse<Lock>> task = Storage.Container.CreateItemWithRetriesAsync(new Lock { Id = lockKey, TimeToLive = (int)TimeSpan.FromMinutes(1).TotalSeconds }, PartitionKeys.Lock);
+		task.Wait();
 
 		// get the aggregator
 		CountersAggregator aggregator = new(Storage);

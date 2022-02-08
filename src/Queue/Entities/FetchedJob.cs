@@ -94,7 +94,7 @@ internal class FetchedJob : IFetchedJob
 
 				data = task.Result;
 			}
-			catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+			catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
 			{
 				/* ignore */
 			}

@@ -76,4 +76,5 @@ internal static class PartitionKeys
 	public static PartitionKey Hash { get; } = new((int)DocumentTypes.Hash);
 	public static PartitionKey List { get; } = new((int)DocumentTypes.List);
 	public static PartitionKey Queue { get; } = new((int)DocumentTypes.Queue);
+	public static PartitionKey Lock { get; } = new((int)DocumentTypes.Lock);
 }

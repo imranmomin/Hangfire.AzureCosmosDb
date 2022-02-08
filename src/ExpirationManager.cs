@@ -14,7 +14,7 @@ internal class ExpirationManager : IServerComponent
 #pragma warning restore 618
 {
 	private const string DISTRIBUTED_LOCK_KEY = "locks:expiration:manager";
-	private readonly DocumentTypes[] documents = { DocumentTypes.Lock, DocumentTypes.Job, DocumentTypes.List, DocumentTypes.Set, DocumentTypes.Hash, DocumentTypes.Counter, DocumentTypes.State };
+	private readonly DocumentTypes[] documents = { DocumentTypes.Job, DocumentTypes.List, DocumentTypes.Set, DocumentTypes.Hash, DocumentTypes.Counter, DocumentTypes.State };
 	private readonly ILog logger = LogProvider.For<ExpirationManager>();
 	private readonly CosmosDbStorage storage;
 
@@ -54,7 +54,7 @@ internal class ExpirationManager : IServerComponent
 		}
 		catch (CosmosDbDistributedLockException exception) when (exception.Key == DISTRIBUTED_LOCK_KEY)
 		{
-			logger.Debug($@"An exception was thrown during acquiring distributed lock on the [{DISTRIBUTED_LOCK_KEY}] resource within [{storage.StorageOptions.ExpirationCheckInterval.TotalSeconds}] seconds." +
+			logger.Debug($@"An exception was thrown during acquiring distributed lock on the [{DISTRIBUTED_LOCK_KEY}] resource within [{storage.StorageOptions.ExpirationCheckInterval.TotalSeconds}] seconds. " +
 			             $@"Outdated records were not removed. It will be retried in [{storage.StorageOptions.ExpirationCheckInterval.TotalSeconds}] seconds.");
 		}
 		finally
