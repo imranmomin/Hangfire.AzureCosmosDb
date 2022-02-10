@@ -29,4 +29,6 @@ public class CosmosDbStorageOptions
 	///		Gets or sets the max item count to aggregate the counters. Default value 100
 	/// </summary>
 	public int CountersAggregateMaxItemCount { get; set; } = 100;
+
+	internal TimeSpan TransactionalLockTimeout { get; set; } = TimeSpan.FromSeconds(30);
 }

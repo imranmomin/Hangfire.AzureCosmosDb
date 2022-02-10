@@ -56,7 +56,7 @@ internal class CountersAggregator : IServerComponent
 				sql.WithParameter("@counterType", (int)CounterTypes.Raw);
 
 				int completed = 0;
-				while (completed < total)
+				do
 				{
 					// check if the token was cancelled
 					cancellationToken.ThrowIfCancellationRequested();
@@ -132,7 +132,8 @@ internal class CountersAggregator : IServerComponent
 						int deleted = storage.Container.ExecuteDeleteDocuments(query, partitionKey);
 						completed += deleted;
 					}
-				}
+
+				} while (completed < total);
 
 				logger.Trace($"Total [{completed}] records from the [Counter] table were aggregated.");
 			}

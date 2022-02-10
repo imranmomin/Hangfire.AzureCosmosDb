@@ -76,10 +76,14 @@ internal static class ClientHelper
 	private static async Task<T> ExecuteWithRetries<T>(this Container container, Func<Container, Task<T>> function)
 	{
 		ILog logger = LogProvider.GetCurrentClassLogger();
+		Exception? exception = null;
+		int retry = 0;
+		bool complete;
 
-		while (true)
+		do
 		{
 			TimeSpan? timeSpan = null;
+			complete = true;
 
 			try
 			{
@@ -96,6 +100,12 @@ internal static class ClientHelper
 				timeSpan = de.RetryAfter;
 				logger.ErrorException("Status [429] received", ex);
 			}
+			catch (Exception ex)
+			{
+				exception = ex;
+				retry += 1;
+				complete = false;
+			}
 			finally
 			{
 				if (timeSpan.HasValue)
@@ -104,6 +114,9 @@ internal static class ClientHelper
 					await Task.Delay(timeSpan.Value);
 				}
 			}
-		}
+
+		} while (retry <= 3 && complete == false);
+
+		return await Task.FromException<T>(exception!);
 	}
 }

@@ -504,6 +504,30 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 	}
 
 	[Fact]
+	public void SetParameter_HandlesLockException_And_Retries()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		IStorageConnection connection = Storage.GetConnection();
+		Job job = Job.FromExpression(() => SampleMethod("wrong"));
+		Dictionary<string, string> parameters = new();
+		string? id = connection.CreateExpiredJob(job, parameters, DateTime.UtcNow, TimeSpan.Zero);
+
+		const string lockKey = "locks:job:update";
+		Task<ItemResponse<Lock>> task = Storage.Container.CreateItemWithRetriesAsync(new Lock { Id = lockKey, TimeToLive = (int)TimeSpan.FromMinutes(1).TotalSeconds }, PartitionKeys.Lock);
+		task.Wait();
+
+		// set the parameter
+		connection.SetJobParameter(id, "name", null);
+		string? value = connection.GetJobParameter(id, "name");
+
+		// assert
+		Assert.Null(value);
+	}
+
+	[Fact]
 	public void GetParameter_ThrowsAnException_WhenJobIdIsNull()
 	{
 		// clean
@@ -1187,6 +1211,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		ContainerFixture.Clean();
 
 		// arrange
+		Storage.StorageOptions.TransactionalLockTimeout = TimeSpan.FromMinutes(5);
 		List<Hash> hashes = new()
 		{
 			new Hash { Key = "some-hash", Field = "key1", Value = "value1" }
@@ -1198,7 +1223,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		IStorageConnection connection = Storage.GetConnection();
 
 		// create a lock and dispose after 5 seconds
-		Task.Run(async () =>
+		Task.Factory.StartNew(async () =>
 		{
 			CosmosDbDistributedLock distributedLock = new("locks:set:hash", TimeSpan.FromMinutes(2), Storage);
 			await Task.Delay(5000);
@@ -1206,7 +1231,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		});
 
 		// lets set the range
-		connection.SetRangeInHash("some-hash", new Dictionary<string, string?> { { "key1", "VALUE-1" } });
+		Task.Run(() => { connection.SetRangeInHash("some-hash", new Dictionary<string, string?> { { "key1", "VALUE-1" } }); }).Wait();
 
 		//assert
 		QueryRequestOptions queryRequestOptions = new() { PartitionKey = PartitionKeys.Hash };
@@ -1217,6 +1242,9 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 
 		Assert.Single(result);
 		Assert.Equal("VALUE-1", result["key1"]);
+
+		// reset
+		Storage.StorageOptions.TransactionalLockTimeout = TimeSpan.Zero;
 	}
 
 	[Fact]

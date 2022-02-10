@@ -9,7 +9,6 @@ using Hangfire.Azure.Documents.Helper;
 using Hangfire.Azure.Helper;
 using Hangfire.Azure.Queue;
 using Hangfire.Common;
-using Hangfire.Logging;
 using Hangfire.Server;
 using Hangfire.Storage;
 using Microsoft.Azure.Cosmos;
@@ -19,8 +18,6 @@ namespace Hangfire.Azure;
 
 internal sealed class CosmosDbConnection : JobStorageConnection
 {
-	private readonly ILog logger = LogProvider.For<CosmosDbConnection>();
-
 	public CosmosDbConnection(CosmosDbStorage storage)
 	{
 		Storage = storage ?? throw new ArgumentNullException(nameof(storage));
@@ -186,24 +183,47 @@ internal sealed class CosmosDbConnection : JobStorageConnection
 		if (string.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
 		if (string.IsNullOrWhiteSpace(name)) throw new ArgumentNullException(nameof(name));
 
-		Task<ItemResponse<Documents.Job>> readTask = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(id, PartitionKeys.Job);
-		readTask.Wait();
+		int retry = 0;
+		bool complete;
+		const string resource = "locks:job:update";
+		CosmosDbDistributedLock? distributedLock = null;
 
-		Documents.Job data = readTask.Result.Resource;
-		int index = Array.FindIndex(data.Parameters, x => x.Name == name);
-		index = index == -1 ? data.Parameters.Length : index;
-
-		PatchOperation[] patchOperations =
+		do
 		{
-			PatchOperation.Set($"/parameters/{index}", new Parameter { Name = name, Value = value })
-		};
-		PatchItemRequestOptions patchItemRequestOptions = new()
-		{
-			IfMatchEtag = data.ETag
-		};
+			complete = true;
 
-		Task<ItemResponse<Documents.Job>> task = Storage.Container.PatchItemWithRetriesAsync<Documents.Job>(id, PartitionKeys.Job, patchOperations, patchItemRequestOptions);
-		task.Wait();
+			try
+			{
+				distributedLock = new CosmosDbDistributedLock(resource, Storage.StorageOptions.TransactionalLockTimeout, Storage);
+
+				Task<ItemResponse<Documents.Job>> readTask = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(id, PartitionKeys.Job);
+				readTask.Wait();
+
+				Documents.Job data = readTask.Result.Resource;
+				int index = Array.FindIndex(data.Parameters, x => x.Name == name);
+				index = index == -1 ? data.Parameters.Length : index;
+
+				PatchItemRequestOptions patchItemRequestOptions = new() { IfMatchEtag = data.ETag };
+				PatchOperation[] patchOperations =
+				{
+					PatchOperation.Set($"/parameters/{index}", new Parameter { Name = name, Value = value })
+				};
+
+				Task<ItemResponse<Documents.Job>> task = Storage.Container.PatchItemWithRetriesAsync<Documents.Job>(id, PartitionKeys.Job, patchOperations, patchItemRequestOptions);
+				task.Wait();
+			}
+			catch (CosmosDbDistributedLockException ex) when (ex.Key == resource)
+			{
+				/* ignore */
+				retry += 1;
+				complete = false;
+			}
+			finally
+			{
+				distributedLock?.Dispose();
+			}
+
+		} while (retry <= 3 && complete == false);
 	}
 
 	#endregion
@@ -383,15 +403,19 @@ internal sealed class CosmosDbConnection : JobStorageConnection
 		if (string.IsNullOrWhiteSpace(key)) throw new ArgumentNullException(nameof(key));
 		if (keyValuePairs == null) throw new ArgumentNullException(nameof(keyValuePairs));
 
+		int retry = 0;
+		bool complete;
 		const string resource = "locks:set:hash";
 		CosmosDbDistributedLock? distributedLock = null;
-		TimeSpan timeout = TimeSpan.FromSeconds(15);
 
-		while (true)
+		do
 		{
+			// ReSharper disable once RedundantAssignment
+			complete = true;
+
 			try
 			{
-				distributedLock = new CosmosDbDistributedLock(resource, timeout, Storage);
+				distributedLock = new CosmosDbDistributedLock(resource, Storage.StorageOptions.TransactionalLockTimeout, Storage);
 
 				Data<Hash> data = new();
 				List<Hash> hashes = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Hash })
@@ -446,17 +470,16 @@ internal sealed class CosmosDbConnection : JobStorageConnection
 			}
 			catch (CosmosDbDistributedLockException exception) when (exception.Key == resource)
 			{
-				logger.Debug($@"An exception was thrown during acquiring distributed lock on the [{resource}] resource within [{timeout.TotalSeconds}] seconds." +
-				             $@"Counter records were not aggregated. It will be retried in [{timeout.TotalSeconds}] seconds.");
-
-				// sleep
-				Thread.Sleep(timeout);
+				/* ignore */
+				retry += 1;
+				complete = false;
 			}
 			finally
 			{
 				distributedLock?.Dispose();
 			}
-		}
+
+		} while (retry <= 3 && complete == false);
 	}
 
 	public override long GetHashCount(string key)

@@ -46,7 +46,7 @@ internal class JobQueue : IPersistentJobQueue
 				sql.WithParameter($"@queue_{index}", queue);
 			}
 
-			while (true)
+			do
 			{
 				CosmosDbDistributedLock? distributedLock = null;
 				cancellationToken.ThrowIfCancellationRequested();
@@ -70,10 +70,7 @@ internal class JobQueue : IPersistentJobQueue
 						{
 							PatchOperation.Set("/fetched_at", DateTime.UtcNow.ToEpoch())
 						};
-						PatchItemRequestOptions patchItemRequestOptions = new()
-						{
-							IfMatchEtag = data.ETag
-						};
+						PatchItemRequestOptions patchItemRequestOptions = new() { IfMatchEtag = data.ETag };
 
 						Task<ItemResponse<Documents.Queue>> task = storage.Container.PatchItemWithRetriesAsync<Documents.Queue>(data.Id, partitionKey, patchOperations, patchItemRequestOptions, cancellationToken);
 						task.Wait(cancellationToken);
@@ -96,7 +93,8 @@ internal class JobQueue : IPersistentJobQueue
 
 				logger.Trace($"Unable to find any jobs in the queue. Will check the queue for jobs in [{storage.StorageOptions.QueuePollInterval.TotalSeconds}] seconds");
 				cancellationToken.WaitHandle.WaitOne(storage.StorageOptions.QueuePollInterval);
-			}
+
+			} while (true);
 		}
 	}
 

@@ -26,7 +26,32 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 	public override void Commit()
 	{
-		commands.ForEach(command => command());
+		int retry = 0;
+		bool complete;
+		const string resource = "locks:batch:commit";
+		CosmosDbDistributedLock? distributedLock = null;
+
+		do
+		{
+			complete = true;
+
+			try
+			{
+				distributedLock = new CosmosDbDistributedLock(resource, connection.Storage.StorageOptions.TransactionalLockTimeout, connection.Storage);
+				commands.ForEach(command => command());
+			}
+			catch (CosmosDbDistributedLockException ex) when (ex.Key == resource)
+			{
+				/* ignore */
+				retry += 1;
+				complete = false;
+			}
+			finally
+			{
+				distributedLock?.Dispose();
+			}
+
+		} while (retry <= 3 && complete == false);
 	}
 
 	public override void Dispose() { }
@@ -135,8 +160,33 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 		QueueCommand(() =>
 		{
-			string queryJobs = $"SELECT * FROM doc WHERE doc.id = '{jobId}'";
-			connection.Storage.Container.ExecuteExpireDocuments(queryJobs, epoch, PartitionKeys.Job);
+			int retry = 0;
+			bool complete;
+			const string resource = "locks:job:update";
+			CosmosDbDistributedLock? distributedLock = null;
+
+			do
+			{
+				complete = true;
+
+				try
+				{
+					distributedLock = new CosmosDbDistributedLock(resource, connection.Storage.StorageOptions.TransactionalLockTimeout, connection.Storage);
+					string queryJobs = $"SELECT * FROM doc WHERE doc.id = '{jobId}'";
+					connection.Storage.Container.ExecuteExpireDocuments(queryJobs, epoch, PartitionKeys.Job);
+				}
+				catch (CosmosDbDistributedLockException ex) when (ex.Key == resource)
+				{
+					/* ignore */
+					retry += 1;
+					complete = false;
+				}
+				finally
+				{
+					distributedLock?.Dispose();
+				}
+
+			} while (retry <= 3 && complete == false);
 		});
 
 		// we need to also remove the state documents
@@ -153,11 +203,39 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 		QueueCommand(() =>
 		{
-			PatchOperation[] patchOperations =
+			int retry = 0;
+			bool complete;
+			const string resource = "locks:job:update";
+			CosmosDbDistributedLock? distributedLock = null;
+
+			do
 			{
-				PatchOperation.Remove("/expire_on")
-			};
-			connection.Storage.Container.PatchItemWithRetriesAsync<Job>(jobId, PartitionKeys.Job, patchOperations);
+				complete = true;
+
+				try
+				{
+					distributedLock = new CosmosDbDistributedLock(resource, connection.Storage.StorageOptions.TransactionalLockTimeout, connection.Storage);
+
+					PatchOperation[] patchOperations =
+					{
+						PatchOperation.Remove("/expire_on")
+					};
+					Task<ItemResponse<Job>> task = connection.Storage.Container.PatchItemWithRetriesAsync<Job>(jobId, PartitionKeys.Job, patchOperations);
+					task.Wait();
+				}
+				catch (CosmosDbDistributedLockException ex) when (ex.Key == resource)
+				{
+					/* ignore */
+					retry += 1;
+					complete = false;
+				}
+				finally
+				{
+					distributedLock?.Dispose();
+				}
+
+			} while (retry <= 3 && complete == false);
+
 		});
 	}
 
@@ -172,26 +250,51 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 		QueueCommand(() =>
 		{
-			State data = new()
-			{
-				JobId = jobId,
-				Name = state.Name,
-				Reason = state.Reason,
-				CreatedOn = DateTime.UtcNow,
-				Data = state.SerializeData()
-			};
+			int retry = 0;
+			bool complete;
+			const string resource = "locks:job:update";
+			CosmosDbDistributedLock? distributedLock = null;
 
-			Task<ItemResponse<State>> task = connection.Storage.Container.CreateItemAsync(data, PartitionKeys.State);
-			Task<ItemResponse<Job>> spTask = task.ContinueWith(_ =>
+			do
 			{
-				PatchOperation[] patchOperations =
+				complete = true;
+
+				try
 				{
-					PatchOperation.Set("/state_id", data.Id),
-					PatchOperation.Set("/state_name", data.Name)
-				};
-				return connection.Storage.Container.PatchItemWithRetriesAsync<Job>(jobId, PartitionKeys.Job, patchOperations);
-			}, TaskContinuationOptions.NotOnFaulted).Unwrap();
-			spTask.Wait();
+					distributedLock = new CosmosDbDistributedLock(resource, connection.Storage.StorageOptions.TransactionalLockTimeout, connection.Storage);
+
+					State data = new()
+					{
+						JobId = jobId,
+						Name = state.Name,
+						Reason = state.Reason,
+						CreatedOn = DateTime.UtcNow,
+						Data = state.SerializeData()
+					};
+
+					Task<ItemResponse<State>> task = connection.Storage.Container.CreateItemAsync(data, PartitionKeys.State);
+					task.Wait();
+
+					PatchOperation[] patchOperations =
+					{
+						PatchOperation.Set("/state_id", data.Id),
+						PatchOperation.Set("/state_name", data.Name)
+					};
+					Task<ItemResponse<Job>> jobTask = connection.Storage.Container.PatchItemWithRetriesAsync<Job>(jobId, PartitionKeys.Job, patchOperations);
+					jobTask.Wait();
+				}
+				catch (CosmosDbDistributedLockException ex) when (ex.Key == resource)
+				{
+					/* ignore */
+					retry += 1;
+					complete = false;
+				}
+				finally
+				{
+					distributedLock?.Dispose();
+				}
+
+			} while (retry <= 3 && complete == false);
 		});
 	}
 

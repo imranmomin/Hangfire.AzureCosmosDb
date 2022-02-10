@@ -87,7 +87,7 @@ internal class CosmosDbDistributedLock : IDisposable
 		// this is if the expiration manager was not able to remove the orphan lock in time.
 		double ttl = Math.Max(15, timeout.TotalSeconds) * 1.5;
 
-		while (@lock == null)
+		do
 		{
 			Lock data = new()
 			{
@@ -119,7 +119,8 @@ internal class CosmosDbDistributedLock : IDisposable
 
 			logger.Trace($"Unable to acquire lock for [{resource}]. Will try after [2] seconds");
 			Thread.Sleep(2000);
-		}
+
+		} while (@lock == null);
 
 		// set the timer for the KeepLockAlive callbacks
 		TimeSpan period = TimeSpan.FromSeconds(ttl).Divide(2);
@@ -153,10 +154,7 @@ internal class CosmosDbDistributedLock : IDisposable
 					PatchOperation.Set("/last_heartbeat", DateTime.UtcNow.ToEpoch())
 				};
 
-				PatchItemRequestOptions patchItemRequestOptions = new()
-				{
-					IfMatchEtag = temp.ETag
-				};
+				PatchItemRequestOptions patchItemRequestOptions = new() { IfMatchEtag = temp.ETag };
 
 				Task<ItemResponse<Lock>> task = storage.Container.PatchItemWithRetriesAsync<Lock>(temp.Id, PartitionKeys.Lock, patchOperations, patchItemRequestOptions);
 				task.Wait();
