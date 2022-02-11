@@ -13,8 +13,20 @@ internal static class QueryHelper
 		while (iterator.HasMoreResults)
 		{
 			Task<FeedResponse<T>> task = iterator.ReadNextAsync();
-			task.Wait();
-			foreach (T item in task.Result)
+			FeedResponse<T> result = task.ExecuteSynchronously();
+			foreach (T item in result)
+			{
+				yield return item;
+			}
+		}
+	}
+
+	internal static async IAsyncEnumerable<T> ToQueryResultAsync<T>(this FeedIterator<T> iterator)
+	{
+		while (iterator.HasMoreResults)
+		{
+			FeedResponse<T> result = await iterator.ReadNextAsync();
+			foreach (T item in result)
 			{
 				yield return item;
 			}
@@ -25,5 +37,11 @@ internal static class QueryHelper
 	{
 		FeedIterator<T> iterator = queryable.ToFeedIterator();
 		return iterator.ToQueryResult();
+	}
+
+	internal static IAsyncEnumerable<T> ToQueryResultAsync<T>(this IQueryable<T> queryable)
+	{
+		FeedIterator<T> iterator = queryable.ToFeedIterator();
+		return iterator.ToQueryResultAsync();
 	}
 }

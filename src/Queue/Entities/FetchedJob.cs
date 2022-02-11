@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Net;
 using System.Threading;
-using System.Threading.Tasks;
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
 using Hangfire.Azure.Helper;
@@ -59,8 +58,7 @@ internal class FetchedJob : IFetchedJob
 		{
 			try
 			{
-				Task<ItemResponse<Documents.Queue>> task = storage.Container.DeleteItemWithRetriesAsync<Documents.Queue>(data.Id, partitionKey);
-				task.Wait();
+				storage.Container.DeleteItemWithRetries<Documents.Queue>(data.Id, partitionKey);
 			}
 			catch (Exception exception)
 			{
@@ -79,20 +77,18 @@ internal class FetchedJob : IFetchedJob
 		{
 			try
 			{
+				PatchItemRequestOptions patchItemRequestOptions = new() { IfMatchEtag = data.ETag };
 				PatchOperation[] patchOperations =
 				{
 					PatchOperation.Remove("/fetched_at"),
 					PatchOperation.Set("/created_on", DateTime.UtcNow.ToEpoch())
 				};
-				PatchItemRequestOptions patchItemRequestOptions = new()
-				{
-					IfMatchEtag = data.ETag
-				};
 
-				Task<ItemResponse<Documents.Queue>> task = storage.Container.PatchItemWithRetriesAsync<Documents.Queue>(data.Id, partitionKey, patchOperations, patchItemRequestOptions);
-				task.Wait();
-
-				data = task.Result;
+				data = storage.Container.PatchItemWithRetries<Documents.Queue>(data.Id, partitionKey, patchOperations, patchItemRequestOptions);
+			}
+			catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+			{
+				/* ignored */
 			}
 			catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
 			{
@@ -107,25 +103,21 @@ internal class FetchedJob : IFetchedJob
 
 	private void KeepAliveJobCallback(object obj)
 	{
+		if (disposed) return;
+
 		lock (syncRoot)
 		{
 			if (reQueued || removedFromQueue) return;
 
 			try
 			{
+				PatchItemRequestOptions patchItemRequestOptions = new() { IfMatchEtag = data.ETag };
 				PatchOperation[] patchOperations =
 				{
 					PatchOperation.Set("/fetched_at", DateTime.UtcNow.ToEpoch())
 				};
-				PatchItemRequestOptions patchItemRequestOptions = new()
-				{
-					IfMatchEtag = data.ETag
-				};
 
-				Task<ItemResponse<Documents.Queue>> task = storage.Container.PatchItemWithRetriesAsync<Documents.Queue>(data.Id, partitionKey, patchOperations, patchItemRequestOptions);
-				task.Wait();
-
-				data = task.Result;
+				data = storage.Container.PatchItemWithRetries<Documents.Queue>(data.Id, partitionKey, patchOperations, patchItemRequestOptions);
 
 				logger.Trace($"Keep-alive query for job: [{data.Id}] sent");
 			}

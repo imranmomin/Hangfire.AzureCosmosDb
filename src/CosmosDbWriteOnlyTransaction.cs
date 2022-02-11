@@ -85,8 +85,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 				Value = -1
 			};
 
-			Task<ItemResponse<Counter>> task = connection.Storage.Container.CreateItemAsync(data, PartitionKeys.Counter);
-			task.Wait();
+			connection.Storage.Container.CreateItemWithRetries(data, PartitionKeys.Counter);
 		});
 	}
 
@@ -105,8 +104,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 				ExpireOn = DateTime.UtcNow.Add(expireIn)
 			};
 
-			Task<ItemResponse<Counter>> task = connection.Storage.Container.CreateItemAsync(data, PartitionKeys.Counter);
-			task.Wait();
+			connection.Storage.Container.CreateItemWithRetries(data, PartitionKeys.Counter);
 		});
 	}
 
@@ -123,8 +121,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 				Value = 1
 			};
 
-			Task<ItemResponse<Counter>> task = connection.Storage.Container.CreateItemAsync(data, PartitionKeys.Counter);
-			task.Wait();
+			connection.Storage.Container.CreateItemWithRetries(data, PartitionKeys.Counter);
 		});
 	}
 
@@ -143,8 +140,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 				ExpireOn = DateTime.UtcNow.Add(expireIn)
 			};
 
-			Task<ItemResponse<Counter>> task = connection.Storage.Container.CreateItemAsync(data, PartitionKeys.Counter);
-			task.Wait();
+			connection.Storage.Container.CreateItemWithRetries(data, PartitionKeys.Counter);
 		});
 	}
 
@@ -220,8 +216,8 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 					{
 						PatchOperation.Remove("/expire_on")
 					};
-					Task<ItemResponse<Job>> task = connection.Storage.Container.PatchItemWithRetriesAsync<Job>(jobId, PartitionKeys.Job, patchOperations);
-					task.Wait();
+
+					connection.Storage.Container.PatchItemWithRetries<Job>(jobId, PartitionKeys.Job, patchOperations);
 				}
 				catch (CosmosDbDistributedLockException ex) when (ex.Key == resource)
 				{
@@ -272,16 +268,15 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 						Data = state.SerializeData()
 					};
 
-					Task<ItemResponse<State>> task = connection.Storage.Container.CreateItemAsync(data, PartitionKeys.State);
-					task.Wait();
+					connection.Storage.Container.CreateItemWithRetries(data, PartitionKeys.State);
 
 					PatchOperation[] patchOperations =
 					{
 						PatchOperation.Set("/state_id", data.Id),
 						PatchOperation.Set("/state_name", data.Name)
 					};
-					Task<ItemResponse<Job>> jobTask = connection.Storage.Container.PatchItemWithRetriesAsync<Job>(jobId, PartitionKeys.Job, patchOperations);
-					jobTask.Wait();
+
+					connection.Storage.Container.PatchItemWithRetries<Job>(jobId, PartitionKeys.Job, patchOperations);
 				}
 				catch (CosmosDbDistributedLockException ex) when (ex.Key == resource)
 				{
@@ -314,8 +309,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 				Data = state.SerializeData()
 			};
 
-			Task<ItemResponse<State>> task = connection.Storage.Container.CreateItemAsync(data, PartitionKeys.State);
-			task.Wait();
+			connection.Storage.Container.CreateItemWithRetries(data, PartitionKeys.State);
 		});
 	}
 
@@ -552,8 +546,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 				CreatedOn = DateTime.UtcNow
 			};
 
-			Task<ItemResponse<List>> task = connection.Storage.Container.CreateItemAsync(data, PartitionKeys.List);
-			task.Wait();
+			connection.Storage.Container.CreateItemWithRetries(data, PartitionKeys.List);
 		});
 	}
 

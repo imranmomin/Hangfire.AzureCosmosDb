@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Hangfire.Azure.Helper;
 using Hangfire.Azure.Queue;
 using Hangfire.Logging;
 using Hangfire.Server;
@@ -133,7 +134,7 @@ internal sealed class CosmosDbStorage : JobStorage, IDisposable
 	public static CosmosDbStorage Create(string url, string authSecret, string databaseName, string containerName, CosmosClientOptions? options = null, CosmosDbStorageOptions? storageOptions = null)
 	{
 		CosmosDbStorage storage = new(url, authSecret, databaseName, containerName, options, storageOptions);
-		storage.InitializeAsync().Wait();
+		storage.InitializeAsync().ExecuteSynchronously();
 		return storage;
 	}
 

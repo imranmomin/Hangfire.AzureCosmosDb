@@ -72,10 +72,7 @@ internal class JobQueue : IPersistentJobQueue
 						};
 						PatchItemRequestOptions patchItemRequestOptions = new() { IfMatchEtag = data.ETag };
 
-						Task<ItemResponse<Documents.Queue>> task = storage.Container.PatchItemWithRetriesAsync<Documents.Queue>(data.Id, partitionKey, patchOperations, patchItemRequestOptions, cancellationToken);
-						task.Wait(cancellationToken);
-
-						data = task.Result;
+						data = storage.Container.PatchItemWithRetries<Documents.Queue>(data.Id, partitionKey, patchOperations, patchItemRequestOptions);
 
 						logger.Trace($"Found job [{data.JobId}] from the queue : [{data.Name}]");
 						return new FetchedJob(storage, data);
@@ -109,7 +106,6 @@ internal class JobQueue : IPersistentJobQueue
 			CreatedOn = createdOn
 		};
 
-		Task<ItemResponse<Documents.Queue>> task = storage.Container.CreateItemWithRetriesAsync(data, partitionKey);
-		task.Wait();
+		storage.Container.CreateItemWithRetries(data, partitionKey);
 	}
 }

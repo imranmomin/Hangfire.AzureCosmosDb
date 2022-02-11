@@ -358,8 +358,7 @@ public class ExpirationManagerFacts : IClassFixture<ContainerFixture>
 		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Counter);
 
 		const string lockKey = "locks:expiration:manager";
-		Task<ItemResponse<Lock>> task = Storage.Container.CreateItemWithRetriesAsync(new Lock { Id = lockKey, TimeToLive = (int)TimeSpan.FromMinutes(1).TotalSeconds }, PartitionKeys.Lock);
-		task.Wait();
+		Storage.Container.CreateItemWithRetries(new Lock { Id = lockKey, TimeToLive = (int)TimeSpan.FromMinutes(1).TotalSeconds }, PartitionKeys.Lock);
 
 		ExpirationManager manager = new(Storage);
 		CancellationTokenSource cts = new();

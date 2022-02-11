@@ -54,9 +54,7 @@ public class CosmosDbDistributedLockFacts : IClassFixture<ContainerFixture>
 		Lock? result = null;
 		try
 		{
-			Task<ItemResponse<Lock>> response = Storage.Container.ReadItemWithRetriesAsync<Lock>(resource, PartitionKeys.Lock);
-			response.Wait();
-			result = response.Result;
+			result = Storage.Container.ReadItemWithRetries<Lock>(resource, PartitionKeys.Lock);
 		}
 		catch
 		{
@@ -84,9 +82,7 @@ public class CosmosDbDistributedLockFacts : IClassFixture<ContainerFixture>
 		Lock? result = null;
 		try
 		{
-			Task<ItemResponse<Lock>> response = Storage.Container.ReadItemWithRetriesAsync<Lock>(resource, PartitionKeys.Lock);
-			response.Wait();
-			result = response.Result;
+			result = Storage.Container.ReadItemWithRetries<Lock>(resource, PartitionKeys.Lock);
 		}
 		catch
 		{
@@ -111,9 +107,7 @@ public class CosmosDbDistributedLockFacts : IClassFixture<ContainerFixture>
 		Lock? result = null;
 		try
 		{
-			Task<ItemResponse<Lock>> response = Storage.Container.ReadItemWithRetriesAsync<Lock>(resource, PartitionKeys.Lock);
-			response.Wait();
-			result = response.Result;
+			result = Storage.Container.ReadItemWithRetries<Lock>(resource, PartitionKeys.Lock);
 		}
 		catch
 		{
@@ -149,8 +143,7 @@ public class CosmosDbDistributedLockFacts : IClassFixture<ContainerFixture>
 
 		// arrange
 		const string resource = "locks:test";
-		Task<ItemResponse<Lock>> task = Storage.Container.CreateItemWithRetriesAsync(new Lock { Id = resource, TimeToLive = (int)TimeSpan.FromMinutes(1).TotalSeconds }, PartitionKeys.Lock);
-		task.Wait();
+		Storage.Container.CreateItemWithRetries(new Lock { Id = resource, TimeToLive = (int)TimeSpan.FromMinutes(1).TotalSeconds }, PartitionKeys.Lock);
 
 		// act
 		CosmosDbDistributedLockException exception = Assert.Throws<CosmosDbDistributedLockException>(() => new CosmosDbDistributedLock(resource, TimeSpan.FromSeconds(1), Storage));
@@ -173,9 +166,7 @@ public class CosmosDbDistributedLockFacts : IClassFixture<ContainerFixture>
 		Lock? result = null;
 		try
 		{
-			Task<ItemResponse<Lock>> response = Storage.Container.ReadItemWithRetriesAsync<Lock>(resource, PartitionKeys.Lock);
-			response.Wait();
-			result = response.Result;
+			result = Storage.Container.ReadItemWithRetries<Lock>(resource, PartitionKeys.Lock);
 		}
 		catch
 		{

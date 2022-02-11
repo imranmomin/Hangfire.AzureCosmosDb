@@ -75,13 +75,9 @@ internal sealed class CosmosDbMonitoringApi : IMonitoringApi
 	{
 		if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
 
-		Task<ItemResponse<Documents.Job>> task = storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, PartitionKeys.Job);
-		task.Wait();
+		Documents.Job job = storage.Container.ReadItemWithRetries<Documents.Job>(jobId, PartitionKeys.Job);
 
 		// if the resource is not found return null;
-		if (task.Result.Resource == null) return null;
-
-		Documents.Job job = task.Result;
 		InvocationData invocationData = job.InvocationData;
 		invocationData.Arguments = job.Arguments;
 
@@ -105,7 +101,6 @@ internal sealed class CosmosDbMonitoringApi : IMonitoringApi
 			Properties = job.Parameters.ToDictionary(p => p.Name, p => p.Value.TryParseEpochToDate(out string? x) ? x : p.Value),
 			History = states
 		};
-
 	}
 
 	public StatisticsDto GetStatistics()

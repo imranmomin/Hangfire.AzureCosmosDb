@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Threading;
-using System.Threading.Tasks;
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
 using Hangfire.Azure.Helper;
@@ -80,36 +79,27 @@ internal class CountersAggregator : IServerComponent
 						if (!counters.TryGetValue(key, out (int Value, DateTime? ExpireOn, List<Counter> Counters) data)) continue;
 
 						string id = $"{key}:{CounterTypes.Aggregate}".GenerateHash();
-						Task<ItemResponse<Counter>> task;
 
 						try
 						{
-							// ReSharper disable once MethodSupportsCancellation
-							Task<ItemResponse<Counter>> readTask = storage.Container.ReadItemWithRetriesAsync<Counter>(id, partitionKey);
-							// ReSharper disable once MethodSupportsCancellation
-							readTask.Wait();
-
-							Counter aggregated = readTask.Result.Resource;
+							Counter aggregated = storage.Container.ReadItemWithRetries<Counter>(id, partitionKey);
 
 							DateTime? expireOn = new[] { aggregated.ExpireOn, data.ExpireOn }.Max();
 							int? expireOnEpoch = expireOn?.ToEpoch();
 
+							PatchItemRequestOptions patchItemRequestOptions = new() { IfMatchEtag = aggregated.ETag };
 							PatchOperation[] patchOperations =
 							{
 								PatchOperation.Increment("/value", data.Value),
 								PatchOperation.Set("/expire_on", expireOnEpoch)
 							};
 
-							PatchItemRequestOptions patchItemRequestOptions = new()
-							{
-								IfMatchEtag = aggregated.ETag
-							};
-
-							// ReSharper disable once MethodSupportsCancellation
-							task = storage.Container.PatchItemWithRetriesAsync<Counter>(aggregated.Id, partitionKey, patchOperations, patchItemRequestOptions);
+							storage.Container.PatchItemWithRetries<Counter>(aggregated.Id, partitionKey, patchOperations, patchItemRequestOptions);
 						}
-						catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
+						catch (Exception ex) when (ex is CosmosException { StatusCode: HttpStatusCode.NotFound } or AggregateException { InnerException: CosmosException { StatusCode: HttpStatusCode.NotFound } })
 						{
+							logger.Trace($"Aggregated document [{id}] was not found. Creating a new document");
+
 							Counter aggregated = new()
 							{
 								Id = id,
@@ -119,12 +109,8 @@ internal class CountersAggregator : IServerComponent
 								ExpireOn = data.ExpireOn
 							};
 
-							// ReSharper disable once MethodSupportsCancellation
-							task = storage.Container.CreateItemWithRetriesAsync(aggregated, partitionKey);
+							storage.Container.CreateItemWithRetries(aggregated, partitionKey);
 						}
-
-						// ReSharper disable once MethodSupportsCancellation
-						task.Wait();
 
 						// now - remove the raw counters
 						string ids = string.Join(",", data.Counters.Select(c => $"'{c.Id}'").ToArray());

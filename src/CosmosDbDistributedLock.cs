@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net;
 using System.Threading;
-using System.Threading.Tasks;
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
 using Hangfire.Azure.Helper;
@@ -44,8 +43,11 @@ internal class CosmosDbDistributedLock : IDisposable
 		{
 			try
 			{
-				Task task = storage.Container.DeleteItemWithRetriesAsync<Lock>(resource, PartitionKeys.Lock);
-				task.Wait();
+				storage.Container.DeleteItemWithRetries<Lock>(resource, PartitionKeys.Lock);
+			}
+			catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+			{
+				logger.Trace($"Unable to release the lock for resource [{resource}]. Status - 404 Not Found");
 			}
 			catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
 			{
@@ -98,11 +100,12 @@ internal class CosmosDbDistributedLock : IDisposable
 
 			try
 			{
-				Task<ItemResponse<Lock>> createTask = storage.Container.CreateItemWithRetriesAsync(data, PartitionKeys.Lock);
-				createTask.Wait();
-
-				@lock = createTask.Result.Resource;
+				@lock = storage.Container.CreateItemWithRetries(data, PartitionKeys.Lock);
 				break;
+			}
+			catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+			{
+				logger.Trace($"Unable to create a lock for resource [{resource}]. Status - 409 Conflict");
 			}
 			catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.Conflict })
 			{
@@ -149,19 +152,19 @@ internal class CosmosDbDistributedLock : IDisposable
 			{
 				logger.Trace($"Preparing the Keep-alive query for lock: [{temp.Id}]");
 
+				PatchItemRequestOptions patchItemRequestOptions = new() { IfMatchEtag = temp.ETag };
 				PatchOperation[] patchOperations =
 				{
 					PatchOperation.Set("/last_heartbeat", DateTime.UtcNow.ToEpoch())
 				};
 
-				PatchItemRequestOptions patchItemRequestOptions = new() { IfMatchEtag = temp.ETag };
-
-				Task<ItemResponse<Lock>> task = storage.Container.PatchItemWithRetriesAsync<Lock>(temp.Id, PartitionKeys.Lock, patchOperations, patchItemRequestOptions);
-				task.Wait();
-
-				@lock = task.Result;
+				@lock = storage.Container.PatchItemWithRetries<Lock>(temp.Id, PartitionKeys.Lock, patchOperations, patchItemRequestOptions);
 
 				logger.Trace($"Keep-alive query for lock: [{temp.Id}] sent");
+			}
+			catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+			{
+				/* ignore */
 			}
 			catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
 			{

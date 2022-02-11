@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Threading;
-using System.Threading.Tasks;
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
 using Hangfire.Azure.Helper;
@@ -56,10 +55,8 @@ internal sealed class CosmosDbConnection : JobStorageConnection
 			}).ToArray()
 		};
 
-		Task<ItemResponse<Documents.Job>> task = Storage.Container.CreateItemWithRetriesAsync(entityJob, PartitionKeys.Job);
-		task.Wait();
-
-		return entityJob.Id;
+		Documents.Job result = Storage.Container.CreateItemWithRetries(entityJob, PartitionKeys.Job);
+		return result.Id;
 	}
 
 	public override IFetchedJob FetchNextJob(string[] queues, CancellationToken cancellationToken)
@@ -85,10 +82,8 @@ internal sealed class CosmosDbConnection : JobStorageConnection
 
 		try
 		{
-			Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, PartitionKeys.Job);
-			task.Wait();
+			Documents.Job data = Storage.Container.ReadItemWithRetries<Documents.Job>(jobId, PartitionKeys.Job);
 
-			Documents.Job data = task.Result.Resource;
 			InvocationData invocationData = data.InvocationData;
 			invocationData.Arguments = data.Arguments;
 
@@ -112,6 +107,10 @@ internal sealed class CosmosDbConnection : JobStorageConnection
 				LoadException = loadException
 			};
 		}
+		catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+		{
+			/* ignored */
+		}
 		catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
 		{
 			/* ignored */
@@ -127,22 +126,19 @@ internal sealed class CosmosDbConnection : JobStorageConnection
 
 		try
 		{
-			Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, PartitionKeys.Job);
-			task.Wait();
+			Documents.Job job = Storage.Container.ReadItemWithRetries<Documents.Job>(jobId, PartitionKeys.Job);
+			State state = Storage.Container.ReadItemWithRetries<State>(job.StateId, PartitionKeys.State);
 
-			Documents.Job job = task.Result.Resource;
-
-			// get the state document
-			Task<ItemResponse<State>> stateTask = Storage.Container.ReadItemWithRetriesAsync<State>(job.StateId, PartitionKeys.State);
-			stateTask.Wait();
-
-			State state = stateTask.Result.Resource;
 			return new StateData
 			{
 				Name = state.Name,
 				Reason = state.Reason,
 				Data = state.Data
 			};
+		}
+		catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+		{
+			/* ignored */
 		}
 		catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
 		{
@@ -164,11 +160,12 @@ internal sealed class CosmosDbConnection : JobStorageConnection
 
 		try
 		{
-			Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(id, PartitionKeys.Job);
-			task.Wait();
-
-			Documents.Job data = task.Result.Resource;
+			Documents.Job data = Storage.Container.ReadItemWithRetries<Documents.Job>(id, PartitionKeys.Job);
 			return data.Parameters.Where(p => p.Name == name).Select(p => p.Value).FirstOrDefault();
+		}
+		catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+		{
+			/* ignored */
 		}
 		catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
 		{
@@ -196,10 +193,8 @@ internal sealed class CosmosDbConnection : JobStorageConnection
 			{
 				distributedLock = new CosmosDbDistributedLock(resource, Storage.StorageOptions.TransactionalLockTimeout, Storage);
 
-				Task<ItemResponse<Documents.Job>> readTask = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(id, PartitionKeys.Job);
-				readTask.Wait();
+				Documents.Job data = Storage.Container.ReadItemWithRetries<Documents.Job>(id, PartitionKeys.Job);
 
-				Documents.Job data = readTask.Result.Resource;
 				int index = Array.FindIndex(data.Parameters, x => x.Name == name);
 				index = index == -1 ? data.Parameters.Length : index;
 
@@ -209,8 +204,7 @@ internal sealed class CosmosDbConnection : JobStorageConnection
 					PatchOperation.Set($"/parameters/{index}", new Parameter { Name = name, Value = value })
 				};
 
-				Task<ItemResponse<Documents.Job>> task = Storage.Container.PatchItemWithRetriesAsync<Documents.Job>(id, PartitionKeys.Job, patchOperations, patchItemRequestOptions);
-				task.Wait();
+				Storage.Container.PatchItemWithRetries<Documents.Job>(id, PartitionKeys.Job, patchOperations, patchItemRequestOptions);
 			}
 			catch (CosmosDbDistributedLockException ex) when (ex.Key == resource)
 			{
@@ -333,8 +327,7 @@ internal sealed class CosmosDbConnection : JobStorageConnection
 			LastHeartbeat = DateTime.UtcNow
 		};
 
-		Task<ItemResponse<Documents.Server>> task = Storage.Container.UpsertItemWithRetriesAsync(server, PartitionKeys.Server);
-		task.Wait();
+		Storage.Container.UpsertItemWithRetries(server, PartitionKeys.Server);
 	}
 
 	public override void Heartbeat(string serverId)
@@ -347,8 +340,11 @@ internal sealed class CosmosDbConnection : JobStorageConnection
 			{
 				PatchOperation.Set("/last_heartbeat", DateTime.UtcNow.ToEpoch())
 			};
-			Task<ItemResponse<Documents.Server>> task = Storage.Container.PatchItemWithRetriesAsync<Documents.Server>(serverId, PartitionKeys.Server, patchOperations);
-			task.Wait();
+			Storage.Container.PatchItemWithRetries<Documents.Server>(serverId, PartitionKeys.Server, patchOperations);
+		}
+		catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+		{
+			/* ignored */
 		}
 		catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
 		{
@@ -362,8 +358,11 @@ internal sealed class CosmosDbConnection : JobStorageConnection
 
 		try
 		{
-			Task<ItemResponse<Documents.Server>> task = Storage.Container.DeleteItemWithRetriesAsync<Documents.Server>(serverId, PartitionKeys.Server);
-			task.Wait();
+			Storage.Container.DeleteItemWithRetries<Documents.Server>(serverId, PartitionKeys.Server);
+		}
+		catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+		{
+			/* ignored */
 		}
 		catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
 		{

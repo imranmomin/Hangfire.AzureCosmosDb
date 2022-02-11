@@ -90,8 +90,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		Assert.NotNull(jobId);
 		Assert.NotEmpty(jobId);
 
-		Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, PartitionKeys.Job);
-		Documents.Job? sqlJob = task.Result.Resource;
+		Documents.Job? sqlJob = Storage.Container.ReadItemWithRetries<Documents.Job>(jobId, PartitionKeys.Job);
 
 		Assert.Equal(jobId, sqlJob.Id);
 		Assert.Equal(createdAt, sqlJob.CreatedOn.ToLocalTime());
@@ -137,9 +136,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		Assert.NotNull(jobId);
 		Assert.NotEmpty(jobId);
 
-		Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, PartitionKeys.Job);
-		Documents.Job? sqlJob = task.Result.Resource;
-
+		Documents.Job? sqlJob = Storage.Container.ReadItemWithRetries<Documents.Job>(jobId, PartitionKeys.Job);
 		Assert.Null(sqlJob.Parameters.SingleOrDefault(x => x.Name == "Key1")?.Value);
 		Assert.Null(sqlJob.Parameters.SingleOrDefault(x => x.Name == "Key2")?.Value);
 		Assert.Null(sqlJob.Parameters.SingleOrDefault(x => x.Name == "Key3")?.Value);
@@ -163,9 +160,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		Assert.NotNull(jobId);
 		Assert.NotEmpty(jobId);
 
-		Task<ItemResponse<Documents.Job>> task = Storage.Container.ReadItemWithRetriesAsync<Documents.Job>(jobId, PartitionKeys.Job);
-		Documents.Job? sqlJob = task.Result.Resource;
-
+		Documents.Job? sqlJob = Storage.Container.ReadItemWithRetries<Documents.Job>(jobId, PartitionKeys.Job);
 		Assert.Empty(sqlJob.Parameters);
 	}
 
@@ -249,11 +244,10 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 			StateId = Guid.NewGuid().ToString(),
 			StateName = SucceededState.StateName
 		};
-		Task<ItemResponse<Documents.Job>> task = Storage.Container.CreateItemWithRetriesAsync(entityJob, PartitionKeys.Job);
-		task.Wait();
+		Documents.Job sqlJob = Storage.Container.CreateItemWithRetries(entityJob, PartitionKeys.Job);
 
 		// act
-		JobData? result = connection.GetJobData(task.Result.Resource.Id);
+		JobData? result = connection.GetJobData(sqlJob.Id);
 
 		// assert
 		Assert.NotNull(result);
@@ -295,11 +289,10 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 			StateId = Guid.NewGuid().ToString(),
 			StateName = SucceededState.StateName
 		};
-		Task<ItemResponse<Documents.Job>> task = Storage.Container.CreateItemWithRetriesAsync(entityJob, PartitionKeys.Job);
-		task.Wait();
+		Documents.Job sqlJob = Storage.Container.CreateItemWithRetries(entityJob, PartitionKeys.Job);
 
 		// act
-		JobData? result = connection.GetJobData(task.Result.Resource.Id);
+		JobData? result = connection.GetJobData(sqlJob.Id);
 
 		// assert
 		Assert.NotNull(result.LoadException);
@@ -366,8 +359,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 			CreatedOn = DateTime.UtcNow,
 			StateId = Guid.NewGuid().ToString()
 		};
-		Task<ItemResponse<Documents.Job>> task = Storage.Container.CreateItemWithRetriesAsync(entityJob, PartitionKeys.Job);
-		task.Wait();
+		Storage.Container.CreateItemWithRetries(entityJob, PartitionKeys.Job);
 
 		// act 
 		StateData? state = connection.GetStateData(entityJob.Id);
@@ -389,8 +381,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 			CreatedOn = DateTime.UtcNow,
 			StateId = Guid.NewGuid().ToString()
 		};
-		Task<ItemResponse<Documents.Job>> task = Storage.Container.CreateItemWithRetriesAsync(entityJob, PartitionKeys.Job);
-		task.Wait();
+		Storage.Container.CreateItemWithRetries(entityJob, PartitionKeys.Job);
 
 		// set the job state
 		Dictionary<string, string> data = new()
@@ -516,8 +507,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		string? id = connection.CreateExpiredJob(job, parameters, DateTime.UtcNow, TimeSpan.Zero);
 
 		const string lockKey = "locks:job:update";
-		Task<ItemResponse<Lock>> task = Storage.Container.CreateItemWithRetriesAsync(new Lock { Id = lockKey, TimeToLive = (int)TimeSpan.FromMinutes(1).TotalSeconds }, PartitionKeys.Lock);
-		task.Wait();
+		Storage.Container.CreateItemWithRetries(new Lock { Id = lockKey, TimeToLive = (int)TimeSpan.FromMinutes(1).TotalSeconds }, PartitionKeys.Lock);
 
 		// set the parameter
 		connection.SetJobParameter(id, "name", null);
@@ -771,11 +761,8 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		};
 		connection.AnnounceServer("server", context1);
 
-		Task<ItemResponse<Documents.Server>> readTask = Storage.Container.ReadItemWithRetriesAsync<Documents.Server>("server", PartitionKeys.Server);
-		readTask.Wait();
-		Documents.Server? server = readTask.Result.Resource;
-
 		//assert
+		Documents.Server? server = Storage.Container.ReadItemWithRetries<Documents.Server>("server", PartitionKeys.Server);
 		Assert.Equal("server", server.Id);
 		Assert.Equal(4, server.Workers);
 		Assert.Contains("critical", server.Queues);
@@ -789,11 +776,8 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		};
 		connection.AnnounceServer("server", context2);
 
-		readTask = Storage.Container.ReadItemWithRetriesAsync<Documents.Server>("server", PartitionKeys.Server);
-		readTask.Wait();
-		Documents.Server? sameServer = readTask.Result.Resource;
-
 		//assert
+		Documents.Server? sameServer = Storage.Container.ReadItemWithRetries<Documents.Server>("server", PartitionKeys.Server);
 		Assert.Equal("server", sameServer.Id);
 		Assert.Equal(1000, sameServer.Workers);
 		Assert.DoesNotContain("critical", sameServer.Queues);
@@ -1436,7 +1420,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 			new Counter { Key = "counter-1", Value = 1, Type = CounterTypes.Aggregate },
 			new Counter { Key = "counter-1", Value = 1, Type = CounterTypes.Aggregate },
 			new Counter { Key = "counter-2", Value = 1, Type = CounterTypes.Raw },
-			new Counter { Key = "counter-1", Value = 1, Type = CounterTypes.Raw },
+			new Counter { Key = "counter-1", Value = 1, Type = CounterTypes.Raw }
 		};
 		Data<Counter> data = new(counters);
 		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Counter);
@@ -1825,7 +1809,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 
 		// Act
 		JobStorageConnection connection = (JobStorageConnection)Storage.GetConnection();
-		var result = connection.GetAllItemsFromList("list-1");
+		List<string>? result = connection.GetAllItemsFromList("list-1");
 
 		// assert
 		Assert.Equal(new[] { "1", "5", "3", "2" }, result);

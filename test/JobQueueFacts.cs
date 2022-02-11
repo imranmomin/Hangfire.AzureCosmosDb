@@ -96,8 +96,7 @@ public class JobQueueFacts : IClassFixture<ContainerFixture>
 			FetchedAt = DateTime.UtcNow.AddMinutes(-16),
 			CreatedOn = DateTime.UtcNow
 		};
-		Task<ItemResponse<Documents.Queue>> response = Storage.Container.CreateItemWithRetriesAsync(document, PartitionKeys.Queue);
-		response.Wait();
+		Storage.Container.CreateItemWithRetries(document, PartitionKeys.Queue);
 
 		//act
 		JobQueue jobQueue = new(Storage);
@@ -123,8 +122,7 @@ public class JobQueueFacts : IClassFixture<ContainerFixture>
 			FetchedAt = DateTime.UtcNow.AddMinutes(-10),
 			CreatedOn = DateTime.UtcNow.AddMinutes(-1)
 		};
-		Task<ItemResponse<Documents.Queue>> response = Storage.Container.CreateItemWithRetriesAsync(document, PartitionKeys.Queue);
-		response.Wait();
+		Storage.Container.CreateItemWithRetries(document, PartitionKeys.Queue);
 
 		JobQueue jobQueue = new(Storage);
 		jobQueue.Enqueue(queue, jobId);

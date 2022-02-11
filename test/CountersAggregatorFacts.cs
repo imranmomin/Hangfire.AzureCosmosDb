@@ -122,8 +122,7 @@ public class CountersAggregatorFacts : IClassFixture<ContainerFixture>
 
 		// add a lock
 		const string lockKey = "locks:counters:aggregator";
-		Task<ItemResponse<Lock>> task = Storage.Container.CreateItemWithRetriesAsync(new Lock { Id = lockKey, TimeToLive = (int)TimeSpan.FromMinutes(1).TotalSeconds }, PartitionKeys.Lock);
-		task.Wait();
+		Storage.Container.CreateItemWithRetries(new Lock { Id = lockKey, TimeToLive = (int)TimeSpan.FromMinutes(1).TotalSeconds }, PartitionKeys.Lock);
 
 		// get the aggregator
 		CountersAggregator aggregator = new(Storage);
