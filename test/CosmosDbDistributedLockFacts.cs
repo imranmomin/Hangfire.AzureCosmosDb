@@ -160,9 +160,8 @@ public class CosmosDbDistributedLockFacts : IClassFixture<ContainerFixture>
 
 		// arrange
 		const string resource = "locks:test";
-		using CosmosDbDistributedLock distributedLock = new(resource, TimeSpan.FromSeconds(6), Storage);
+		using CosmosDbDistributedLock distributedLock = new(resource, TimeSpan.FromMinutes(1), Storage);
 
-		// assert
 		Lock? result = null;
 		try
 		{
@@ -175,13 +174,58 @@ public class CosmosDbDistributedLockFacts : IClassFixture<ContainerFixture>
 
 		Assert.NotNull(result);
 
-		// lets sleep
-		Thread.Sleep(3000);
+		// act
+		Thread.Sleep(1000);
+		distributedLock.KeepLockAlive(result!);
 
+		// assert
 		FieldInfo? lockField = typeof(CosmosDbDistributedLock).GetField("lock", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Default);
 		Assert.NotNull(lockField);
 
 		Lock @lock = (Lock)lockField!.GetValue(distributedLock)!;
 		Assert.NotEqual(result!.LastHeartBeat, @lock.LastHeartBeat);
+	}
+
+	[Fact]
+	public void DistributeLocks_ShouldHandlerNotFound_KeepAliveQuery()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		const string resource = "locks:test";
+		using CosmosDbDistributedLock distributedLock = new(resource, TimeSpan.FromMinutes(1), Storage);
+
+		// act
+		Lock result = new() { LastHeartBeat = DateTime.UtcNow.AddSeconds(10) };
+		distributedLock.KeepLockAlive(result);
+
+		// assert
+		FieldInfo? lockField = typeof(CosmosDbDistributedLock).GetField("lock", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Default);
+		Assert.NotNull(lockField);
+
+		Lock @lock = (Lock)lockField!.GetValue(distributedLock)!;
+		Assert.NotEqual(result.LastHeartBeat, @lock.LastHeartBeat);
+	}
+
+	[Fact]
+	public void DistributeLocks_ShouldHandlerPreconditionFailed_KeepAliveQuery()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		const string resource = "locks:test";
+		using CosmosDbDistributedLock distributedLock = new(resource, TimeSpan.FromMinutes(1), Storage);
+		FieldInfo? lockField = typeof(CosmosDbDistributedLock).GetField("lock", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Default);
+		Lock @lock = (Lock)lockField?.GetValue(distributedLock)!;
+
+		// act
+		Lock result = new() { Id = @lock.Id, ETag = $"{@lock.ETag}Z", LastHeartBeat = DateTime.UtcNow.AddSeconds(10) };
+		result.ETag = $"{result.ETag}Z";
+		distributedLock.KeepLockAlive(result);
+
+		// assert
+		Assert.NotEqual(result.LastHeartBeat, @lock.LastHeartBeat);
 	}
 }

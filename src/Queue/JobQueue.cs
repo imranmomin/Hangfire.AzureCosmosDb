@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
 using Hangfire.Azure.Helper;
@@ -66,11 +65,11 @@ internal class JobQueue : IPersistentJobQueue
 					if (data != null)
 					{
 						// mark the document that it was fetched
+						PatchItemRequestOptions patchItemRequestOptions = new() { IfMatchEtag = data.ETag };
 						PatchOperation[] patchOperations =
 						{
 							PatchOperation.Set("/fetched_at", DateTime.UtcNow.ToEpoch())
 						};
-						PatchItemRequestOptions patchItemRequestOptions = new() { IfMatchEtag = data.ETag };
 
 						data = storage.Container.PatchItemWithRetries<Documents.Queue>(data.Id, partitionKey, patchOperations, patchItemRequestOptions);
 

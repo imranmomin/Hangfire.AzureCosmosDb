@@ -31,4 +31,9 @@ public class CosmosDbStorageOptions
 	public int CountersAggregateMaxItemCount { get; set; } = 100;
 
 	internal TimeSpan TransactionalLockTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
+	/// <summary>
+	///		Gets or sets the interval timespan for job keep alive interval. Default value 30 seconds
+	/// </summary>
+	public TimeSpan JobKeepAliveInterval { get; set; } = TimeSpan.FromSeconds(15);
 }

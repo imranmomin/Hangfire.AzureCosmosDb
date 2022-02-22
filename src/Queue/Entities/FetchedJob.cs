@@ -28,7 +28,7 @@ internal class FetchedJob : IFetchedJob
 		this.storage = storage;
 		this.data = data;
 
-		TimeSpan keepAliveInterval = TimeSpan.FromSeconds(15);
+		TimeSpan keepAliveInterval = storage.StorageOptions.JobKeepAliveInterval;
 		timer = new Timer(KeepAliveJobCallback, data, keepAliveInterval, keepAliveInterval);
 		logger.Trace($"Job [{data.JobId}] will send a Keep-Alive query every [{keepAliveInterval.TotalSeconds}] seconds until disposed");
 	}
@@ -54,15 +54,21 @@ internal class FetchedJob : IFetchedJob
 
 	public void RemoveFromQueue()
 	{
+		if (removedFromQueue) return;
+
 		lock (syncRoot)
 		{
 			try
 			{
-				storage.Container.DeleteItemWithRetries<Documents.Queue>(data.Id, partitionKey);
+				storage.Container.DeleteItemWithRetries<Documents.Queue>(JobId, partitionKey);
 			}
-			catch (Exception exception)
+			catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
 			{
-				logger.ErrorException($"Unable to remove the job [{JobId}] from the queue [{data.Name}]", exception);
+				logger.Trace($"Unable to remove the job [{JobId}] from the queue [{Queue}]. Status - 404 Not Found");
+			}
+			catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
+			{
+				logger.Trace($"Unable to remove the job [{JobId}] from the queue [{Queue}]. Status - 404 Not Found");
 			}
 			finally
 			{
@@ -73,6 +79,8 @@ internal class FetchedJob : IFetchedJob
 
 	public void Requeue()
 	{
+		if (reQueued) return;
+
 		lock (syncRoot)
 		{
 			try
@@ -84,15 +92,15 @@ internal class FetchedJob : IFetchedJob
 					PatchOperation.Set("/created_on", DateTime.UtcNow.ToEpoch())
 				};
 
-				data = storage.Container.PatchItemWithRetries<Documents.Queue>(data.Id, partitionKey, patchOperations, patchItemRequestOptions);
+				data = storage.Container.PatchItemWithRetries<Documents.Queue>(JobId, partitionKey, patchOperations, patchItemRequestOptions);
 			}
 			catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
 			{
-				/* ignored */
+				logger.Trace($"Unable to requeue the job [{JobId}] from the queue [{Queue}]. Status - 404 Not Found");
 			}
 			catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
 			{
-				/* ignore */
+				logger.Trace($"Unable to requeue the job [{JobId}] from the queue [{Queue}]. Status - 404 Not Found");
 			}
 			finally
 			{
@@ -101,29 +109,41 @@ internal class FetchedJob : IFetchedJob
 		}
 	}
 
-	private void KeepAliveJobCallback(object obj)
+	// ReSharper disable once MemberCanBePrivate.Global
+	internal void KeepAliveJobCallback(object obj)
 	{
 		if (disposed) return;
 
 		lock (syncRoot)
 		{
 			if (reQueued || removedFromQueue) return;
+			if (obj is not Documents.Queue temp) return;
 
 			try
 			{
-				PatchItemRequestOptions patchItemRequestOptions = new() { IfMatchEtag = data.ETag };
+				PatchItemRequestOptions patchItemRequestOptions = new() { IfMatchEtag = temp.ETag };
 				PatchOperation[] patchOperations =
 				{
 					PatchOperation.Set("/fetched_at", DateTime.UtcNow.ToEpoch())
 				};
 
-				data = storage.Container.PatchItemWithRetries<Documents.Queue>(data.Id, partitionKey, patchOperations, patchItemRequestOptions);
+				data = storage.Container.PatchItemWithRetries<Documents.Queue>(temp.Id, partitionKey, patchOperations, patchItemRequestOptions);
 
-				logger.Trace($"Keep-alive query for job: [{data.Id}] sent");
+				logger.Trace($"Keep-alive query for job: [{temp.Id}] sent");
+			}
+			catch (Exception ex) when (ex is CosmosException { StatusCode: HttpStatusCode.NotFound } or AggregateException { InnerException: CosmosException { StatusCode: HttpStatusCode.NotFound } })
+			{
+				logger.Trace($"Job [{temp.Id}] keep-alive query failed. Most likely the job was removed from the queue");
+				((IDisposable)this).Dispose();
+			}
+			catch (Exception ex) when (ex is CosmosException { StatusCode: HttpStatusCode.BadRequest } or AggregateException { InnerException: CosmosException { StatusCode: HttpStatusCode.BadRequest } })
+			{
+				logger.Trace($"Job [{temp.Id}] keep-alive query failed. Most likely the job was updated by some other server");
+				((IDisposable)this).Dispose();
 			}
 			catch (Exception ex)
 			{
-				logger.DebugException($"Unable to execute keep-alive query for job: [{data.Id}]", ex);
+				logger.DebugException($"Unable to execute keep-alive query for job [{temp.Id}]", ex);
 			}
 		}
 	}
