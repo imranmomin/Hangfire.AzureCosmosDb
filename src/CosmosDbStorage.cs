@@ -51,8 +51,28 @@ internal sealed class CosmosDbStorage : JobStorage, IDisposable
 	/// <param name="containerName">The name of the collection/container on the database</param>
 	/// <param name="options">The CosmosClientOptions object to override any of the options</param>
 	/// <param name="storageOptions">The CosmosDbStorageOptions object to override any of the options</param>
-	private CosmosDbStorage(string url, string authSecret, string databaseName, string containerName, CosmosClientOptions? options = null, CosmosDbStorageOptions? storageOptions = null)
+	internal CosmosDbStorage(string url, string authSecret, string databaseName, string containerName, CosmosClientOptions? options = null, CosmosDbStorageOptions? storageOptions = null)
 	{
+		if (string.IsNullOrEmpty(url))
+		{
+			throw new ArgumentNullException(nameof(url));
+		}
+
+		if (string.IsNullOrEmpty(authSecret))
+		{
+			throw new ArgumentNullException(nameof(authSecret));
+		}
+
+		if (string.IsNullOrEmpty(databaseName))
+		{
+			throw new ArgumentNullException(nameof(databaseName));
+		}
+
+		if (string.IsNullOrEmpty(containerName))
+		{
+			throw new ArgumentNullException(nameof(containerName));
+		}
+
 		this.databaseName = databaseName;
 		this.containerName = containerName;
 		StorageOptions = storageOptions ?? new CosmosDbStorageOptions();
