@@ -1,20 +1,17 @@
-﻿using System;
+﻿using Hangfire.Azure.Queue;
+using Hangfire.Logging;
+using Hangfire.Server;
+using Hangfire.Storage;
+using Microsoft.Azure.Cosmos;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-
-using Hangfire.Azure.Queue;
-using Hangfire.Logging;
-using Hangfire.Server;
-using Hangfire.Storage;
-
-using Microsoft.Azure.Cosmos;
-
-using Newtonsoft.Json;
-using Newtonsoft.Json.Serialization;
 
 
 namespace Hangfire.Azure
@@ -55,6 +52,30 @@ namespace Hangfire.Azure
         /// <param name="options">The CosmosDbStorageOptions object to override any of the options</param>
         /// <param name="storageOptions"></param>
         public CosmosDbStorage(string url, string authSecret, string database, string collection, CosmosClientOptions options = null, CosmosDbStorageOptions storageOptions = null)
+            : this(database, collection, storageOptions)
+        {
+            options = options ?? new CosmosClientOptions();
+            options.ApplicationName = "Hangfire";
+            options.Serializer = new CosmosJsonSerializer(settings);
+            Client = new CosmosClient(url, authSecret, options);
+        }
+
+
+        /// <summary>
+        /// Initializes the CosmosDbStorage form the url auth secret provide.
+        /// </summary>
+        /// <param name="cosmosClient">Instance of CosmosClient</param>
+        /// <param name="database">The name of the database to connect with</param>
+        /// <param name="collection">The name of the collection/container on the database</param>
+        /// <param name="storageOptions"></param>
+        public CosmosDbStorage(CosmosClient cosmosClient, string database, string collection, CosmosDbStorageOptions storageOptions = null)
+            :this(database,collection,storageOptions)
+        {
+            Client = cosmosClient;
+            Client.ClientOptions.Serializer = new CosmosJsonSerializer(settings);
+        }
+
+        private CosmosDbStorage(string database, string collection, CosmosDbStorageOptions storageOptions = null)
         {
             this.database = database;
             this.collection = collection;
@@ -62,11 +83,6 @@ namespace Hangfire.Azure
 
             JobQueueProvider provider = new JobQueueProvider(this);
             QueueProviders = new PersistentJobQueueProviderCollection(provider);
-
-            options = options ?? new CosmosClientOptions();
-            options.ApplicationName = "Hangfire";
-            options.Serializer = new CosmosJsonSerializer(settings);
-            Client = new CosmosClient(url, authSecret, options);
             Initialize();
         }
 
