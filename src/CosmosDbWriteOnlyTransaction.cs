@@ -445,7 +445,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		});
 	}
 
-	public override void SetRangeInHash(string key, IEnumerable<KeyValuePair<string, string>> keyValuePairs)
+	public override void SetRangeInHash(string key, IEnumerable<KeyValuePair<string, string?>> keyValuePairs)
 	{
 		if (string.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
 		if (keyValuePairs == null) throw new ArgumentNullException(nameof(keyValuePairs));

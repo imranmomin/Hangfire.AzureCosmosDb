@@ -39,6 +39,8 @@ internal class FetchedJob : IFetchedJob
 
 	public string JobId => data.JobId;
 
+	private string Id => data.Id;
+
 	public void Dispose()
 	{
 		if (disposed) return;
@@ -60,7 +62,7 @@ internal class FetchedJob : IFetchedJob
 		{
 			try
 			{
-				storage.Container.DeleteItemWithRetries<Documents.Queue>(JobId, partitionKey);
+				storage.Container.DeleteItemWithRetries<Documents.Queue>(Id, partitionKey);
 			}
 			catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
 			{
@@ -92,7 +94,7 @@ internal class FetchedJob : IFetchedJob
 					PatchOperation.Set("/created_on", DateTime.UtcNow.ToEpoch())
 				};
 
-				data = storage.Container.PatchItemWithRetries<Documents.Queue>(JobId, partitionKey, patchOperations, patchItemRequestOptions);
+				data = storage.Container.PatchItemWithRetries<Documents.Queue>(Id, partitionKey, patchOperations, patchItemRequestOptions);
 			}
 			catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
 			{

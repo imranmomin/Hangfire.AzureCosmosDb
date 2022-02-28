@@ -1028,6 +1028,657 @@ public class CosmosDbWriteOnlyTransactionFacts : IClassFixture<ContainerFixture>
 		Assert.Equal(3.2, record.Score, 3);
 	}
 
+	[Fact]
+	public void RemoveFromSet_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+		{
+			transaction.RemoveFromSet(null!, "value");
+			transaction.Commit();
+		});
+
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void RemoveFromSet_ThrowsAnException_WhenValueIsNull()
+	{
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+		{
+			transaction.RemoveFromSet("my-set", null!);
+			transaction.Commit();
+		});
+
+		Assert.Equal("value", exception.ParamName);
+	}
+
+	[Fact]
+	public void RemoveFromSet_RemovesARecord_WithGivenKeyAndValue()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		transaction.AddToSet("my-key", "my-value");
+		transaction.RemoveFromSet("my-key", "my-value");
+		transaction.Commit();
+
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.Set };
+		List<Set> record = Storage.Container.GetItemLinqQueryable<Set>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToList();
+
+		Assert.Empty(record);
+	}
+
+	[Fact]
+	public void RemoveFromSet_DoesNotRemoveRecord_WithSameKey_AndDifferentValue()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		transaction.AddToSet("my-key", "my-value");
+		transaction.RemoveFromSet("my-key", "different-value");
+		transaction.Commit();
+
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.Set };
+		List<Set> record = Storage.Container.GetItemLinqQueryable<Set>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToList();
+
+		Assert.Single(record);
+	}
+
+
+	[Fact]
+	public void RemoveFromSet_DoesNotRemoveRecord_WithSameValue_AndDifferentKey()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		transaction.AddToSet("my-key", "my-value");
+		transaction.RemoveFromSet("different-key", "my-value");
+		transaction.Commit();
+
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.Set };
+		List<Set> record = Storage.Container.GetItemLinqQueryable<Set>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToList();
+
+		Assert.Single(record);
+	}
+
+	[Fact]
+	public void InsertToList_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+		{
+			transaction.InsertToList(null!, "value");
+			transaction.Commit();
+		});
+
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void InsertToList_ThrowsAnException_WhenValueIsNull()
+	{
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+		{
+			transaction.InsertToList("my-list", null!);
+			transaction.Commit();
+		});
+
+		Assert.Equal("value", exception.ParamName);
+	}
+
+	[Fact]
+	public void InsertToList_AddsARecord_WithGivenValues()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		transaction.InsertToList("my-key", "my-value");
+		transaction.Commit();
+
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.List };
+		List? record = Storage.Container.GetItemLinqQueryable<List>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.SingleOrDefault();
+
+		Assert.NotNull(record);
+		Assert.Equal("my-key", record!.Key);
+		Assert.Equal("my-value", record.Value);
+	}
+
+	[Fact]
+	public void InsertToList_AddsAnotherRecord_WhenBothKeyAndValueAreExist()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		transaction.InsertToList("my-key", "my-value");
+		transaction.InsertToList("my-key", "my-value");
+		transaction.Commit();
+
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.List };
+		List<List> records = Storage.Container.GetItemLinqQueryable<List>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToList();
+
+		Assert.Equal(2, records.Count);
+	}
+
+	[Fact]
+	public void RemoveFromList_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+		{
+			transaction.RemoveFromList(null!, "value");
+			transaction.Commit();
+		});
+
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void RemoveFromList_ThrowsAnException_WhenValueIsNull()
+	{
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+		{
+			transaction.RemoveFromList("my-list", null!);
+			transaction.Commit();
+		});
+
+		Assert.Equal("value", exception.ParamName);
+	}
+
+	[Fact]
+	public void RemoveFromList_RemovesAllRecords_WithGivenKeyAndValue()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		transaction.InsertToList("my-key", "my-value");
+		transaction.InsertToList("my-key", "my-value");
+		transaction.RemoveFromList("my-key", "my-value");
+		transaction.Commit();
+
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.List };
+		List<List> records = Storage.Container.GetItemLinqQueryable<List>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToList();
+
+		Assert.Empty(records);
+	}
+
+	[Fact]
+	public void RemoveFromList_DoesNotRemoveRecords_WithSameKey_ButDifferentValue()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		transaction.InsertToList("my-key", "my-value");
+		transaction.RemoveFromList("my-key", "different-value");
+		transaction.Commit();
+
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.List };
+		List<List> records = Storage.Container.GetItemLinqQueryable<List>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToList();
+
+		Assert.Single(records);
+	}
+
+	[Fact]
+	public void RemoveFromList_DoesNotRemoveRecords_WithSameValue_ButDifferentKey()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		transaction.InsertToList("my-key", "my-value");
+		transaction.RemoveFromList("different-key", "my-value");
+		transaction.Commit();
+
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.List };
+		List<List> records = Storage.Container.GetItemLinqQueryable<List>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToList();
+
+		Assert.Single(records);
+	}
+
+	[Fact]
+	public void TrimList_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+		{
+			transaction.TrimList(null!, 0, 1);
+			transaction.Commit();
+		});
+
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void TrimList_TrimsAList_ToASpecifiedRange()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		transaction.InsertToList("my-key", "0");
+		transaction.InsertToList("my-key", "1");
+		transaction.InsertToList("my-key", "2");
+		transaction.InsertToList("my-key", "3");
+		transaction.TrimList("my-key", 1, 2);
+		transaction.Commit();
+
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.List };
+		List<List> records = Storage.Container.GetItemLinqQueryable<List>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToList();
+
+		Assert.Equal(2, records.Count);
+		Assert.Equal("1", records[0].Value);
+		Assert.Equal("2", records[1].Value);
+	}
+
+	[Fact]
+	public void TrimList_RemovesRecordsToEnd_IfKeepEndingAt_GreaterThanMaxElementIndex()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		transaction.InsertToList("my-key", "0");
+		transaction.InsertToList("my-key", "1");
+		transaction.InsertToList("my-key", "2");
+		transaction.TrimList("my-key", 1, 100);
+		transaction.Commit();
+
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.List };
+		List<List> records = Storage.Container.GetItemLinqQueryable<List>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToList();
+
+		Assert.Equal(2, records.Count);
+		Assert.Equal("0", records[0].Value);
+		Assert.Equal("1", records[1].Value);
+	}
+
+	[Fact]
+	public void TrimList_RemovesAllRecords_WhenStartingFromValue_GreaterThanMaxElementIndex()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		transaction.InsertToList("my-key", "0");
+		transaction.TrimList("my-key", 1, 100);
+		transaction.Commit();
+
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.List };
+		List<List> records = Storage.Container.GetItemLinqQueryable<List>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToList();
+
+		Assert.Empty(records);
+	}
+
+	[Fact]
+	public void TrimList_RemovesAllRecords_IfStartFromGreaterThanEndingAt()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		transaction.InsertToList("my-key", "0");
+		transaction.TrimList("my-key", 1, 0);
+		transaction.Commit();
+
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.List };
+		List<List> records = Storage.Container.GetItemLinqQueryable<List>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToList();
+
+		Assert.Empty(records);
+	}
+
+	[Fact]
+	public void TrimList_RemovesRecords_OnlyOfAGivenKey()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		transaction.InsertToList("my-key", "0");
+		transaction.TrimList("another-key", 1, 0);
+		transaction.Commit();
+
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.List };
+		List<List> records = Storage.Container.GetItemLinqQueryable<List>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToList();
+
+		Assert.Single(records);
+	}
+
+	[Fact]
+	public void SetRangeInHash_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+		{
+			transaction.SetRangeInHash(null!, new Dictionary<string, string?>());
+			transaction.Commit();
+		});
+
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void SetRangeInHash_ThrowsAnException_WhenKeyValuePairsArgumentIsNull()
+	{
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+		{
+			transaction.SetRangeInHash("some-hash", null!);
+			transaction.Commit();
+		});
+
+		Assert.Equal("keyValuePairs", exception.ParamName);
+	}
+
+	[Fact]
+	public void SetRangeInHash_MergesAllRecords()
+	{
+		//clean
+		ContainerFixture.Clean();
+
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		transaction.SetRangeInHash("some-hash", new Dictionary<string, string?>
+		{
+			{ "Key1", "Value1" },
+			{ "Key2", "Value2" }
+		});
+		transaction.Commit();
+
+		//assert
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.Hash };
+		Dictionary<string, string?> records = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToDictionary(x => x.Field, x => x.Value);
+
+
+		Assert.Equal(2, records.Count);
+		Assert.Equal("Value1", records["Key1"]);
+		Assert.Equal("Value2", records["Key2"]);
+	}
+
+	[Fact]
+	public void SetRangeInHash_CanSetANullValue()
+	{
+		//clean
+		ContainerFixture.Clean();
+
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		transaction.SetRangeInHash("some-hash", new Dictionary<string, string?> { { "Key1", null! } });
+		transaction.Commit();
+
+		//assert
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.Hash };
+		Dictionary<string, string?> records = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToDictionary(x => x.Field, x => x.Value);
+
+		Assert.Single(records);
+		Assert.Null(records["Key1"]);
+	}
+
+	[Fact]
+	public void SetRangeInHash_UpdatesExistingValue()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<Hash> hashes = new()
+		{
+			new Hash { Key = "some-hash", Field = "key1", Value = "value1" },
+			new Hash { Key = "some-hash", Field = "key2", Value = "value2" },
+			new Hash { Key = "some-hash", Field = "key3", Value = "value3" },
+			new Hash { Key = "some-other-hash", Field = "key1", Value = "value1" }
+		};
+		Data<Hash> data = new(hashes);
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Hash);
+
+		// act
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+		transaction.SetRangeInHash("some-hash", new Dictionary<string, string?> { { "key1", "VALUE-1" } });
+		transaction.Commit();
+
+		QueryRequestOptions queryRequestOptions = new() { PartitionKey = PartitionKeys.Hash };
+		Dictionary<string, string?> result = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: queryRequestOptions)
+			.Where(x => x.Key == "some-hash")
+			.ToQueryResult()
+			.ToDictionary(x => x.Field, x => x.Value);
+
+		Dictionary<string, string?> result2 = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: queryRequestOptions)
+			.Where(x => x.Key == "some-other-hash")
+			.ToQueryResult()
+			.ToDictionary(x => x.Field, x => x.Value);
+
+		//assert
+		Assert.Equal(3, result.Count);
+		Assert.Equal("VALUE-1", result["key1"]);
+		Assert.Equal("value2", result["key2"]);
+		Assert.Equal("value3", result["key3"]);
+
+		Assert.Single(result2);
+		Assert.Equal("value1", result2["key1"]);
+	}
+
+	[Fact]
+	public void SetRangeInHash_UpdatesExistingValueAndRemoveDuplicate_WhenAlreadyHasMultipleFieldForAKey()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<Hash> hashes = new()
+		{
+			new Hash { Key = "some-hash", Field = "key1", Value = "value1" },
+			new Hash { Key = "some-hash", Field = "key1", Value = "value2" },
+			new Hash { Key = "some-hash", Field = "key3", Value = "value3" },
+			new Hash { Key = "some-other-hash", Field = "key1", Value = "value1" }
+		};
+		Data<Hash> data = new(hashes);
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Hash);
+
+		// act
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+		transaction.SetRangeInHash("some-hash", new Dictionary<string, string?> { { "key1", "VALUE-1" } });
+		transaction.Commit();
+
+		QueryRequestOptions queryRequestOptions = new() { PartitionKey = PartitionKeys.Hash };
+		Dictionary<string, string?> result = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: queryRequestOptions)
+			.Where(x => x.Key == "some-hash")
+			.ToQueryResult()
+			.ToDictionary(x => x.Field, x => x.Value);
+
+		Dictionary<string, string?> result2 = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: queryRequestOptions)
+			.Where(x => x.Key == "some-other-hash")
+			.ToQueryResult()
+			.ToDictionary(x => x.Field, x => x.Value);
+
+		//assert
+		Assert.Equal(2, result.Count);
+		Assert.Equal("VALUE-1", result["key1"]);
+		Assert.Equal("value3", result["key3"]);
+
+		Assert.Single(result2);
+		Assert.Equal("value1", result2["key1"]);
+	}
+
+	[Fact]
+	public void RemoveHash_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+		{
+			transaction.RemoveHash(null!);
+			transaction.Commit();
+		});
+
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void RemoveHash_RemovesAllHashRecords()
+	{
+		//clean
+		ContainerFixture.Clean();
+
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		transaction.SetRangeInHash("some-hash", new Dictionary<string, string?>
+		{
+			{ "Key1", "Value1" },
+			{ "Key2", "Value2" }
+		});
+		transaction.Commit();
+
+		transaction.RemoveHash("some-hash");
+		transaction.Commit();
+
+		//assert
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.Hash };
+		Dictionary<string, string?> records = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToDictionary(x => x.Field, x => x.Value);
+
+		Assert.Empty(records);
+	}
 
 #pragma warning disable xUnit1013
 // ReSharper disable once MemberCanBePrivate.Global

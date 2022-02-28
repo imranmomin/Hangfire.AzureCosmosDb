@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
 using Hangfire.Azure.Helper;
@@ -71,7 +70,7 @@ internal sealed class CosmosDbMonitoringApi : IMonitoringApi
 		})
 		.ToList();
 
-	public JobDetailsDto? JobDetails(string jobId)
+	public JobDetailsDto JobDetails(string jobId)
 	{
 		if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
 
