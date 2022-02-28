@@ -58,6 +58,7 @@ namespace Hangfire.Azure
             options.ApplicationName = "Hangfire";
             options.Serializer = new CosmosJsonSerializer(settings);
             Client = new CosmosClient(url, authSecret, options);
+            Initialize();
         }
 
 
@@ -73,6 +74,7 @@ namespace Hangfire.Azure
         {
             Client = cosmosClient;
             Client.ClientOptions.Serializer = new CosmosJsonSerializer(settings);
+            Initialize();
         }
 
         private CosmosDbStorage(string database, string collection, CosmosDbStorageOptions storageOptions = null)
@@ -83,7 +85,6 @@ namespace Hangfire.Azure
 
             JobQueueProvider provider = new JobQueueProvider(this);
             QueueProviders = new PersistentJobQueueProviderCollection(provider);
-            Initialize();
         }
 
         /// <summary>
