@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
 using Hangfire.Azure.Helper;
@@ -19,7 +18,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 	public CosmosDbWriteOnlyTransaction(CosmosDbConnection connection)
 	{
-		this.connection = connection;
+		this.connection = connection ?? throw new ArgumentNullException(nameof(connection));
 	}
 
 	private void QueueCommand(Action command) => commands.Add(command);
@@ -63,9 +62,12 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		if (string.IsNullOrEmpty(queue)) throw new ArgumentNullException(nameof(queue));
 		if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
 
-		IPersistentJobQueueProvider provider = connection.QueueProviders.GetProvider(queue);
-		IPersistentJobQueue persistentQueue = provider.GetJobQueue();
-		QueueCommand(() => persistentQueue.Enqueue(queue, jobId));
+		QueueCommand(() =>
+		{
+			IPersistentJobQueueProvider provider = connection.QueueProviders.GetProvider(queue);
+			IPersistentJobQueue persistentQueue = provider.GetJobQueue();
+			persistentQueue.Enqueue(queue, jobId);
+		});
 	}
 
 	#endregion
@@ -324,8 +326,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 		QueueCommand(() =>
 		{
-			PartitionKey partitionKey = new((int)DocumentTypes.Set);
-			string[] sets = connection.Storage.Container.GetItemLinqQueryable<List>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
+			string[] sets = connection.Storage.Container.GetItemLinqQueryable<List>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Set })
 				.Where(s => s.Key == key)
 				.Select(s => new { s.Id, s.Value })
 				.ToQueryResult()
@@ -337,7 +338,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 			string ids = string.Join(",", sets.Select(s => $"'{s}'"));
 			string query = $"SELECT doc._self FROM doc WHERE doc.id IN ({ids})";
-			connection.Storage.Container.ExecuteDeleteDocuments(query, partitionKey);
+			connection.Storage.Container.ExecuteDeleteDocuments(query, PartitionKeys.Set);
 		});
 	}
 
@@ -350,8 +351,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 		QueueCommand(() =>
 		{
-			PartitionKey partitionKey = new((int)DocumentTypes.Set);
-			List<Set> sets = connection.Storage.Container.GetItemLinqQueryable<Set>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
+			List<Set> sets = connection.Storage.Container.GetItemLinqQueryable<Set>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Set })
 				.Where(s => s.Key == key)
 				.ToQueryResult()
 				.Where(s => s.Value == value) // value may contain json string.. which interfere with query 
@@ -372,7 +372,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 				sets.ForEach(s => s.Score = score);
 
 			Data<Set> data = new(sets);
-			connection.Storage.Container.ExecuteUpsertDocuments(data, partitionKey);
+			connection.Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Set);
 		});
 	}
 
@@ -454,8 +454,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		{
 			Data<Hash> data = new();
 
-			PartitionKey partitionKey = new((int)DocumentTypes.Hash);
-			List<Hash> hashes = connection.Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
+			List<Hash> hashes = connection.Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.Hash })
 				.Where(h => h.Key == key)
 				.ToQueryResult()
 				.ToList();
@@ -482,7 +481,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 						data.Items.Add(hash);
 
 						string query = $"SELECT * FROM doc WHERE doc.key = '{hash.Key}' AND doc.field = '{hash.Field}' AND doc.id != '{hash.Id}'";
-						connection.Storage.Container.ExecuteDeleteDocuments(query, partitionKey);
+						connection.Storage.Container.ExecuteDeleteDocuments(query, PartitionKeys.Hash);
 						break;
 					}
 					case 1:
@@ -501,7 +500,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 				}
 			}
 
-			connection.Storage.Container.ExecuteUpsertDocuments(data, partitionKey);
+			connection.Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Hash);
 		});
 	}
 
@@ -557,8 +556,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 		QueueCommand(() =>
 		{
-			PartitionKey partitionKey = new((int)DocumentTypes.List);
-			string[] lists = connection.Storage.Container.GetItemLinqQueryable<List>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
+			string[] lists = connection.Storage.Container.GetItemLinqQueryable<List>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.List })
 				.Where(l => l.Key == key)
 				.Select(l => new { l.Id, l.Value })
 				.ToQueryResult()
@@ -570,7 +568,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 			string ids = string.Join(",", lists.Select(l => $"'{l}'"));
 			string query = $"SELECT doc._self FROM doc WHERE doc.id IN ({ids})";
-			connection.Storage.Container.ExecuteDeleteDocuments(query, partitionKey);
+			connection.Storage.Container.ExecuteDeleteDocuments(query, PartitionKeys.List);
 		});
 	}
 
@@ -580,8 +578,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 		QueueCommand(() =>
 		{
-			PartitionKey partitionKey = new((int)DocumentTypes.List);
-			string[] lists = connection.Storage.Container.GetItemLinqQueryable<List>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
+			string[] lists = connection.Storage.Container.GetItemLinqQueryable<List>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.List })
 				.Where(l => l.Key == key)
 				.OrderByDescending(l => l.CreatedOn)
 				.Select(l => l.Id)
@@ -595,7 +592,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 			string ids = string.Join(",", lists.Select(l => $"'{l}'"));
 			string query = $"SELECT doc._self FROM doc WHERE doc.id IN ({ids})";
-			connection.Storage.Container.ExecuteDeleteDocuments(query, partitionKey);
+			connection.Storage.Container.ExecuteDeleteDocuments(query, PartitionKeys.List);
 		});
 	}
 
