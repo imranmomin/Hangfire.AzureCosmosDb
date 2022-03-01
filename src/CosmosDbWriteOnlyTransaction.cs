@@ -29,6 +29,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		bool complete;
 		const string resource = "locks:batch:commit";
 		CosmosDbDistributedLock? distributedLock = null;
+		int commandIndex = 0;
 
 		do
 		{
@@ -37,7 +38,16 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 			try
 			{
 				distributedLock = new CosmosDbDistributedLock(resource, connection.Storage.StorageOptions.TransactionalLockTimeout, connection.Storage);
-				commands.ForEach(command => command());
+
+				do
+				{
+					Action command = commands.ElementAt(commandIndex);
+					command.Invoke();
+					commandIndex += 1;
+				} while (commandIndex <= commands.Count - 1);
+
+				// clear the commands array
+				commands.Clear();
 			}
 			catch (CosmosDbDistributedLockException ex) when (ex.Key == resource)
 			{
@@ -170,8 +180,8 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 				try
 				{
 					distributedLock = new CosmosDbDistributedLock(resource, connection.Storage.StorageOptions.TransactionalLockTimeout, connection.Storage);
-					string queryJobs = $"SELECT * FROM doc WHERE doc.id = '{jobId}'";
-					connection.Storage.Container.ExecuteExpireDocuments(queryJobs, epoch, PartitionKeys.Job);
+					PatchOperation[] patchOperations = { PatchOperation.Set("/expire_on", epoch) };
+					connection.Storage.Container.PatchItemWithRetries<Job>(jobId, PartitionKeys.Job, patchOperations);
 				}
 				catch (CosmosDbDistributedLockException ex) when (ex.Key == resource)
 				{
@@ -190,8 +200,14 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		// we need to also remove the state documents
 		QueueCommand(() =>
 		{
-			string queryStates = $"SELECT * FROM doc WHERE doc.job_id = '{jobId}'";
-			connection.Storage.Container.ExecuteExpireDocuments(queryStates, epoch, PartitionKeys.State);
+			QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.State };
+			QueryDefinition sql = new($"SELECT VALUE doc.id FROM doc WHERE doc.job_id = '{jobId}'");
+
+			string[] records = connection.Storage.Container.GetItemQueryIterator<string>(sql, requestOptions: requestOptions)
+				.ToQueryResult()
+				.ToArray();
+
+			ExpireDocuments<State>(epoch, records, PartitionKeys.State);
 		});
 	}
 
@@ -213,12 +229,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 				try
 				{
 					distributedLock = new CosmosDbDistributedLock(resource, connection.Storage.StorageOptions.TransactionalLockTimeout, connection.Storage);
-
-					PatchOperation[] patchOperations =
-					{
-						PatchOperation.Remove("/expire_on")
-					};
-
+					PatchOperation[] patchOperations = { PatchOperation.Remove("/expire_on") };
 					connection.Storage.Container.PatchItemWithRetries<Job>(jobId, PartitionKeys.Job, patchOperations);
 				}
 				catch (CosmosDbDistributedLockException ex) when (ex.Key == resource)
@@ -379,12 +390,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 	public override void PersistSet(string key)
 	{
 		if (key == null) throw new ArgumentNullException(nameof(key));
-
-		QueueCommand(() =>
-		{
-			string query = $"SELECT * FROM doc WHERE doc.key = '{key}'";
-			connection.Storage.Container.ExecutePersistDocuments(query, PartitionKeys.Set);
-		});
+		QueueCommand(() => PersistDocuments<Set>(key, PartitionKeys.Set));
 	}
 
 	public override void ExpireSet(string key, TimeSpan expireIn)
@@ -393,9 +399,15 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 		QueueCommand(() =>
 		{
-			string query = $"SELECT * FROM doc WHERE doc.key = '{key}'";
 			int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
-			connection.Storage.Container.ExecuteExpireDocuments(query, epoch, PartitionKeys.Set);
+			QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.Set };
+			QueryDefinition sql = new($"SELECT VALUE doc.id FROM doc WHERE doc.key = '{key}'");
+
+			string[] records = connection.Storage.Container.GetItemQueryIterator<string>(sql, requestOptions: requestOptions)
+				.ToQueryResult()
+				.ToArray();
+
+			ExpireDocuments<Set>(epoch, records, PartitionKeys.Set);
 		});
 	}
 
@@ -510,21 +522,22 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 		QueueCommand(() =>
 		{
-			string query = $"SELECT * FROM doc WHERE doc.key = '{key}'";
 			int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
-			connection.Storage.Container.ExecuteExpireDocuments(query, epoch, PartitionKeys.Hash);
+			QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.Hash };
+			QueryDefinition sql = new($"SELECT VALUE doc.id FROM doc WHERE doc.key = '{key}'");
+
+			string[] records = connection.Storage.Container.GetItemQueryIterator<string>(sql, requestOptions: requestOptions)
+				.ToQueryResult()
+				.ToArray();
+
+			ExpireDocuments<Hash>(epoch, records, PartitionKeys.Hash);
 		});
 	}
 
 	public override void PersistHash(string key)
 	{
 		if (string.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
-
-		QueueCommand(() =>
-		{
-			string query = $"SELECT * FROM doc WHERE doc.key = '{key}'";
-			connection.Storage.Container.ExecutePersistDocuments(query, PartitionKeys.Hash);
-		});
+		QueueCommand(() => PersistDocuments<Hash>(key, PartitionKeys.Hash));
 	}
 
 	#endregion
@@ -602,21 +615,81 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 		QueueCommand(() =>
 		{
-			string query = $"SELECT * FROM doc WHERE doc.key = '{key}'";
 			int epoch = DateTime.UtcNow.Add(expireIn).ToEpoch();
-			connection.Storage.Container.ExecuteExpireDocuments(query, epoch, PartitionKeys.List);
+			QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.List };
+			QueryDefinition sql = new($"SELECT VALUE doc.id FROM doc WHERE doc.key = '{key}'");
+
+			string[] records = connection.Storage.Container.GetItemQueryIterator<string>(sql, requestOptions: requestOptions)
+				.ToQueryResult()
+				.ToArray();
+
+			ExpireDocuments<List>(epoch, records, PartitionKeys.List);
 		});
 	}
 
 	public override void PersistList(string key)
 	{
 		if (key == null) throw new ArgumentNullException(nameof(key));
+		QueueCommand(() => PersistDocuments<List>(key, PartitionKeys.List));
+	}
 
-		QueueCommand(() =>
+	#endregion
+
+	#region PRIVATE
+
+	private void PersistDocuments<T>(string key, PartitionKey partitionKey)
+	{
+		QueryRequestOptions requestOptions = new() { PartitionKey = partitionKey };
+		QueryDefinition sql = new($"SELECT VALUE doc.id FROM doc WHERE doc.key = '{key}' AND IS_DEFINED(doc.expire_on)");
+
+		string[] records = connection.Storage.Container.GetItemQueryIterator<string>(sql, requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToArray();
+
+		if (records.Length == 0) return;
+
+		PatchOperation[] patchOperations = { PatchOperation.Remove("/expire_on") };
+
+		if (records.Length == 1)
 		{
-			string query = $"SELECT * FROM doc WHERE doc.key = '{key}'";
-			connection.Storage.Container.ExecutePersistDocuments(query, PartitionKeys.List);
-		});
+			string id = records.First();
+			PatchItemRequestOptions patchItemRequestOptions = new() { FilterPredicate = $"FROM doc WHERE doc.key = '{key}' AND IS_DEFINED(doc.expire_on)" };
+			connection.Storage.Container.PatchItemWithRetries<T>(id, partitionKey, patchOperations, patchItemRequestOptions);
+		}
+		else
+		{
+			TransactionalBatchPatchItemRequestOptions batchPatchItemRequestOptions = new() { FilterPredicate = $"FROM doc WHERE doc.key = '{key}' AND IS_DEFINED(doc.expire_on)" };
+			TransactionalBatch transactionalBatch = connection.Storage.Container.CreateTransactionalBatch(partitionKey);
+			foreach (string id in records)
+			{
+				transactionalBatch.PatchItem(id, patchOperations, batchPatchItemRequestOptions);
+			}
+			transactionalBatch.ExecuteAsync().ExecuteWithRetriesAsync().ExecuteSynchronously();
+		}
+	}
+
+	private void ExpireDocuments<T>(int expireOn, string[] records, PartitionKey partitionKey)
+	{
+		if (records.Length == 0) return;
+
+		PatchOperation[] patchOperations = { PatchOperation.Set("/expire_on", expireOn) };
+
+		if (records.Length == 1)
+		{
+			string id = records.First();
+			PatchItemRequestOptions patchItemRequestOptions = new() { FilterPredicate = $"FROM doc WHERE NOT IS_DEFINED(doc.expire_on) OR doc.expire_on != {expireOn}" };
+			connection.Storage.Container.PatchItemWithRetries<T>(id, partitionKey, patchOperations, patchItemRequestOptions);
+		}
+		else
+		{
+			TransactionalBatchPatchItemRequestOptions batchPatchItemRequestOptions = new() { FilterPredicate = $"FROM doc WHERE NOT IS_DEFINED(doc.expire_on) OR doc.expire_on != {expireOn}" };
+			TransactionalBatch transactionalBatch = connection.Storage.Container.CreateTransactionalBatch(partitionKey);
+			foreach (string id in records)
+			{
+				transactionalBatch.PatchItem(id, patchOperations, batchPatchItemRequestOptions);
+			}
+			transactionalBatch.ExecuteAsync().ExecuteWithRetriesAsync().ExecuteSynchronously();
+		}
 	}
 
 	#endregion

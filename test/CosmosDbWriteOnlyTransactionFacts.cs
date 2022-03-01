@@ -109,6 +109,15 @@ public class CosmosDbWriteOnlyTransactionFacts : IClassFixture<ContainerFixture>
 
 		// job 1
 		Documents.Job sqlJob1 = Storage.Container.CreateItemWithRetries(entityJob, PartitionKeys.Job);
+		foreach (int index in Enumerable.Range(0, 5))
+		{
+			Mock<IState> state = new();
+			state.Setup(x => x.Name).Returns($"State-{index}");
+			state.Setup(x => x.Reason).Returns((string)null!);
+			state.Setup(x => x.SerializeData()).Returns(((Dictionary<string, string>)null!)!);
+			transaction.SetJobState(sqlJob1.Id, state.Object);
+		}
+		transaction.Commit();
 
 		// job 2
 		entityJob.Id = Guid.NewGuid().ToString();
@@ -125,6 +134,16 @@ public class CosmosDbWriteOnlyTransactionFacts : IClassFixture<ContainerFixture>
 
 		sqlJob2 = Storage.Container.ReadItemWithRetries<Documents.Job>(sqlJob2.Id, PartitionKeys.Job);
 		Assert.Null(sqlJob2.ExpireOn);
+
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.State };
+		List<State> jobStates = Storage.Container.GetItemLinqQueryable<State>(requestOptions: requestOptions)
+			.Where(x => x.JobId == sqlJob1.Id)
+			.ToQueryResult()
+			.ToList();
+
+		Assert.Equal(5, jobStates.Count);
+		Assert.NotNull(jobStates[0].ExpireOn);
+		Assert.True(DateTime.UtcNow.AddHours(23) < jobStates[0].ExpireOn && jobStates[0].ExpireOn < DateTime.UtcNow.AddHours(25));
 	}
 
 	[Fact]
@@ -1678,6 +1697,519 @@ public class CosmosDbWriteOnlyTransactionFacts : IClassFixture<ContainerFixture>
 			.ToDictionary(x => x.Field, x => x.Value);
 
 		Assert.Empty(records);
+	}
+
+	[Fact]
+	public void AddRangeToSet_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+		{
+			transaction.AddRangeToSet(null!, new List<string>());
+			transaction.Commit();
+		});
+
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void AddRangeToSet_ThrowsAnException_WhenItemsValueIsNull()
+	{
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+		{
+			transaction.AddRangeToSet("my-set", null!);
+			transaction.Commit();
+		});
+
+		Assert.Equal("items", exception.ParamName);
+	}
+
+	[Fact]
+	public void AddRangeToSet_AddsAllItems_ToAGivenSet()
+	{
+		//clean
+		ContainerFixture.Clean();
+
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		List<string> items = new() { "1", "2", "3" };
+		transaction.AddRangeToSet("my-set", items);
+		transaction.Commit();
+
+		//assert
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.Set };
+		List<string> records = Storage.Container.GetItemLinqQueryable<Set>(requestOptions: requestOptions)
+			.Where(x => x.Key == "my-set")
+			.Select(x => x.Value)
+			.ToQueryResult()
+			.ToList();
+
+		Assert.Equal(items, records);
+	}
+
+	[Fact]
+	public void RemoveSet_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+		{
+			transaction.RemoveSet(null!);
+			transaction.Commit();
+		});
+
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void RemoveSet_RemovesASet_WithAGivenKey()
+	{
+		//clean
+		ContainerFixture.Clean();
+
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		List<string> items = new() { "1", "2", "3" };
+		transaction.AddRangeToSet("set-1", items);
+		transaction.AddRangeToSet("set-2", items);
+		transaction.Commit();
+
+		transaction.RemoveSet("set-1");
+		transaction.Commit();
+
+		//assert
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.Set };
+		List<string> records = Storage.Container.GetItemLinqQueryable<Set>(requestOptions: requestOptions)
+			.Where(x => x.Key == "set-1")
+			.Select(x => x.Value)
+			.ToQueryResult()
+			.ToList();
+
+		Assert.Empty(records);
+
+		records = Storage.Container.GetItemLinqQueryable<Set>(requestOptions: requestOptions)
+			.Where(x => x.Key == "set-2")
+			.Select(x => x.Value)
+			.ToQueryResult()
+			.ToList();
+
+		Assert.Equal(items, records);
+	}
+
+	[Fact]
+	public void ExpireHash_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+		{
+			transaction.ExpireHash(null!, TimeSpan.FromMinutes(5));
+			transaction.Commit();
+		});
+
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void ExpireHash_SetsExpirationTimeOnAHash_WithGivenKey()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<Hash> hashes = new()
+		{
+			new Hash { Key = "some-hash", Field = "key1", Value = "value1" },
+			new Hash { Key = "some-other-hash", Field = "key1", Value = "value1" }
+		};
+		Data<Hash> data = new(hashes);
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Hash);
+
+
+		// Act
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+		transaction.ExpireHash("some-hash", TimeSpan.FromMinutes(60));
+		transaction.Commit();
+
+		//assert
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.Hash };
+		Dictionary<string, DateTime?> records = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToDictionary(x => x.Key, x => x.ExpireOn);
+
+		Assert.True(DateTime.UtcNow.AddMinutes(59) < records["some-hash"]);
+		Assert.True(records["some-hash"] < DateTime.UtcNow.AddMinutes(61));
+		Assert.Null(records["some-other-hash"]);
+	}
+
+	[Fact]
+	public void ExpireSet_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+		{
+			transaction.ExpireSet(null!, TimeSpan.FromSeconds(45));
+			transaction.Commit();
+		});
+
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void ExpireSet_SetsExpirationTime_OnASet_WithGivenKey()
+	{
+		//clean
+		ContainerFixture.Clean();
+
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		List<string> items = new() { "1" };
+		transaction.AddRangeToSet("set-1", items);
+		transaction.AddRangeToSet("set-2", items);
+		transaction.Commit();
+
+
+		// Act
+		transaction.ExpireSet("set-1", TimeSpan.FromMinutes(60));
+		transaction.Commit();
+
+		// Assert
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.Set };
+		Dictionary<string, DateTime?> records = Storage.Container.GetItemLinqQueryable<Set>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToDictionary(x => x.Key, x => x.ExpireOn);
+
+		Assert.True(DateTime.UtcNow.AddMinutes(59) < records["set-1"]);
+		Assert.True(records["set-1"] < DateTime.UtcNow.AddMinutes(61));
+		Assert.Null(records["set-2"]);
+	}
+
+	[Fact]
+	public void ExpireList_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+		{
+			transaction.ExpireList(null!, TimeSpan.FromSeconds(45));
+			transaction.Commit();
+		});
+
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void ExpireList_SetsExpirationTime_OnAList_WithGivenKey()
+	{
+		//clean
+		ContainerFixture.Clean();
+
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+		transaction.InsertToList("list-1", "1");
+		transaction.InsertToList("list-2", "2");
+		transaction.Commit();
+
+		// Act
+		transaction.ExpireList("list-1", TimeSpan.FromMinutes(60));
+		transaction.Commit();
+
+		// Assert
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.List };
+		Dictionary<string, DateTime?> records = Storage.Container.GetItemLinqQueryable<List>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToDictionary(x => x.Key, x => x.ExpireOn);
+
+		Assert.True(DateTime.UtcNow.AddMinutes(59) < records["list-1"]);
+		Assert.True(records["list-1"] < DateTime.UtcNow.AddMinutes(61));
+		Assert.Null(records["list-2"]);
+	}
+
+	[Fact]
+	public void PersistHash_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+		{
+			transaction.PersistHash(null!);
+			transaction.Commit();
+		});
+
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void PersistHash_ClearsExpirationTime_OnAGivenHash()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<Hash> hashes = new()
+		{
+			new Hash { Key = "hash-1", Field = "key1", Value = "value1", ExpireOn = DateTime.Now.AddDays(1) },
+			new Hash { Key = "hash-2", Field = "key1", Value = "value1", ExpireOn = DateTime.Now.AddDays(1) }
+		};
+		Data<Hash> data = new(hashes);
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Hash);
+
+		// Act
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+		transaction.PersistHash("hash-1");
+		transaction.Commit();
+
+		// Assert
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.Hash };
+		Dictionary<string, DateTime?> records = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToDictionary(x => x.Key, x => x.ExpireOn);
+
+		Assert.Null(records["hash-1"]);
+		Assert.NotNull(records["hash-2"]);
+	}
+
+	[Fact]
+	public void PersistHash_ClearsExpirationTime_OnAGivenHash_MultipleDocuments()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<Hash> hashes = new()
+		{
+			new Hash { Key = "hash-1", Field = "key1", Value = "value1", ExpireOn = DateTime.Now.AddDays(1) },
+			new Hash { Key = "hash-1", Field = "key2", Value = "value2", ExpireOn = DateTime.Now.AddDays(1) },
+			new Hash { Key = "hash-1", Field = "key3", Value = "value3", ExpireOn = DateTime.Now.AddDays(1) },
+			new Hash { Key = "hash-1", Field = "key4", Value = "value4", ExpireOn = DateTime.Now.AddDays(1) },
+			new Hash { Key = "hash-2", Field = "key1", Value = "value1", ExpireOn = DateTime.Now.AddDays(1) }
+		};
+		Data<Hash> data = new(hashes);
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Hash);
+
+		// Act
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+		transaction.PersistHash("hash-1");
+		transaction.Commit();
+
+		// Assert
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.Hash };
+		Dictionary<string, DateTime?> records = Storage.Container.GetItemLinqQueryable<Hash>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.GroupBy(x => x.Key)
+			.ToDictionary(x => x.Key, x => x.Max(z => z.ExpireOn));
+
+		Assert.Null(records["hash-1"]);
+		Assert.NotNull(records["hash-2"]);
+	}
+
+	[Fact]
+	public void PersistSet_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+		{
+			transaction.PersistSet(null!);
+			transaction.Commit();
+		});
+
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void PersistSet_ClearsExpirationTime_OnAGivenKey()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<Set> sets = new()
+		{
+			new Set { Key = "set-2", Value = "value2", CreatedOn = DateTime.UtcNow, ExpireOn = DateTime.Now.AddDays(1) },
+			new Set { Key = "set-3", Value = "value3", CreatedOn = DateTime.UtcNow, ExpireOn = DateTime.Now.AddDays(1) },
+			new Set { Key = "set-1", Value = "value1", CreatedOn = DateTime.UtcNow, ExpireOn = DateTime.Now.AddDays(1) }
+		};
+		Data<Set> data = new(sets);
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Set);
+
+		// Act
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+		transaction.PersistSet("set-1");
+		transaction.Commit();
+
+		// Assert
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.Set };
+		Dictionary<string, DateTime?> records = Storage.Container.GetItemLinqQueryable<Set>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToDictionary(x => x.Key, x => x.ExpireOn);
+
+		Assert.Null(records["set-1"]);
+		Assert.NotNull(records["set-2"]);
+		Assert.NotNull(records["set-3"]);
+	}
+
+	[Fact]
+	public void PersistSet_ClearsExpirationTime_OnAGivenKey_MultipleDocuments()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<Set> sets = new()
+		{
+			new Set { Key = "set-2", Value = "value2", CreatedOn = DateTime.UtcNow, ExpireOn = DateTime.Now.AddDays(1) },
+			new Set { Key = "set-3", Value = "value3", CreatedOn = DateTime.UtcNow, ExpireOn = DateTime.Now.AddDays(1) },
+			new Set { Key = "set-1", Value = "value1", CreatedOn = DateTime.UtcNow, ExpireOn = DateTime.Now.AddDays(1) },
+			new Set { Key = "set-1", Value = "value1", CreatedOn = DateTime.UtcNow, ExpireOn = DateTime.Now.AddDays(1) },
+			new Set { Key = "set-1", Value = "value1", CreatedOn = DateTime.UtcNow, ExpireOn = DateTime.Now.AddDays(1) },
+			new Set { Key = "set-1", Value = "value1", CreatedOn = DateTime.UtcNow, ExpireOn = DateTime.Now.AddDays(1) }
+		};
+		Data<Set> data = new(sets);
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Set);
+
+		// Act
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+		transaction.PersistSet("set-1");
+		transaction.Commit();
+
+		// Assert
+		// Assert
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.Set };
+		Dictionary<string, DateTime?> records = Storage.Container.GetItemLinqQueryable<Set>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.GroupBy(x => x.Key)
+			.ToDictionary(x => x.Key, x => x.Max(z => z.ExpireOn));
+
+		Assert.Null(records["set-1"]);
+		Assert.NotNull(records["set-2"]);
+		Assert.NotNull(records["set-3"]);
+	}
+
+	[Fact]
+	public void PersistList_ThrowsAnException_WhenKeyIsNull()
+	{
+		// arrange
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+
+		// act
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+		{
+			transaction.PersistList(null!);
+			transaction.Commit();
+		});
+
+		Assert.Equal("key", exception.ParamName);
+	}
+
+	[Fact]
+	public void PersistList_ClearsExpirationTime_OnAGivenKey()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<List> lists = new()
+		{
+			new List { Key = "list-1", CreatedOn = DateTime.UtcNow, ExpireOn = DateTime.UtcNow.AddHours(1) },
+			new List { Key = "list-2", CreatedOn = DateTime.UtcNow, ExpireOn = DateTime.UtcNow.AddHours(1) }
+		};
+		Data<List> data = new(lists);
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.List);
+
+		// Act
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+		transaction.PersistList("list-1");
+		transaction.Commit();
+
+		// Assert
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.List };
+		Dictionary<string, DateTime?> records = Storage.Container.GetItemLinqQueryable<List>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.ToDictionary(x => x.Key, x => x.ExpireOn);
+
+		Assert.Null(records["list-1"]);
+		Assert.NotNull(records["list-2"]);
+	}
+
+	[Fact]
+	public void PersistList_ClearsExpirationTime_OnAGivenKey_MultipleDocuments()
+	{
+		// clean
+		ContainerFixture.Clean();
+
+		// arrange
+		List<List> lists = new()
+		{
+			new List { Key = "list-1", CreatedOn = DateTime.UtcNow, ExpireOn = DateTime.UtcNow.AddHours(1) },
+			new List { Key = "list-2", CreatedOn = DateTime.UtcNow, ExpireOn = DateTime.UtcNow.AddHours(1) },
+			new List { Key = "list-1", CreatedOn = DateTime.UtcNow, ExpireOn = DateTime.UtcNow.AddHours(1) },
+			new List { Key = "list-1", CreatedOn = DateTime.UtcNow, ExpireOn = DateTime.UtcNow.AddHours(1) },
+			new List { Key = "list-1", CreatedOn = DateTime.UtcNow, ExpireOn = DateTime.UtcNow.AddHours(1) }
+		};
+		Data<List> data = new(lists);
+		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.List);
+
+		// Act
+		CosmosDbConnection connection = (CosmosDbConnection)Storage.GetConnection();
+		CosmosDbWriteOnlyTransaction transaction = new(connection);
+		transaction.PersistList("list-1");
+		transaction.Commit();
+
+		// Assert
+		QueryRequestOptions requestOptions = new() { PartitionKey = PartitionKeys.List };
+		Dictionary<string, DateTime?> records = Storage.Container.GetItemLinqQueryable<List>(requestOptions: requestOptions)
+			.ToQueryResult()
+			.GroupBy(x => x.Key)
+			.ToDictionary(x => x.Key, x => x.Max(z => z.ExpireOn));
+
+		Assert.Null(records["list-1"]);
+		Assert.NotNull(records["list-2"]);
 	}
 
 #pragma warning disable xUnit1013
