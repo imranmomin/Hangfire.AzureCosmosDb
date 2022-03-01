@@ -84,7 +84,9 @@ public class CosmosDbStorageFacts
 	public void GetComponents_ReturnsAllNeededComponents()
 	{
 		CosmosDbStorage storage = new(url, secret, database, container);
+#pragma warning disable CS0618
 		IEnumerable<IServerComponent> components = storage.GetComponents();
+#pragma warning restore CS0618
 		Type[] componentTypes = components.Select(x => x.GetType()).ToArray();
 		Assert.Contains(typeof(ExpirationManager), componentTypes);
 	}

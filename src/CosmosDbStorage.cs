@@ -110,15 +110,15 @@ internal sealed class CosmosDbStorage : JobStorage, IDisposable
 	/// <summary>
 	///     Prints out the storage options
 	/// </summary>
-	/// <param name="logger"></param>
-	public override void WriteOptionsToLog(ILog logger)
+	/// <param name="log"></param>
+	public override void WriteOptionsToLog(ILog log)
 	{
-		logger.Info("Using the following options for Azure Cosmos DB job storage:");
-		logger.Info($"     Cosmos DB Url: [{Client.Endpoint.AbsoluteUri}]");
-		logger.Info($"     Request Timeout: [{Client.ClientOptions.RequestTimeout}]");
-		logger.Info($"     Counter Aggregate Interval: [{StorageOptions.CountersAggregateInterval.TotalSeconds}] seconds");
-		logger.Info($"     Queue Poll Interval: [{StorageOptions.QueuePollInterval.TotalSeconds}] seconds");
-		logger.Info($"     Expiration Check Interval: [{StorageOptions.ExpirationCheckInterval.TotalSeconds}] seconds");
+		log.Info("Using the following options for Azure Cosmos DB job storage:");
+		log.Info($"     Cosmos DB Url: [{Client.Endpoint.AbsoluteUri}]");
+		log.Info($"     Request Timeout: [{Client.ClientOptions.RequestTimeout}]");
+		log.Info($"     Counter Aggregate Interval: [{StorageOptions.CountersAggregateInterval.TotalSeconds}] seconds");
+		log.Info($"     Queue Poll Interval: [{StorageOptions.QueuePollInterval.TotalSeconds}] seconds");
+		log.Info($"     Expiration Check Interval: [{StorageOptions.ExpirationCheckInterval.TotalSeconds}] seconds");
 	}
 
 	/// <summary>
