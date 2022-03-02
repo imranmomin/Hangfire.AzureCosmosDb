@@ -24,7 +24,7 @@ namespace Hangfire.Azure;
 ///     CosmosDbStorage extend the storage option for Hangfire.
 /// </summary>
 [SuppressMessage("Microsoft.Design", "CA1001:TypesThatOwnDisposableFieldsShouldBeDisposable")]
-internal sealed class CosmosDbStorage : JobStorage, IDisposable
+public sealed class CosmosDbStorage : JobStorage, IDisposable
 {
 	private readonly string containerName;
 	private readonly string databaseName;
