@@ -171,7 +171,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		{
 			int retry = 0;
 			bool complete;
-			const string resource = "locks:job:update";
+			string resource = $"locks:job:{jobId}:update";
 			CosmosDbDistributedLock? distributedLock = null;
 
 			do
@@ -220,7 +220,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		{
 			int retry = 0;
 			bool complete;
-			const string resource = "locks:job:update";
+			string resource = $"locks:job:{jobId}:update";
 			CosmosDbDistributedLock? distributedLock = null;
 
 			do
@@ -267,7 +267,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		{
 			int retry = 0;
 			bool complete;
-			const string resource = "locks:job:update";
+			string resource = $"locks:job:{jobId}:update";
 			CosmosDbDistributedLock? distributedLock = null;
 
 			do

@@ -182,7 +182,7 @@ internal sealed class CosmosDbConnection : JobStorageConnection
 
 		int retry = 0;
 		bool complete;
-		const string resource = "locks:job:update";
+		string resource = $"locks:job:{id}:update";
 		CosmosDbDistributedLock? distributedLock = null;
 
 		do
@@ -404,7 +404,7 @@ internal sealed class CosmosDbConnection : JobStorageConnection
 
 		int retry = 0;
 		bool complete;
-		const string resource = "locks:set:hash";
+		string resource = $"locks:set:{key}:hash";
 		CosmosDbDistributedLock? distributedLock = null;
 
 		do
