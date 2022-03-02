@@ -110,12 +110,12 @@ internal static class ClientHelper
 			catch (CosmosException ex) when ((int)ex.StatusCode == 429)
 			{
 				timeSpan = ex.RetryAfter;
-				logger.ErrorException("Status [429] received", ex);
+				logger.Error($"{ex.Message} Status - 429 TooManyRequests");
 			}
 			catch (AggregateException ex) when (ex.InnerException is CosmosException de && (int)de.StatusCode == 429)
 			{
 				timeSpan = de.RetryAfter;
-				logger.ErrorException("Status [429] received", ex);
+				logger.Error($"{ex.Message} Status - 429 TooManyRequests");
 			}
 			catch (Exception ex)
 			{
@@ -127,7 +127,7 @@ internal static class ClientHelper
 			{
 				if (timeSpan.HasValue)
 				{
-					logger.Trace($"Status [429] received. Will wait for [{timeSpan.Value.TotalSeconds}] seconds.");
+					logger.Trace($"Status - 429 TooManyRequests. Will wait for [{timeSpan.Value.TotalSeconds}] seconds.");
 					await Task.Delay(timeSpan.Value);
 				}
 			}

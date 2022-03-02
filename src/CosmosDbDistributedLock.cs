@@ -108,11 +108,11 @@ internal class CosmosDbDistributedLock : IDisposable
 			}
 			catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
 			{
-				logger.Trace($"Unable to create a lock [{resource}]. Status - 409 Conflict");
+				logger.Trace($"Unable to create a lock [{resource}]. Status - 409 Conflict. Lock already exists");
 			}
 			catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.Conflict })
 			{
-				logger.Trace($"Unable to create a lock [{resource}]. Status - 409 Conflict");
+				logger.Trace($"Unable to create a lock [{resource}]. Status - 409 Conflict. Lock already exists");
 			}
 			catch (Exception ex)
 			{
