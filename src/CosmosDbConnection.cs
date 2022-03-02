@@ -103,7 +103,7 @@ internal sealed class CosmosDbConnection : JobStorageConnection
 			{
 				Job = job,
 				State = data.StateName,
-				CreatedAt = data.CreatedOn.ToLocalTime(),
+				CreatedAt = data.CreatedOn,
 				LoadException = loadException
 			};
 		}
@@ -427,7 +427,7 @@ internal sealed class CosmosDbConnection : JobStorageConnection
 				{
 					Key = key,
 					Field = k.Key,
-					Value = k.Value.TryParseToEpoch()
+					Value = k.Value
 				}).ToArray();
 
 				foreach (Hash source in sources)

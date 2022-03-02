@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
 using Hangfire.Azure.Helper;
@@ -10,6 +11,7 @@ using Hangfire.States;
 using Hangfire.Storage;
 using Hangfire.Storage.Monitoring;
 using Microsoft.Azure.Cosmos;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Job = Hangfire.Common.Job;
 
@@ -31,13 +33,14 @@ internal sealed class CosmosDbMonitoringApi : IMonitoringApi
 
 	public IList<QueueWithTopEnqueuedJobsDto> Queues()
 	{
-		List<QueueWithTopEnqueuedJobsDto> queueJobs = new();
 
 		var tuples = storage.QueueProviders
 			.Select(x => x.GetJobQueueMonitoringApi())
 			.SelectMany(x => x.GetQueues(), (monitoring, queue) => new { Monitoring = monitoring, Queue = queue })
 			.OrderBy(x => x.Queue)
 			.ToArray();
+
+		List<QueueWithTopEnqueuedJobsDto> queueJobs = new(tuples.Length);
 
 		// ReSharper disable once LoopCanBeConvertedToQuery
 		foreach (var tuple in tuples)
@@ -63,43 +66,80 @@ internal sealed class CosmosDbMonitoringApi : IMonitoringApi
 		.Select(server => new ServerDto
 		{
 			Name = server.Id,
-			Heartbeat = server.LastHeartbeat.ToLocalTime(),
+			Heartbeat = server.LastHeartbeat,
 			Queues = server.Queues,
-			StartedAt = server.CreatedOn.ToLocalTime(),
+			StartedAt = server.CreatedOn,
 			WorkersCount = server.Workers
-		})
-		.ToList();
+		}).ToList();
 
-	public JobDetailsDto JobDetails(string jobId)
+	public JobDetailsDto? JobDetails(string jobId)
 	{
 		if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
+		if (Guid.TryParse(jobId, out Guid _) == false) return null;
 
-		Documents.Job job = storage.Container.ReadItemWithRetries<Documents.Job>(jobId, PartitionKeys.Job);
-
-		// if the resource is not found return null;
-		InvocationData invocationData = job.InvocationData;
-		invocationData.Arguments = job.Arguments;
-
-		List<StateHistoryDto> states = storage.Container.GetItemLinqQueryable<State>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.State })
-			.Where(s => s.JobId == jobId)
-			.OrderByDescending(s => s.CreatedOn)
-			.ToQueryResult()
-			.Select(s => new StateHistoryDto
-			{
-				Data = s.Data,
-				CreatedAt = s.CreatedOn.ToLocalTime(),
-				Reason = s.Reason,
-				StateName = s.Name
-			}).ToList();
-
-		return new JobDetailsDto
+		try
 		{
-			Job = invocationData.DeserializeJob(),
-			CreatedAt = job.CreatedOn.ToLocalTime(),
-			ExpireAt = job.ExpireOn?.ToLocalTime(),
-			Properties = job.Parameters.ToDictionary(p => p.Name, p => p.Value.TryParseEpochToDate(out string? x) ? x : p.Value),
-			History = states
-		};
+			Documents.Job data = storage.Container.ReadItemWithRetries<Documents.Job>(jobId, PartitionKeys.Job);
+
+			List<StateHistoryDto> states = storage.Container.GetItemLinqQueryable<State>(requestOptions: new QueryRequestOptions { PartitionKey = PartitionKeys.State })
+				.Where(s => s.JobId == jobId)
+				.OrderByDescending(s => s.CreatedOn)
+				.ToQueryResult()
+				.Select(s => new StateHistoryDto
+				{
+					Data = s.Data,
+					CreatedAt = s.CreatedOn,
+					Reason = s.Reason,
+					StateName = s.Name
+				}).ToList();
+
+			List<Parameter> parameters = data.Parameters.ToList();
+
+			Job? job = null;
+			InvocationData? invocationData = null;
+
+			try
+			{
+				invocationData = data.InvocationData;
+				invocationData.Arguments = data.Arguments;
+				job = invocationData.DeserializeJob();
+			}
+			catch (JobLoadException ex)
+			{
+				parameters.Add(new Parameter { Name = "DBG_Exception", Value = (ex.InnerException ?? ex).Message });
+			}
+
+			if (invocationData != null)
+			{
+				parameters.Add(new Parameter { Name = "DBG_Type", Value = invocationData.Type });
+				parameters.Add(new Parameter { Name = "DBG_Method", Value = invocationData.Method });
+				parameters.Add(new Parameter { Name = "DBG_Args", Value = invocationData.Arguments });
+			}
+			else
+			{
+				parameters.Add(new Parameter { Name = "DBG_Payload", Value = JsonConvert.SerializeObject(data.InvocationData) });
+				parameters.Add(new Parameter { Name = "DBG_Args", Value = JsonConvert.SerializeObject(data.Arguments) });
+			}
+
+			return new JobDetailsDto
+			{
+				Job = job,
+				CreatedAt = data.CreatedOn,
+				ExpireAt = data.ExpireOn,
+				Properties = parameters.GroupBy(x => x.Name).Select(x => x.First()).ToDictionary(p => p.Name, p => p.Value),
+				History = states
+			};
+		}
+		catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+		{
+			/* ignored */
+		}
+		catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.NotFound })
+		{
+			/* ignored */
+		}
+
+		return null;
 	}
 
 	public StatisticsDto GetStatistics()

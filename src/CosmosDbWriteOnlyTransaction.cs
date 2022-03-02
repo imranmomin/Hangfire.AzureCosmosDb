@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using Hangfire.Azure.Documents;
 using Hangfire.Azure.Documents.Helper;
 using Hangfire.Azure.Helper;
@@ -230,7 +231,12 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 				{
 					distributedLock = new CosmosDbDistributedLock(resource, connection.Storage.StorageOptions.TransactionalLockTimeout, connection.Storage);
 					PatchOperation[] patchOperations = { PatchOperation.Remove("/expire_on") };
-					connection.Storage.Container.PatchItemWithRetries<Job>(jobId, PartitionKeys.Job, patchOperations);
+					PatchItemRequestOptions patchItemRequestOptions = new() { FilterPredicate = "FROM doc WHERE IS_DEFINED(doc.expire_on)" };
+					connection.Storage.Container.PatchItemWithRetries<Job>(jobId, PartitionKeys.Job, patchOperations, patchItemRequestOptions);
+				}
+				catch (Exception ex) when (ex is CosmosException { StatusCode: HttpStatusCode.PreconditionFailed } or AggregateException { InnerException: CosmosException { StatusCode: HttpStatusCode.PreconditionFailed } })
+				{
+					/* Ignore */
 				}
 				catch (CosmosDbDistributedLockException ex) when (ex.Key == resource)
 				{
@@ -475,7 +481,7 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 			{
 				Key = key,
 				Field = k.Key,
-				Value = k.Value.TryParseToEpoch()
+				Value = k.Value
 			}).ToArray();
 
 			foreach (Hash source in sources)
@@ -652,19 +658,33 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 
 		if (records.Length == 1)
 		{
-			string id = records.First();
-			PatchItemRequestOptions patchItemRequestOptions = new() { FilterPredicate = $"FROM doc WHERE doc.key = '{key}' AND IS_DEFINED(doc.expire_on)" };
-			connection.Storage.Container.PatchItemWithRetries<T>(id, partitionKey, patchOperations, patchItemRequestOptions);
+			try
+			{
+				string id = records.First();
+				PatchItemRequestOptions patchItemRequestOptions = new() { FilterPredicate = "FROM doc WHERE IS_DEFINED(doc.expire_on)" };
+				connection.Storage.Container.PatchItemWithRetries<T>(id, partitionKey, patchOperations, patchItemRequestOptions);
+			}
+			catch (Exception ex) when (ex is CosmosException { StatusCode: HttpStatusCode.PreconditionFailed } or AggregateException { InnerException: CosmosException { StatusCode: HttpStatusCode.PreconditionFailed } })
+			{
+				/* Ignore */
+			}
 		}
 		else
 		{
-			TransactionalBatchPatchItemRequestOptions batchPatchItemRequestOptions = new() { FilterPredicate = $"FROM doc WHERE doc.key = '{key}' AND IS_DEFINED(doc.expire_on)" };
-			TransactionalBatch transactionalBatch = connection.Storage.Container.CreateTransactionalBatch(partitionKey);
-			foreach (string id in records)
+			try
 			{
-				transactionalBatch.PatchItem(id, patchOperations, batchPatchItemRequestOptions);
+				TransactionalBatchPatchItemRequestOptions batchPatchItemRequestOptions = new() { FilterPredicate = "FROM doc WHERE IS_DEFINED(doc.expire_on)" };
+				TransactionalBatch transactionalBatch = connection.Storage.Container.CreateTransactionalBatch(partitionKey);
+				foreach (string id in records)
+				{
+					transactionalBatch.PatchItem(id, patchOperations, batchPatchItemRequestOptions);
+				}
+				transactionalBatch.ExecuteAsync().ExecuteWithRetriesAsync().ExecuteSynchronously();
 			}
-			transactionalBatch.ExecuteAsync().ExecuteWithRetriesAsync().ExecuteSynchronously();
+			catch (Exception ex) when (ex is CosmosException { StatusCode: HttpStatusCode.PreconditionFailed } or AggregateException { InnerException: CosmosException { StatusCode: HttpStatusCode.PreconditionFailed } })
+			{
+				/* Ignore */
+			}
 		}
 	}
 
@@ -677,16 +697,14 @@ internal class CosmosDbWriteOnlyTransaction : JobStorageTransaction
 		if (records.Length == 1)
 		{
 			string id = records.First();
-			PatchItemRequestOptions patchItemRequestOptions = new() { FilterPredicate = $"FROM doc WHERE NOT IS_DEFINED(doc.expire_on) OR doc.expire_on != {expireOn}" };
-			connection.Storage.Container.PatchItemWithRetries<T>(id, partitionKey, patchOperations, patchItemRequestOptions);
+			connection.Storage.Container.PatchItemWithRetries<T>(id, partitionKey, patchOperations);
 		}
 		else
 		{
-			TransactionalBatchPatchItemRequestOptions batchPatchItemRequestOptions = new() { FilterPredicate = $"FROM doc WHERE NOT IS_DEFINED(doc.expire_on) OR doc.expire_on != {expireOn}" };
 			TransactionalBatch transactionalBatch = connection.Storage.Container.CreateTransactionalBatch(partitionKey);
 			foreach (string id in records)
 			{
-				transactionalBatch.PatchItem(id, patchOperations, batchPatchItemRequestOptions);
+				transactionalBatch.PatchItem(id, patchOperations);
 			}
 			transactionalBatch.ExecuteAsync().ExecuteWithRetriesAsync().ExecuteSynchronously();
 		}

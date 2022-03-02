@@ -22,8 +22,8 @@
 		<Nullable>enable</Nullable>
 	</PropertyGroup>
 	<ItemGroup>
-		<None Remove="node_modules\**" />
-		<None Remove="package-lock.json" />
+		<None Remove="node_modules\**"/>
+		<None Remove="package-lock.json"/>
 	</ItemGroup>
 	<ItemGroup>
 		<EmbeddedResource Include="StoredProcedure\heartbeatServer.js">
@@ -52,10 +52,10 @@
 		</None>
 	</ItemGroup>
 	<ItemGroup>
-		<PackageReference Include="Hangfire.Core" Version="1.7.28" />
-		<PackageReference Include="Microsoft.Azure.Cosmos" Version="3.25.0" />
-		<PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
-		<PackageReference Include="System.ValueTuple" Version="4.5.0" />
+		<PackageReference Include="Hangfire.Core" Version="1.7.28"/>
+		<PackageReference Include="Microsoft.Azure.Cosmos" Version="3.25.0"/>
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.1"/>
+		<PackageReference Include="System.ValueTuple" Version="4.5.0"/>
 	</ItemGroup>
 	<ItemGroup>
 		<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
