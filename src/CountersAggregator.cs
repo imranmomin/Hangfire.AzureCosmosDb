@@ -51,7 +51,7 @@ internal class CountersAggregator : IServerComponent
 
 			if (total > 0)
 			{
-				sql = new QueryDefinition($"SELECT TOP {storage.StorageOptions.CountersAggregateMaxItemCount} * FROM doc WHERE doc.counterType = @counterType ORDER BY doc.expire_on");
+				sql = new QueryDefinition($"SELECT TOP {storage.StorageOptions.CountersAggregateMaxItemCount} * FROM doc WHERE doc.counterType = @counterType");
 				sql.WithParameter("@counterType", (int)CounterTypes.Raw);
 
 				int completed = 0;
