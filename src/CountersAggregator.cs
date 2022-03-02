@@ -78,31 +78,25 @@ internal class CountersAggregator : IServerComponent
 
 						if (!counters.TryGetValue(key, out (int Value, DateTime? ExpireOn, List<Counter> Counters) data)) continue;
 
-						string id = $"{key}:{CounterTypes.Aggregate}".GenerateHash();
-
 						try
 						{
-							Counter aggregated = storage.Container.ReadItemWithRetries<Counter>(id, partitionKey);
+							Counter aggregated = storage.Container.ReadItemWithRetries<Counter>(key, partitionKey);
+							List<PatchOperation> patchOperations = new() { PatchOperation.Increment("/value", data.Value) };
 
 							DateTime? expireOn = new[] { aggregated.ExpireOn, data.ExpireOn }.Max();
 							int? expireOnEpoch = expireOn?.ToEpoch();
+							if (expireOnEpoch.HasValue) patchOperations.Add(PatchOperation.Set("/expire_on", expireOnEpoch));
 
 							PatchItemRequestOptions patchItemRequestOptions = new() { IfMatchEtag = aggregated.ETag };
-							PatchOperation[] patchOperations =
-							{
-								PatchOperation.Increment("/value", data.Value),
-								PatchOperation.Set("/expire_on", expireOnEpoch)
-							};
-
 							storage.Container.PatchItemWithRetries<Counter>(aggregated.Id, partitionKey, patchOperations, patchItemRequestOptions);
 						}
 						catch (Exception ex) when (ex is CosmosException { StatusCode: HttpStatusCode.NotFound } or AggregateException { InnerException: CosmosException { StatusCode: HttpStatusCode.NotFound } })
 						{
-							logger.Trace($"Aggregated document [{id}] was not found. Creating a new document");
+							logger.Trace($"Aggregated document [{key}] was not found. Creating a new document");
 
 							Counter aggregated = new()
 							{
-								Id = id,
+								Id = key,
 								Key = key,
 								Type = CounterTypes.Aggregate,
 								Value = data.Value,
