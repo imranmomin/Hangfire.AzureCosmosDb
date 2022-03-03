@@ -58,7 +58,6 @@ public class ContainerFixture : IDisposable
 		disposed = true;
 
 		Clean();
-		Storage.Dispose();
 	}
 
 	private class TestLogger : ILogProvider
