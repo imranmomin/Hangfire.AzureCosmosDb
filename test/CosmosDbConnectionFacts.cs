@@ -255,7 +255,7 @@ public class CosmosDbConnectionFacts : IClassFixture<ContainerFixture>
 		Assert.Equal(SucceededState.StateName, result.State);
 		Assert.Equal("wrong", result.Job.Args[0]);
 		Assert.Null(result.LoadException);
-		Assert.True(createdAt == result.CreatedAt);
+		Assert.True(createdAt == result.CreatedAt.ToLocalTime());
 	}
 
 	[Fact]

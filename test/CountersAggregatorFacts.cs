@@ -79,8 +79,8 @@ public class CountersAggregatorFacts : IClassFixture<ContainerFixture>
 		List<Counter> counters = new()
 		{
 			new Counter { Key = "key", Value = 1, ExpireOn = DateTime.UtcNow.AddHours(1), Type = CounterTypes.Raw },
-			new Counter { Key = "key", Value = 1, ExpireOn = DateTime.UtcNow.AddHours(1), Type = CounterTypes.Raw },
-			new Counter { Id = "700129197C369DA5D65629D85A1D2B6B", Key = "key", Value = 1, ExpireOn = DateTime.UtcNow.AddHours(1), Type = CounterTypes.Aggregate }
+			new Counter { Key = "key", Value = 1, Type = CounterTypes.Raw },
+			new Counter { Id = "key", Key = "key", Value = 1, ExpireOn = DateTime.UtcNow.AddHours(1), Type = CounterTypes.Aggregate }
 		};
 		Data<Counter> data = new(counters);
 		Storage.Container.ExecuteUpsertDocuments(data, PartitionKeys.Counter);
