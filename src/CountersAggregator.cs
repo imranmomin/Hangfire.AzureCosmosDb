@@ -83,9 +83,15 @@ internal class CountersAggregator : IServerComponent
 							Counter aggregated = storage.Container.ReadItemWithRetries<Counter>(key, partitionKey);
 							List<PatchOperation> patchOperations = new() { PatchOperation.Increment("/value", data.Value) };
 
-							DateTime? expireOn = new[] { aggregated.ExpireOn, data.ExpireOn }.Max();
-							int? expireOnEpoch = expireOn?.ToEpoch();
-							if (expireOnEpoch.HasValue) patchOperations.Add(PatchOperation.Set("/expire_on", expireOnEpoch));
+							if (aggregated.ExpireOn.HasValue || data.ExpireOn.HasValue)
+							{
+								DateTime? expireOn = aggregated.ExpireOn.HasValue && aggregated.ExpireOn > (data.ExpireOn ?? DateTime.MinValue) ? aggregated.ExpireOn : data.ExpireOn;
+								if (expireOn.HasValue && expireOn != aggregated.ExpireOn)
+								{
+									int expireOnEpoch = expireOn.Value.ToEpoch();
+									patchOperations.Add(PatchOperation.Set("/expire_on", expireOnEpoch));
+								}
+							}
 
 							PatchItemRequestOptions patchItemRequestOptions = new() { IfMatchEtag = aggregated.ETag };
 							storage.Container.PatchItemWithRetries<Counter>(aggregated.Id, partitionKey, patchOperations, patchItemRequestOptions);
