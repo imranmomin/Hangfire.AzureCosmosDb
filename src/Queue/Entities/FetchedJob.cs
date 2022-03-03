@@ -29,7 +29,7 @@ internal class FetchedJob : IFetchedJob
 		this.data = data;
 
 		TimeSpan keepAliveInterval = storage.StorageOptions.JobKeepAliveInterval;
-		timer = new Timer(KeepAliveJobCallback, data, keepAliveInterval, keepAliveInterval);
+		timer = new Timer(KeepAliveJobCallback, data, keepAliveInterval, Timeout.InfiniteTimeSpan);
 		logger.Trace($"Job [{data.JobId}] will send a Keep-Alive query every [{keepAliveInterval.TotalSeconds}] seconds until disposed");
 	}
 
@@ -131,17 +131,19 @@ internal class FetchedJob : IFetchedJob
 
 				data = storage.Container.PatchItemWithRetries<Documents.Queue>(temp.Id, partitionKey, patchOperations, patchItemRequestOptions);
 
+				// set the timer for the next callback
+				TimeSpan keepAliveInterval = storage.StorageOptions.JobKeepAliveInterval;
+				timer.Change(keepAliveInterval, Timeout.InfiniteTimeSpan);
+
 				logger.Trace($"Keep-alive query for job: [{temp.Id}] sent");
 			}
 			catch (Exception ex) when (ex is CosmosException { StatusCode: HttpStatusCode.NotFound } or AggregateException { InnerException: CosmosException { StatusCode: HttpStatusCode.NotFound } })
 			{
 				logger.Trace($"Job [{temp.Id}] keep-alive query failed. Most likely the job was removed from the queue");
-				((IDisposable)this).Dispose();
 			}
 			catch (Exception ex) when (ex is CosmosException { StatusCode: HttpStatusCode.BadRequest } or AggregateException { InnerException: CosmosException { StatusCode: HttpStatusCode.BadRequest } })
 			{
 				logger.Trace($"Job [{temp.Id}] keep-alive query failed. Most likely the job was updated by some other server");
-				((IDisposable)this).Dispose();
 			}
 			catch (Exception ex)
 			{
