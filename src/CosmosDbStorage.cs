@@ -66,6 +66,20 @@ internal sealed class CosmosDbStorage : JobStorage, IDisposable
 		Client = new CosmosClient(url, authSecret, options);
 	}
 
+	private CosmosDbStorage(CosmosClient cosmosClient, string databaseName, string containerName, CosmosDbStorageOptions storageOptions = null)
+	{
+		this.databaseName = databaseName;
+		this.containerName = containerName;
+		StorageOptions = storageOptions ?? new CosmosDbStorageOptions();
+
+		JobQueueProvider provider = new(this);
+		QueueProviders = new PersistentJobQueueProviderCollection(provider);
+
+		cosmosClient.ClientOptions.Serializer = new CosmosJsonSerializer(settings);
+
+		Client = cosmosClient;
+	}
+
 	internal PersistentJobQueueProviderCollection QueueProviders { get; }
 
 	internal CosmosDbStorageOptions StorageOptions { get; set; }
@@ -138,6 +152,24 @@ internal sealed class CosmosDbStorage : JobStorage, IDisposable
 		return storage;
 	}
 
+
+	/// <summary>
+	///     Creates and returns an instance of CosmosDbStorage
+	/// </summary>
+	///<param name="cosmosClient">An instance of CosmosClient</param>
+	/// <param name="databaseName">The name of the database to connect with</param>
+	/// <param name="containerName">The name of the collection/container on the database</param>
+	/// <param name="options">The CosmosClientOptions object to override any of the options</param>
+	/// <param name="storageOptions">The CosmosDbStorageOptions object to override any of the options</param>
+	public static CosmosDbStorage Create(CosmosClient cosmosClient, string databaseName, string containerName, CosmosDbStorageOptions storageOptions = null)
+	{
+		if (cosmosClient is null)
+			throw new ArgumentNullException(nameof(cosmosClient));
+
+		CosmosDbStorage storage = new(cosmosClient, databaseName, containerName, storageOptions);
+		storage.InitializeAsync().ExecuteSynchronously();
+		return storage;
+	}
 	/// <summary>
 	///     Creates and returns an instance of CosmosDbStorage
 	/// </summary>
