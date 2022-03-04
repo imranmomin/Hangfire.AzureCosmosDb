@@ -66,6 +66,8 @@ public sealed class CosmosDbStorage : JobStorage
 		options ??= new CosmosClientOptions();
 		options.ApplicationName = "Hangfire";
 		options.Serializer = new CosmosJsonSerializer(settings);
+		options.MaxRetryAttemptsOnRateLimitedRequests ??= 9;
+		options.MaxRetryWaitTimeOnRateLimitedRequests ??= TimeSpan.FromSeconds(30);
 		Client = new CosmosClient(url, authSecret, options);
 	}
 
@@ -104,19 +106,29 @@ public sealed class CosmosDbStorage : JobStorage
 	/// <param name="log"></param>
 	public override void WriteOptionsToLog(ILog log)
 	{
-		log.Info("Using the following options for Azure Cosmos DB job storage:");
-		log.Info($"     Cosmos DB Url: [{Client.Endpoint.AbsoluteUri}]");
-		log.Info($"     Request Timeout: [{Client.ClientOptions.RequestTimeout}]");
-		log.Info($"     Counter Aggregate Interval: [{StorageOptions.CountersAggregateInterval.TotalSeconds}] seconds");
-		log.Info($"     Queue Poll Interval: [{StorageOptions.QueuePollInterval.TotalSeconds}] seconds");
-		log.Info($"     Expiration Check Interval: [{StorageOptions.ExpirationCheckInterval.TotalSeconds}] seconds");
+		StringBuilder info = new();
+		info.AppendLine("Using the following options for Azure Cosmos DB job storage:");
+		info.AppendLine($"	Cosmos DB Url: [{Client.Endpoint.AbsoluteUri}]");
+		info.AppendLine($"	Database: [{databaseName}]");
+		info.AppendLine($"	Container: [{containerName}]");
+		info.AppendLine($"	Request Timeout: [{Client.ClientOptions.RequestTimeout}]");
+		info.AppendLine($"	Connection Mode: [{Client.ClientOptions.ConnectionMode}]");
+		info.AppendLine($"	Region: [{Client.ClientOptions.ApplicationRegion}]");
+		info.AppendLine($"	Max Retry Attempts On Rate Limited Requests: [{Client.ClientOptions.MaxRetryAttemptsOnRateLimitedRequests}]");
+		info.AppendLine($"	Max Retry Wait Time On Rate Limited Requests: [{Client.ClientOptions.MaxRetryWaitTimeOnRateLimitedRequests!.Value}]");
+		info.AppendLine($"	Counter Aggregator Max Items: [{StorageOptions.CountersAggregateMaxItemCount}]");
+		info.AppendLine($"	Counter Aggregate Interval: [{StorageOptions.CountersAggregateInterval}]");
+		info.AppendLine($"	Queue Poll Interval: [{StorageOptions.QueuePollInterval}]");
+		info.AppendLine($"	Expiration Check Interval: [{StorageOptions.ExpirationCheckInterval}]");
+		info.Append($"	Job Keep-Alive Interval: [{StorageOptions.JobKeepAliveInterval}]");
+		log.Info(info.ToString);
 	}
 
 	/// <summary>
 	///     Return the name of the database
 	/// </summary>
 	/// <returns></returns>
-	public override string ToString() => $"Cosmos DB : {databaseName}";
+	public override string ToString() => $"Cosmos DB : {databaseName}/{containerName}";
 
 	/// <summary>
 	///     Creates and returns an instance of CosmosDbStorage
@@ -191,8 +203,10 @@ public sealed class CosmosDbStorage : JobStorage
 			logger.Info($"Creating storedprocedure : [{storedProcedureFile}]");
 			Stream? stream = assembly.GetManifestResourceStream(storedProcedureFile);
 
-			// if the stream is null skip and continue to next resource
-			if (stream == null) continue;
+			if (stream == null)
+			{
+				throw new ArgumentNullException(nameof(stream), $"{storedProcedureFile} was not found");
+			}
 
 			await using MemoryStream memoryStream = new();
 			await stream.CopyToAsync(memoryStream, cancellationToken);
@@ -217,7 +231,6 @@ public sealed class CosmosDbStorage : JobStorage
 				else await Container.Scripts.ReplaceStoredProcedureAsync(sp, cancellationToken: cancellationToken);
 			}
 
-			// close the stream
 			stream.Close();
 		}
 	}
