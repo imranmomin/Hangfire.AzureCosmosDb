@@ -23,9 +23,7 @@ CosmosClientOptions cosmoClientOptions = new()
 {
 	ApplicationName = "hangfire",
 	RequestTimeout = TimeSpan.FromSeconds(60),
-	ConnectionMode = ConnectionMode.Direct,
-	MaxRetryAttemptsOnRateLimitedRequests = 1,
-	MaxRetryWaitTimeOnRateLimitedRequests = TimeSpan.FromSeconds(30)
+	ConnectionMode = ConnectionMode.Direct
 };
 
 // use cosmos emulator or free cosmos plan from azure
