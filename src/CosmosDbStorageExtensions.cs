@@ -66,8 +66,7 @@ internal static class CosmosDbStorageExtensions
 	///     Enables to attach Azure Cosmos DB to Hangfire
 	/// </summary>
 	/// <param name="configuration">The IGlobalConfiguration object</param>
-	/// <param name="url">The url string to Cosmos Database</param>
-	/// <param name="authSecret">The secret key for the Cosmos Database</param>
+	/// <param name="cosmosClient">An instance of CosmosClient</param>
 	/// <param name="database">The name of the database to connect with</param>
 	/// <param name="collection">The name of the collection on the database</param>
 	/// <param name="option"></param>
