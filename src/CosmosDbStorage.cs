@@ -66,6 +66,23 @@ internal sealed class CosmosDbStorage : JobStorage, IDisposable
 		Client = new CosmosClient(url, authSecret, options);
 	}
 
+	private CosmosDbStorage(CosmosClient cosmosClient, string databaseName, string containerName, CosmosDbStorageOptions? storageOptions = null)
+	{
+		if (cosmosClient is null)
+			throw new ArgumentNullException(nameof(cosmosClient));
+
+		this.databaseName = databaseName;
+		this.containerName = containerName;
+		StorageOptions = storageOptions ?? new CosmosDbStorageOptions();
+
+		JobQueueProvider provider = new(this);
+		QueueProviders = new PersistentJobQueueProviderCollection(provider);
+
+		cosmosClient.ClientOptions.Serializer = new CosmosJsonSerializer(settings);
+
+		Client = cosmosClient;
+	}
+
 	internal PersistentJobQueueProviderCollection QueueProviders { get; }
 
 	internal CosmosDbStorageOptions StorageOptions { get; set; }
@@ -138,6 +155,21 @@ internal sealed class CosmosDbStorage : JobStorage, IDisposable
 		return storage;
 	}
 
+
+	/// <summary>
+	///     Creates and returns an instance of CosmosDbStorage
+	/// </summary>
+	///<param name="cosmosClient">An instance of CosmosClient</param>
+	/// <param name="databaseName">The name of the database to connect with</param>
+	/// <param name="containerName">The name of the collection/container on the database</param>
+	/// <param name="options">The CosmosClientOptions object to override any of the options</param>
+	/// <param name="storageOptions">The CosmosDbStorageOptions object to override any of the options</param>
+	public static CosmosDbStorage Create(CosmosClient cosmosClient, string databaseName, string containerName, CosmosDbStorageOptions? storageOptions = null)
+	{
+		CosmosDbStorage storage = new(cosmosClient, databaseName, containerName, storageOptions);
+		storage.InitializeAsync().ExecuteSynchronously();
+		return storage;
+	}
 	/// <summary>
 	///     Creates and returns an instance of CosmosDbStorage
 	/// </summary>
@@ -157,6 +189,25 @@ internal sealed class CosmosDbStorage : JobStorage, IDisposable
 		await storage.InitializeAsync(cancellationToken);
 		return storage;
 	}
+
+	/// <summary>
+	///     Creates and returns an instance of CosmosDbStorage
+	/// </summary>
+	/// <param name="cosmosClient">An instance of CosmosClient</param>
+	/// <param name="databaseName">The name of the database to connect with</param>
+	/// <param name="containerName">The name of the collection/container on the database</param>
+	/// <param name="options">The CosmosClientOptions object to override any of the options</param>
+	/// <param name="storageOptions">The CosmosDbStorageOptions object to override any of the options</param>
+	/// <param name="cancellationToken">A cancellation token</param>
+	public static async Task<CosmosDbStorage> CreateAsync(CosmosClient cosmosClient, string databaseName, string containerName,
+	    CosmosDbStorageOptions? storageOptions = null,
+		CancellationToken cancellationToken = default)
+	{
+		CosmosDbStorage storage = new(cosmosClient, databaseName, containerName, storageOptions);
+		await storage.InitializeAsync(cancellationToken);
+		return storage;
+	}
+
 
 	private async Task InitializeAsync(CancellationToken cancellationToken = default)
 	{
