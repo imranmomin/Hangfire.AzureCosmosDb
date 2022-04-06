@@ -251,7 +251,5 @@ paket-files/
 .idea/
 *.sln.iml
 
-/test
-
 # NPM Package Lock
 package-lock.json
