@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Hangfire.Server;
 using Hangfire.Storage;
+using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
 using Xunit;
 
@@ -32,14 +33,21 @@ public class CosmosDbStorageFacts
 	[Fact]
 	public void Ctor_ThrowsAnException_WhenUrlIsNullOrEmpty()
 	{
-		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => new CosmosDbStorage(null!, string.Empty, string.Empty, string.Empty));
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => new CosmosDbStorage(null!, string.Empty, "databaseName", "container"));
 		Assert.Equal("url", exception.ParamName);
+	}
+
+	[Fact]
+	public void Ctor_ThrowsAnException_WhenCosmosClientIsNullOrEmpty()
+	{
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => new CosmosDbStorage( null!,"databaseName", "container", null));
+		Assert.Equal("cosmosClient", exception.ParamName);
 	}
 
 	[Fact]
 	public void Ctor_ThrowsAnException_WhenSecretIsNullOrEmpty()
 	{
-		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => new CosmosDbStorage("http://", null!, string.Empty, string.Empty));
+		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => new CosmosDbStorage("http://", null!, "databaseName", "container"));
 		Assert.Equal("authSecret", exception.ParamName);
 	}
 
@@ -81,6 +89,22 @@ public class CosmosDbStorageFacts
 	}
 
 	[Fact]
+	public void WithExistingCosmosClient_GetMonitoringApi_ReturnsNonNullInstance()
+	{
+		CosmosDbStorage storage = CreateSutWithCosmosClient();
+		IMonitoringApi api = storage.GetMonitoringApi();
+		Assert.NotNull(api);
+	}
+
+	[Fact]
+	public void WithExistingCosmosClient_GetConnection_ReturnsNonNullInstance()
+	{
+		CosmosDbStorage storage = CreateSutWithCosmosClient();
+		using CosmosDbConnection connection = (CosmosDbConnection)storage.GetConnection();
+		Assert.NotNull(connection);
+	}
+
+	[Fact]
 	public void GetComponents_ReturnsAllNeededComponents()
 	{
 		CosmosDbStorage storage = new(url, secret, database, container);
@@ -89,5 +113,11 @@ public class CosmosDbStorageFacts
 #pragma warning restore CS0618
 		Type[] componentTypes = components.Select(x => x.GetType()).ToArray();
 		Assert.Contains(typeof(ExpirationManager), componentTypes);
+	}
+
+	private CosmosDbStorage CreateSutWithCosmosClient()
+	{
+		var cosmosClient = new CosmosClient(url, secret);
+		return  new(cosmosClient, database, container);
 	}
 }

@@ -50,9 +50,27 @@ public sealed class CosmosDbStorage : JobStorage
 	/// <param name="options">The CosmosClientOptions object to override any of the options</param>
 	/// <param name="storageOptions">The CosmosDbStorageOptions object to override any of the options</param>
 	internal CosmosDbStorage(string url, string authSecret, string databaseName, string containerName, CosmosClientOptions? options = null, CosmosDbStorageOptions? storageOptions = null)
+		: this(databaseName, containerName, storageOptions)
 	{
 		if (string.IsNullOrEmpty(url)) throw new ArgumentNullException(nameof(url));
 		if (string.IsNullOrEmpty(authSecret)) throw new ArgumentNullException(nameof(authSecret));
+
+		options ??= new CosmosClientOptions();
+		ConfigureCosmosClientOptions(options);
+		Client = new CosmosClient(url, authSecret, options);
+	}
+
+	internal CosmosDbStorage(CosmosClient cosmosClient, string databaseName, string containerName, CosmosDbStorageOptions? storageOptions = null)
+		:this(databaseName, containerName, storageOptions)
+	{
+		if (cosmosClient is null) throw new ArgumentNullException(nameof(cosmosClient));
+	 
+		ConfigureCosmosClientOptions(cosmosClient.ClientOptions);
+		Client = cosmosClient;
+	}
+
+	private CosmosDbStorage(string databaseName, string containerName, CosmosDbStorageOptions? storageOptions = null)
+	{
 		if (string.IsNullOrEmpty(databaseName)) throw new ArgumentNullException(nameof(databaseName));
 		if (string.IsNullOrEmpty(containerName)) throw new ArgumentNullException(nameof(containerName));
 
@@ -62,30 +80,14 @@ public sealed class CosmosDbStorage : JobStorage
 
 		JobQueueProvider provider = new(this);
 		QueueProviders = new PersistentJobQueueProviderCollection(provider);
-
-		options ??= new CosmosClientOptions();
-		options.ApplicationName = "Hangfire";
-		options.Serializer = new CosmosJsonSerializer(settings);
-		options.MaxRetryAttemptsOnRateLimitedRequests ??= 9;
-		options.MaxRetryWaitTimeOnRateLimitedRequests ??= TimeSpan.FromSeconds(30);
-		Client = new CosmosClient(url, authSecret, options);
 	}
 
-	private CosmosDbStorage(CosmosClient cosmosClient, string databaseName, string containerName, CosmosDbStorageOptions? storageOptions = null)
+	private void ConfigureCosmosClientOptions(CosmosClientOptions cosmosClientOptions)
 	{
-		if (cosmosClient is null)
-			throw new ArgumentNullException(nameof(cosmosClient));
-
-		this.databaseName = databaseName;
-		this.containerName = containerName;
-		StorageOptions = storageOptions ?? new CosmosDbStorageOptions();
-
-		JobQueueProvider provider = new(this);
-		QueueProviders = new PersistentJobQueueProviderCollection(provider);
-
-		cosmosClient.ClientOptions.Serializer = new CosmosJsonSerializer(settings);
-
-		Client = cosmosClient;
+		cosmosClientOptions.ApplicationName ??= "Hangfire";
+		cosmosClientOptions.Serializer = new CosmosJsonSerializer(settings);
+		cosmosClientOptions.MaxRetryAttemptsOnRateLimitedRequests ??= 9;
+		cosmosClientOptions.MaxRetryWaitTimeOnRateLimitedRequests ??= TimeSpan.FromSeconds(30);
 	}
 
 	internal PersistentJobQueueProviderCollection QueueProviders { get; }
