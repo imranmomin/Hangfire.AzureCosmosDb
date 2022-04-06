@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -23,7 +22,6 @@ namespace Hangfire.Azure;
 /// <summary>
 ///     CosmosDbStorage extend the storage option for Hangfire.
 /// </summary>
-[SuppressMessage("Microsoft.Design", "CA1001:TypesThatOwnDisposableFieldsShouldBeDisposable")]
 public sealed class CosmosDbStorage : JobStorage
 {
 	private readonly string containerName;
@@ -61,10 +59,10 @@ public sealed class CosmosDbStorage : JobStorage
 	}
 
 	internal CosmosDbStorage(CosmosClient cosmosClient, string databaseName, string containerName, CosmosDbStorageOptions? storageOptions = null)
-		:this(databaseName, containerName, storageOptions)
+		: this(databaseName, containerName, storageOptions)
 	{
 		if (cosmosClient is null) throw new ArgumentNullException(nameof(cosmosClient));
-	 
+
 		ConfigureCosmosClientOptions(cosmosClient.ClientOptions);
 		Client = cosmosClient;
 	}
@@ -94,7 +92,7 @@ public sealed class CosmosDbStorage : JobStorage
 
 	internal CosmosDbStorageOptions StorageOptions { get; set; }
 
-	private CosmosClient Client { get; }
+	private CosmosClient Client { get; } = null!;
 
 	internal Container Container { get; private set; } = null!;
 
@@ -172,7 +170,6 @@ public sealed class CosmosDbStorage : JobStorage
 	///<param name="cosmosClient">An instance of CosmosClient</param>
 	/// <param name="databaseName">The name of the database to connect with</param>
 	/// <param name="containerName">The name of the collection/container on the database</param>
-	/// <param name="options">The CosmosClientOptions object to override any of the options</param>
 	/// <param name="storageOptions">The CosmosDbStorageOptions object to override any of the options</param>
 	public static CosmosDbStorage Create(CosmosClient cosmosClient, string databaseName, string containerName, CosmosDbStorageOptions? storageOptions = null)
 	{
@@ -180,6 +177,7 @@ public sealed class CosmosDbStorage : JobStorage
 		storage.InitializeAsync().ExecuteSynchronously();
 		return storage;
 	}
+
 	/// <summary>
 	///     Creates and returns an instance of CosmosDbStorage
 	/// </summary>
@@ -206,18 +204,16 @@ public sealed class CosmosDbStorage : JobStorage
 	/// <param name="cosmosClient">An instance of CosmosClient</param>
 	/// <param name="databaseName">The name of the database to connect with</param>
 	/// <param name="containerName">The name of the collection/container on the database</param>
-	/// <param name="options">The CosmosClientOptions object to override any of the options</param>
 	/// <param name="storageOptions">The CosmosDbStorageOptions object to override any of the options</param>
 	/// <param name="cancellationToken">A cancellation token</param>
 	public static async Task<CosmosDbStorage> CreateAsync(CosmosClient cosmosClient, string databaseName, string containerName,
-	    CosmosDbStorageOptions? storageOptions = null,
+		CosmosDbStorageOptions? storageOptions = null,
 		CancellationToken cancellationToken = default)
 	{
 		CosmosDbStorage storage = new(cosmosClient, databaseName, containerName, storageOptions);
 		await storage.InitializeAsync(cancellationToken);
 		return storage;
 	}
-
 
 	private async Task InitializeAsync(CancellationToken cancellationToken = default)
 	{

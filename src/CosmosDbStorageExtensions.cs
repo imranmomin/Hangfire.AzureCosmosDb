@@ -20,12 +20,12 @@ public static class CosmosDbStorageExtensions
 	/// <param name="configuration">The IGlobalConfiguration object</param>
 	/// <param name="url">The url string to Cosmos Database</param>
 	/// <param name="authSecret">The secret key for the Cosmos Database</param>
-	/// <param name="database">The name of the database to connect with</param>
-	/// <param name="collection">The name of the collection on the database</param>
-	/// <param name="option"></param>
+	/// <param name="databaseName">The name of the database to connect with</param>
+	/// <param name="containerName">The name of the container on the database</param>
+	/// <param name="option">An instance of CosmosClientOptions</param>
 	/// <param name="storageOptions">The CosmosDbStorage object to override any of the options</param>
 	/// <returns></returns>
-	public static IGlobalConfiguration<CosmosDbStorage> UseAzureCosmosDbStorage(this IGlobalConfiguration configuration, string url, string authSecret, string database, string collection,
+	public static IGlobalConfiguration<CosmosDbStorage> UseAzureCosmosDbStorage(this IGlobalConfiguration configuration, string url, string authSecret, string databaseName, string containerName,
 		CosmosClientOptions? option = null,
 		CosmosDbStorageOptions? storageOptions = null)
 	{
@@ -33,7 +33,7 @@ public static class CosmosDbStorageExtensions
 		if (string.IsNullOrEmpty(url)) throw new ArgumentNullException(nameof(url));
 		if (string.IsNullOrEmpty(authSecret)) throw new ArgumentNullException(nameof(authSecret));
 
-		CosmosDbStorage storage = CosmosDbStorage.Create(url, authSecret, database, collection, option, storageOptions);
+		CosmosDbStorage storage = CosmosDbStorage.Create(url, authSecret, databaseName, containerName, option, storageOptions);
 		return configuration.UseStorage(storage);
 	}
 
@@ -44,8 +44,8 @@ public static class CosmosDbStorageExtensions
 	/// <param name="url">The url string to Cosmos Database</param>
 	/// <param name="authSecret">The secret key for the Cosmos Database</param>
 	/// <param name="database">The name of the database to connect with</param>
-	/// <param name="collection">The name of the collection on the database</param>
-	/// <param name="option"></param>
+	/// <param name="collection">The name of the container on the database</param>
+	/// <param name="option">An instance of CosmosClientOptions</param>
 	/// <param name="storageOptions">The CosmosDbStorage object to override any of the options</param>
 	/// <param name="cancellationToken">A cancellation token</param>
 	/// <returns></returns>
@@ -67,28 +67,36 @@ public static class CosmosDbStorageExtensions
 	/// </summary>
 	/// <param name="configuration">The IGlobalConfiguration object</param>
 	/// <param name="cosmosClient">An instance of CosmosClient</param>
-	/// <param name="database">The name of the database to connect with</param>
-	/// <param name="collection">The name of the collection on the database</param>
-	/// <param name="option"></param>
+	/// <param name="databaseName">The name of the database to connect with</param>
+	/// <param name="containerName">The name of the collection on the database</param>
 	/// <param name="storageOptions">The CosmosDbStorage object to override any of the options</param>
 	/// <returns></returns>
-	public static IGlobalConfiguration<CosmosDbStorage> UseAzureCosmosDbStorage(this IGlobalConfiguration configuration, CosmosClient cosmosClient, string databaseName, string containerName, CosmosDbStorageOptions storageOptions = null)
+	public static IGlobalConfiguration<CosmosDbStorage> UseAzureCosmosDbStorage(this IGlobalConfiguration configuration, CosmosClient cosmosClient, string databaseName, string containerName, CosmosDbStorageOptions? storageOptions = null)
 	{
 		if (configuration == null) throw new ArgumentNullException(nameof(configuration));
-		if (cosmosClient is null)
-			throw new ArgumentNullException(nameof(cosmosClient));
+		if (cosmosClient is null) throw new ArgumentNullException(nameof(cosmosClient));
 
 		CosmosDbStorage storage = CosmosDbStorage.Create(cosmosClient, databaseName, containerName, storageOptions);
 		return configuration.UseStorage(storage);
 	}
 
-	public static async Task<IGlobalConfiguration<CosmosDbStorage>> UseAzureCosmosDbStorageAsync(this IGlobalConfiguration configuration, CosmosClient cosmosClient, string database, string collection,
-	CosmosDbStorageOptions? storageOptions = null,
-	CancellationToken cancellationToken = default)
+	/// <summary>
+	///     Enables to attach Azure Cosmos DB to Hangfire
+	/// </summary>
+	/// <param name="configuration">The IGlobalConfiguration object</param>
+	/// <param name="cosmosClient">An instance of CosmosClient</param>
+	/// <param name="databaseName">The name of the database to connect with</param>
+	/// <param name="containerName">The name of the container on the database</param>
+	/// <param name="storageOptions">The CosmosDbStorage object to override any of the options</param>
+	/// <param name="cancellationToken"></param>
+	/// <returns></returns>
+	public static async Task<IGlobalConfiguration<CosmosDbStorage>> UseAzureCosmosDbStorageAsync(this IGlobalConfiguration configuration, CosmosClient cosmosClient, string databaseName, string containerName,
+		CosmosDbStorageOptions? storageOptions = null,
+		CancellationToken cancellationToken = default)
 	{
 		if (configuration == null) throw new ArgumentNullException(nameof(configuration));
 
-		CosmosDbStorage storage = await CosmosDbStorage.CreateAsync(cosmosClient, database, collection, storageOptions, cancellationToken);
+		CosmosDbStorage storage = await CosmosDbStorage.CreateAsync(cosmosClient, databaseName, containerName, storageOptions, cancellationToken);
 		return configuration.UseStorage(storage);
 	}
 }
