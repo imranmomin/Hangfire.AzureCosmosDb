@@ -90,7 +90,7 @@ internal class CosmosDbDistributedLock : IDisposable
 
 		// ttl for lock document
 		// this is if the expiration manager was not able to remove the orphan lock in time.
-		double ttl = Math.Max(15, timeout.TotalSeconds) * 1.5;
+		double ttl = Math.Max(60, timeout.TotalSeconds * 1.5);
 
 		do
 		{
@@ -108,11 +108,11 @@ internal class CosmosDbDistributedLock : IDisposable
 			}
 			catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
 			{
-				logger.Trace($"Unable to create a lock [{resource}]. Status - 409 Conflict");
+				logger.Trace($"Unable to create a lock [{resource}]. Status - 409 Conflict. Lock already exists");
 			}
 			catch (AggregateException ex) when (ex.InnerException is CosmosException { StatusCode: HttpStatusCode.Conflict })
 			{
-				logger.Trace($"Unable to create a lock [{resource}]. Status - 409 Conflict");
+				logger.Trace($"Unable to create a lock [{resource}]. Status - 409 Conflict. Lock already exists");
 			}
 			catch (Exception ex)
 			{
@@ -131,7 +131,7 @@ internal class CosmosDbDistributedLock : IDisposable
 		// set the timer for the KeepLockAlive callbacks
 		TimeSpan period = TimeSpan.FromSeconds(ttl).Divide(2);
 		period = period.TotalSeconds < 1 ? TimeSpan.FromSeconds(1) : period;
-		timer = new Timer(KeepLockAlive, @lock, period, period);
+		timer = new Timer(KeepLockAlive, @lock, period, Timeout.InfiniteTimeSpan);
 
 		// add the resource to the local 
 		acquiredLocks.Value.Add(resource, 1);
@@ -147,7 +147,6 @@ internal class CosmosDbDistributedLock : IDisposable
 	internal void KeepLockAlive(object data)
 	{
 		if (disposed) return;
-
 		lock (syncLock)
 		{
 			if (data is not Lock temp) return;
@@ -164,17 +163,20 @@ internal class CosmosDbDistributedLock : IDisposable
 
 				@lock = storage.Container.PatchItemWithRetries<Lock>(temp.Id, PartitionKeys.Lock, patchOperations, patchItemRequestOptions);
 
+				// set the time for the next callback
+				TimeSpan period = TimeSpan.FromSeconds(@lock.TimeToLive!.Value).Divide(2);
+				period = period.TotalSeconds < 1 ? TimeSpan.FromSeconds(1) : period;
+				timer?.Change(period, Timeout.InfiniteTimeSpan);
+
 				logger.Trace($"Keep-alive query for lock: [{temp.Id}] sent");
 			}
 			catch (Exception ex) when (ex is CosmosException { StatusCode: HttpStatusCode.NotFound } or AggregateException { InnerException: CosmosException { StatusCode: HttpStatusCode.NotFound } })
 			{
-				logger.Trace($"Lock [{temp.Id}] keep-alive query failed. Status - 404 NotFound");
-				timer?.Dispose();
+				logger.Trace($"Lock [{temp.Id}] keep-alive query failed. Status - 404 NotFound. Keep-alive query won't be executed anymore");
 			}
 			catch (Exception ex) when (ex is CosmosException { StatusCode: HttpStatusCode.PreconditionFailed } or AggregateException { InnerException: CosmosException { StatusCode: HttpStatusCode.PreconditionFailed } })
 			{
-				logger.Trace($"Lock [{temp.Id}] keep-alive query failed. Most likely the lock was updated by some other server. Status - 412 PreconditionFailed");
-				timer?.Dispose();
+				logger.Trace($"Lock [{temp.Id}] keep-alive query failed. Most likely the lock was updated by some other server. Status - 412 PreconditionFailed. Keep-alive query won't be executed anymore");
 			}
 			catch (Exception ex)
 			{

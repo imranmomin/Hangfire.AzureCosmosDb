@@ -12,7 +12,7 @@ namespace Hangfire;
 ///     Extension methods to use CosmosDBStorage.
 /// </summary>
 // ReSharper disable once UnusedType.Global
-internal static class CosmosDbStorageExtensions
+public static class CosmosDbStorageExtensions
 {
 	/// <summary>
 	///     Enables to attach Azure Cosmos DB to Hangfire

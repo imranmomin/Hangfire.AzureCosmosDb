@@ -58,7 +58,6 @@ public class ContainerFixture : IDisposable
 		disposed = true;
 
 		Clean();
-		Storage.Dispose();
 	}
 
 	private class TestLogger : ILogProvider
@@ -84,7 +83,7 @@ public class ContainerFixture : IDisposable
 
 		public bool Log(LogLevel logLevel, Func<string>? messageFunc, Exception? exception = null)
 		{
-			if (messageFunc != null && testOutputHelper != null) testOutputHelper.WriteLine("[{0}] - [{1}] - {2} {3}", DateTime.UtcNow, logLevel, messageFunc(), exception?.Message);
+			if (messageFunc != null && testOutputHelper != null) testOutputHelper.WriteLine("[{0:O}] - [{1}] - {2} {3}", DateTime.UtcNow, logLevel, messageFunc(), exception?.Message);
 			return true;
 		}
 	}

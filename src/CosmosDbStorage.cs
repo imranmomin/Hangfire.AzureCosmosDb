@@ -24,7 +24,7 @@ namespace Hangfire.Azure;
 ///     CosmosDbStorage extend the storage option for Hangfire.
 /// </summary>
 [SuppressMessage("Microsoft.Design", "CA1001:TypesThatOwnDisposableFieldsShouldBeDisposable")]
-internal sealed class CosmosDbStorage : JobStorage, IDisposable
+public sealed class CosmosDbStorage : JobStorage
 {
 	private readonly string containerName;
 	private readonly string databaseName;
@@ -40,8 +40,6 @@ internal sealed class CosmosDbStorage : JobStorage, IDisposable
 		}
 	};
 
-	private bool disposed;
-
 	/// <summary>
 	///     Creates an instance of CosmosDbStorage
 	/// </summary>
@@ -51,8 +49,13 @@ internal sealed class CosmosDbStorage : JobStorage, IDisposable
 	/// <param name="containerName">The name of the collection/container on the database</param>
 	/// <param name="options">The CosmosClientOptions object to override any of the options</param>
 	/// <param name="storageOptions">The CosmosDbStorageOptions object to override any of the options</param>
-	private CosmosDbStorage(string url, string authSecret, string databaseName, string containerName, CosmosClientOptions? options = null, CosmosDbStorageOptions? storageOptions = null)
+	internal CosmosDbStorage(string url, string authSecret, string databaseName, string containerName, CosmosClientOptions? options = null, CosmosDbStorageOptions? storageOptions = null)
 	{
+		if (string.IsNullOrEmpty(url)) throw new ArgumentNullException(nameof(url));
+		if (string.IsNullOrEmpty(authSecret)) throw new ArgumentNullException(nameof(authSecret));
+		if (string.IsNullOrEmpty(databaseName)) throw new ArgumentNullException(nameof(databaseName));
+		if (string.IsNullOrEmpty(containerName)) throw new ArgumentNullException(nameof(containerName));
+
 		this.databaseName = databaseName;
 		this.containerName = containerName;
 		StorageOptions = storageOptions ?? new CosmosDbStorageOptions();
@@ -63,6 +66,8 @@ internal sealed class CosmosDbStorage : JobStorage, IDisposable
 		options ??= new CosmosClientOptions();
 		options.ApplicationName = "Hangfire";
 		options.Serializer = new CosmosJsonSerializer(settings);
+		options.MaxRetryAttemptsOnRateLimitedRequests ??= 9;
+		options.MaxRetryWaitTimeOnRateLimitedRequests ??= TimeSpan.FromSeconds(30);
 		Client = new CosmosClient(url, authSecret, options);
 	}
 
@@ -91,13 +96,6 @@ internal sealed class CosmosDbStorage : JobStorage, IDisposable
 
 	internal Container Container { get; private set; } = null!;
 
-	public void Dispose()
-	{
-		if (disposed) return;
-		disposed = true;
-		Client.Dispose();
-	}
-
 	/// <summary>
 	/// </summary>
 	/// <returns></returns>
@@ -122,22 +120,32 @@ internal sealed class CosmosDbStorage : JobStorage, IDisposable
 	/// <summary>
 	///     Prints out the storage options
 	/// </summary>
-	/// <param name="logger"></param>
-	public override void WriteOptionsToLog(ILog logger)
+	/// <param name="log"></param>
+	public override void WriteOptionsToLog(ILog log)
 	{
-		logger.Info("Using the following options for Azure Cosmos DB job storage:");
-		logger.Info($"     Cosmos DB Url: [{Client.Endpoint.AbsoluteUri}]");
-		logger.Info($"     Request Timeout: [{Client.ClientOptions.RequestTimeout}]");
-		logger.Info($"     Counter Aggregate Interval: [{StorageOptions.CountersAggregateInterval.TotalSeconds}] seconds");
-		logger.Info($"     Queue Poll Interval: [{StorageOptions.QueuePollInterval.TotalSeconds}] seconds");
-		logger.Info($"     Expiration Check Interval: [{StorageOptions.ExpirationCheckInterval.TotalSeconds}] seconds");
+		StringBuilder info = new();
+		info.AppendLine("Using the following options for Azure Cosmos DB job storage:");
+		info.AppendLine($"	Cosmos DB Url: [{Client.Endpoint.AbsoluteUri}]");
+		info.AppendLine($"	Database: [{databaseName}]");
+		info.AppendLine($"	Container: [{containerName}]");
+		info.AppendLine($"	Request Timeout: [{Client.ClientOptions.RequestTimeout}]");
+		info.AppendLine($"	Connection Mode: [{Client.ClientOptions.ConnectionMode}]");
+		info.AppendLine($"	Region: [{Client.ClientOptions.ApplicationRegion}]");
+		info.AppendLine($"	Max Retry Attempts On Rate Limited Requests: [{Client.ClientOptions.MaxRetryAttemptsOnRateLimitedRequests}]");
+		info.AppendLine($"	Max Retry Wait Time On Rate Limited Requests: [{Client.ClientOptions.MaxRetryWaitTimeOnRateLimitedRequests!.Value}]");
+		info.AppendLine($"	Counter Aggregator Max Items: [{StorageOptions.CountersAggregateMaxItemCount}]");
+		info.AppendLine($"	Counter Aggregate Interval: [{StorageOptions.CountersAggregateInterval}]");
+		info.AppendLine($"	Queue Poll Interval: [{StorageOptions.QueuePollInterval}]");
+		info.AppendLine($"	Expiration Check Interval: [{StorageOptions.ExpirationCheckInterval}]");
+		info.Append($"	Job Keep-Alive Interval: [{StorageOptions.JobKeepAliveInterval}]");
+		log.Info(info.ToString);
 	}
 
 	/// <summary>
 	///     Return the name of the database
 	/// </summary>
 	/// <returns></returns>
-	public override string ToString() => $"Cosmos DB : {databaseName}";
+	public override string ToString() => $"Cosmos DB : {databaseName}/{containerName}";
 
 	/// <summary>
 	///     Creates and returns an instance of CosmosDbStorage
@@ -246,8 +254,10 @@ internal sealed class CosmosDbStorage : JobStorage, IDisposable
 			logger.Info($"Creating storedprocedure : [{storedProcedureFile}]");
 			Stream? stream = assembly.GetManifestResourceStream(storedProcedureFile);
 
-			// if the stream is null skip and continue to next resource
-			if (stream == null) continue;
+			if (stream == null)
+			{
+				throw new ArgumentNullException(nameof(stream), $"{storedProcedureFile} was not found");
+			}
 
 			await using MemoryStream memoryStream = new();
 			await stream.CopyToAsync(memoryStream, cancellationToken);
@@ -272,7 +282,6 @@ internal sealed class CosmosDbStorage : JobStorage, IDisposable
 				else await Container.Scripts.ReplaceStoredProcedureAsync(sp, cancellationToken: cancellationToken);
 			}
 
-			// close the stream
 			stream.Close();
 		}
 	}

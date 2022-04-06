@@ -192,10 +192,11 @@ public class JobQueueFacts : IClassFixture<ContainerFixture>
 		job.RemoveFromQueue();
 
 		JobQueueMonitoringApi monitoringApi = new(Storage);
-		long count = monitoringApi.GetEnqueuedCount("default");
+		(int? enqueuedCount, int? fetchedCount) data = monitoringApi.GetEnqueuedAndFetchedCount("default");
 
 		//assert
-		Assert.Equal(0, count);
+		Assert.Equal(0, data.enqueuedCount);
+		Assert.Equal(0, data.fetchedCount);
 	}
 
 	[Theory]

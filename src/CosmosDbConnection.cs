@@ -103,7 +103,7 @@ internal sealed class CosmosDbConnection : JobStorageConnection
 			{
 				Job = job,
 				State = data.StateName,
-				CreatedAt = data.CreatedOn.ToLocalTime(),
+				CreatedAt = data.CreatedOn,
 				LoadException = loadException
 			};
 		}
@@ -182,7 +182,7 @@ internal sealed class CosmosDbConnection : JobStorageConnection
 
 		int retry = 0;
 		bool complete;
-		const string resource = "locks:job:update";
+		string resource = $"locks:job:{id}:update";
 		CosmosDbDistributedLock? distributedLock = null;
 
 		do
@@ -404,7 +404,7 @@ internal sealed class CosmosDbConnection : JobStorageConnection
 
 		int retry = 0;
 		bool complete;
-		const string resource = "locks:set:hash";
+		string resource = $"locks:set:{key}:hash";
 		CosmosDbDistributedLock? distributedLock = null;
 
 		do
@@ -427,7 +427,7 @@ internal sealed class CosmosDbConnection : JobStorageConnection
 				{
 					Key = key,
 					Field = k.Key,
-					Value = k.Value.TryParseToEpoch()
+					Value = k.Value
 				}).ToArray();
 
 				foreach (Hash source in sources)
