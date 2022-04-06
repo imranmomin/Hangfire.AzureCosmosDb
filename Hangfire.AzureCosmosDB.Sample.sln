@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hangfire.AzureCosmosDB.Sample", "sample\Hangfire.AzureCosmosDB.Sample.csproj", "{D6190853-C3AF-4D14-9C38-3115D367C8CA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hangfire.AzureCosmosDB", "src\Hangfire.AzureCosmosDB.csproj", "{DE17A903-E6B1-470B-B679-00C8E344D122}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D6190853-C3AF-4D14-9C38-3115D367C8CA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D6190853-C3AF-4D14-9C38-3115D367C8CA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D6190853-C3AF-4D14-9C38-3115D367C8CA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D6190853-C3AF-4D14-9C38-3115D367C8CA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DE17A903-E6B1-470B-B679-00C8E344D122}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DE17A903-E6B1-470B-B679-00C8E344D122}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DE17A903-E6B1-470B-B679-00C8E344D122}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DE17A903-E6B1-470B-B679-00C8E344D122}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
