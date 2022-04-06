@@ -50,9 +50,27 @@ public sealed class CosmosDbStorage : JobStorage
 	/// <param name="options">The CosmosClientOptions object to override any of the options</param>
 	/// <param name="storageOptions">The CosmosDbStorageOptions object to override any of the options</param>
 	internal CosmosDbStorage(string url, string authSecret, string databaseName, string containerName, CosmosClientOptions? options = null, CosmosDbStorageOptions? storageOptions = null)
+		: this(databaseName, containerName, storageOptions)
 	{
 		if (string.IsNullOrEmpty(url)) throw new ArgumentNullException(nameof(url));
 		if (string.IsNullOrEmpty(authSecret)) throw new ArgumentNullException(nameof(authSecret));
+
+		options ??= new CosmosClientOptions();
+		ConfigureCosmosClientOptions(options);
+		Client = new CosmosClient(url, authSecret, options);
+	}
+
+	internal CosmosDbStorage(CosmosClient cosmosClient, string databaseName, string containerName, CosmosDbStorageOptions? storageOptions = null)
+		:this(databaseName, containerName, storageOptions)
+	{
+		if (cosmosClient is null) throw new ArgumentNullException(nameof(cosmosClient));
+	 
+		ConfigureCosmosClientOptions(cosmosClient.ClientOptions);
+		Client = cosmosClient;
+	}
+
+	private CosmosDbStorage(string databaseName, string containerName, CosmosDbStorageOptions? storageOptions = null)
+	{
 		if (string.IsNullOrEmpty(databaseName)) throw new ArgumentNullException(nameof(databaseName));
 		if (string.IsNullOrEmpty(containerName)) throw new ArgumentNullException(nameof(containerName));
 
@@ -62,13 +80,14 @@ public sealed class CosmosDbStorage : JobStorage
 
 		JobQueueProvider provider = new(this);
 		QueueProviders = new PersistentJobQueueProviderCollection(provider);
+	}
 
-		options ??= new CosmosClientOptions();
-		options.ApplicationName = "Hangfire";
-		options.Serializer = new CosmosJsonSerializer(settings);
-		options.MaxRetryAttemptsOnRateLimitedRequests ??= 9;
-		options.MaxRetryWaitTimeOnRateLimitedRequests ??= TimeSpan.FromSeconds(30);
-		Client = new CosmosClient(url, authSecret, options);
+	private void ConfigureCosmosClientOptions(CosmosClientOptions cosmosClientOptions)
+	{
+		cosmosClientOptions.ApplicationName ??= "Hangfire";
+		cosmosClientOptions.Serializer = new CosmosJsonSerializer(settings);
+		cosmosClientOptions.MaxRetryAttemptsOnRateLimitedRequests ??= 9;
+		cosmosClientOptions.MaxRetryWaitTimeOnRateLimitedRequests ??= TimeSpan.FromSeconds(30);
 	}
 
 	internal PersistentJobQueueProviderCollection QueueProviders { get; }
@@ -146,6 +165,21 @@ public sealed class CosmosDbStorage : JobStorage
 		return storage;
 	}
 
+
+	/// <summary>
+	///     Creates and returns an instance of CosmosDbStorage
+	/// </summary>
+	///<param name="cosmosClient">An instance of CosmosClient</param>
+	/// <param name="databaseName">The name of the database to connect with</param>
+	/// <param name="containerName">The name of the collection/container on the database</param>
+	/// <param name="options">The CosmosClientOptions object to override any of the options</param>
+	/// <param name="storageOptions">The CosmosDbStorageOptions object to override any of the options</param>
+	public static CosmosDbStorage Create(CosmosClient cosmosClient, string databaseName, string containerName, CosmosDbStorageOptions? storageOptions = null)
+	{
+		CosmosDbStorage storage = new(cosmosClient, databaseName, containerName, storageOptions);
+		storage.InitializeAsync().ExecuteSynchronously();
+		return storage;
+	}
 	/// <summary>
 	///     Creates and returns an instance of CosmosDbStorage
 	/// </summary>
@@ -165,6 +199,25 @@ public sealed class CosmosDbStorage : JobStorage
 		await storage.InitializeAsync(cancellationToken);
 		return storage;
 	}
+
+	/// <summary>
+	///     Creates and returns an instance of CosmosDbStorage
+	/// </summary>
+	/// <param name="cosmosClient">An instance of CosmosClient</param>
+	/// <param name="databaseName">The name of the database to connect with</param>
+	/// <param name="containerName">The name of the collection/container on the database</param>
+	/// <param name="options">The CosmosClientOptions object to override any of the options</param>
+	/// <param name="storageOptions">The CosmosDbStorageOptions object to override any of the options</param>
+	/// <param name="cancellationToken">A cancellation token</param>
+	public static async Task<CosmosDbStorage> CreateAsync(CosmosClient cosmosClient, string databaseName, string containerName,
+	    CosmosDbStorageOptions? storageOptions = null,
+		CancellationToken cancellationToken = default)
+	{
+		CosmosDbStorage storage = new(cosmosClient, databaseName, containerName, storageOptions);
+		await storage.InitializeAsync(cancellationToken);
+		return storage;
+	}
+
 
 	private async Task InitializeAsync(CancellationToken cancellationToken = default)
 	{

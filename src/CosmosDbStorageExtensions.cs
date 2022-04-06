@@ -61,4 +61,34 @@ public static class CosmosDbStorageExtensions
 		CosmosDbStorage storage = await CosmosDbStorage.CreateAsync(url, authSecret, database, collection, option, storageOptions, cancellationToken);
 		return configuration.UseStorage(storage);
 	}
+
+	/// <summary>
+	///     Enables to attach Azure Cosmos DB to Hangfire
+	/// </summary>
+	/// <param name="configuration">The IGlobalConfiguration object</param>
+	/// <param name="cosmosClient">An instance of CosmosClient</param>
+	/// <param name="database">The name of the database to connect with</param>
+	/// <param name="collection">The name of the collection on the database</param>
+	/// <param name="option"></param>
+	/// <param name="storageOptions">The CosmosDbStorage object to override any of the options</param>
+	/// <returns></returns>
+	public static IGlobalConfiguration<CosmosDbStorage> UseAzureCosmosDbStorage(this IGlobalConfiguration configuration, CosmosClient cosmosClient, string databaseName, string containerName, CosmosDbStorageOptions storageOptions = null)
+	{
+		if (configuration == null) throw new ArgumentNullException(nameof(configuration));
+		if (cosmosClient is null)
+			throw new ArgumentNullException(nameof(cosmosClient));
+
+		CosmosDbStorage storage = CosmosDbStorage.Create(cosmosClient, databaseName, containerName, storageOptions);
+		return configuration.UseStorage(storage);
+	}
+
+	public static async Task<IGlobalConfiguration<CosmosDbStorage>> UseAzureCosmosDbStorageAsync(this IGlobalConfiguration configuration, CosmosClient cosmosClient, string database, string collection,
+	CosmosDbStorageOptions? storageOptions = null,
+	CancellationToken cancellationToken = default)
+	{
+		if (configuration == null) throw new ArgumentNullException(nameof(configuration));
+
+		CosmosDbStorage storage = await CosmosDbStorage.CreateAsync(cosmosClient, database, collection, storageOptions, cancellationToken);
+		return configuration.UseStorage(storage);
+	}
 }
