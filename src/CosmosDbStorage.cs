@@ -257,8 +257,9 @@ public sealed class CosmosDbStorage : JobStorage
 				throw new ArgumentNullException(nameof(stream), $"{storedProcedureFile} was not found");
 			}
 
-			await using MemoryStream memoryStream = new();
-			await stream.CopyToAsync(memoryStream, cancellationToken);
+			using MemoryStream memoryStream = new();
+			const int bufferSize = 81920; // default
+			await stream.CopyToAsync(memoryStream, bufferSize, cancellationToken);
 
 			StoredProcedureProperties sp = new()
 			{

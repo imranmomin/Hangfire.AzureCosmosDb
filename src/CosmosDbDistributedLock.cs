@@ -128,16 +128,18 @@ internal class CosmosDbDistributedLock : IDisposable
 
 		} while (@lock == null);
 
+
 		// set the timer for the KeepLockAlive callbacks
-		TimeSpan period = TimeSpan.FromSeconds(ttl).Divide(2);
-		period = period.TotalSeconds < 1 ? TimeSpan.FromSeconds(1) : period;
-		timer = new Timer(KeepLockAlive, @lock, period, Timeout.InfiniteTimeSpan);
+		TimeSpan temp = TimeSpan.FromSeconds(ttl);
+		TimeSpan dueTime = new(temp.Ticks / 2);
+		dueTime = dueTime.TotalSeconds < 1 ? TimeSpan.FromSeconds(1) : dueTime;
+		timer = new Timer(KeepLockAlive, @lock, dueTime, Timeout.InfiniteTimeSpan);
 
 		// add the resource to the local 
 		acquiredLocks.Value.Add(resource, 1);
 
 		logger.Trace($"Acquired lock [{resource}] for [{timeout.TotalSeconds}] seconds; in [{acquireStart.Elapsed.TotalMilliseconds:#.##}] ms. " +
-		             $"Keep-alive query will be sent every {period.TotalSeconds} seconds until disposed");
+		             $"Keep-alive query will be sent every {dueTime.TotalSeconds} seconds until disposed");
 	}
 
 	/// <summary>
@@ -164,9 +166,10 @@ internal class CosmosDbDistributedLock : IDisposable
 				@lock = storage.Container.PatchItemWithRetries<Lock>(temp.Id, PartitionKeys.Lock, patchOperations, patchItemRequestOptions);
 
 				// set the time for the next callback
-				TimeSpan period = TimeSpan.FromSeconds(@lock.TimeToLive!.Value).Divide(2);
-				period = period.TotalSeconds < 1 ? TimeSpan.FromSeconds(1) : period;
-				timer?.Change(period, Timeout.InfiniteTimeSpan);
+				TimeSpan ttlTemp = TimeSpan.FromSeconds(@lock.TimeToLive!.Value);
+				TimeSpan dueTime = new(ttlTemp.Ticks / 2);
+				dueTime = dueTime.TotalSeconds < 1 ? TimeSpan.FromSeconds(1) : dueTime;
+				timer?.Change(dueTime, Timeout.InfiniteTimeSpan);
 
 				logger.Trace($"Keep-alive query for lock: [{temp.Id}] sent");
 			}
