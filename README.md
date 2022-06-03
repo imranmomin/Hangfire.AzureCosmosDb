@@ -32,11 +32,11 @@ PackageReference
 Use one the following ways to initialize `CosmosDbStorage`
 
 ```csharp
-GlobalConfiguration.Configuration.UseAzureCosmosDbStorage("<url>", "<authSecret>", "<databaseName>", "<collectionName>");
+GlobalConfiguration.Configuration.UseAzureCosmosDbStorage("<url>", "<authSecret>", "<databaseName>", "<containerName>");
 
 ------------------------------------------------ 
 
-Hangfire.Azure.CosmosDbStorage storage = Hangfire.Azure.CosmosDbStorage.Create("<url>", "<authSecret>", "<databaseName>", "<collectionName>");
+Hangfire.Azure.CosmosDbStorage storage = Hangfire.Azure.CosmosDbStorage.Create("<url>", "<authSecret>", "<databaseName>", "<containerName>");
 GlobalConfiguration.Configuration.UseStorage(storage);
 ```
 
@@ -46,14 +46,15 @@ Hangfire.Azure.CosmosDbStorageOptions options = new Hangfire.Azure.CosmosDbStora
 {
     ExpirationCheckInterval = TimeSpan.FromMinutes(2),
     CountersAggregateInterval = TimeSpan.FromMinutes(2),
-    QueuePollInterval = TimeSpan.FromSeconds(15)
+    QueuePollInterval = TimeSpan.FromSeconds(15),
+    CreateIfNotExists = true
 };
 
-GlobalConfiguration.Configuration.UseAzureCosmosDbStorage("<url>", "<authSecret>", "<databaseName>", "<collectionName>", cosmoClientOptions, options);
+GlobalConfiguration.Configuration.UseAzureCosmosDbStorage("<url>", "<authSecret>", "<databaseName>", "<containerName>", cosmoClientOptions, options);
 
 ------------------------------------------------ 
 
-Hangfire.Azure.CosmosDbStorage storage = Hangfire.Azure.CosmosDbStorage.Create("<url>", "<authSecret>", "<databaseName>", "<collectionName>", cosmoClientOptions, options);
+Hangfire.Azure.CosmosDbStorage storage = Hangfire.Azure.CosmosDbStorage.Create("<url>", "<authSecret>", "<databaseName>", "<containerName>", cosmoClientOptions, options);
 GlobalConfiguration.Configuration.UseStorage(storage);
 ```
 

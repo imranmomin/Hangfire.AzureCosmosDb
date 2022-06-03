@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Reflection;
 using System.Text;
 using System.Threading;
@@ -150,7 +151,9 @@ public sealed class CosmosDbStorage : JobStorage
         info.AppendLine($"	Region: [{Client.ClientOptions.ApplicationRegion}]");
         info.AppendLine($"	Max Retry Attempts On Rate Limited Requests: [{Client.ClientOptions.MaxRetryAttemptsOnRateLimitedRequests}]");
         info.AppendLine($"	Max Retry Wait Time On Rate Limited Requests: [{Client.ClientOptions.MaxRetryWaitTimeOnRateLimitedRequests!.Value}]");
+        info.AppendLine($"	Create Storage If Not Exists: [{StorageOptions.CreateIfNotExists}]");
         info.AppendLine($"	Counter Aggregator Max Items: [{StorageOptions.CountersAggregateMaxItemCount}]");
+        info.AppendLine($"	Transactional Lock Timeout: [{StorageOptions.TransactionalLockTimeout}]");
         info.AppendLine($"	Counter Aggregate Interval: [{StorageOptions.CountersAggregateInterval}]");
         info.AppendLine($"	Queue Poll Interval: [{StorageOptions.QueuePollInterval}]");
         info.AppendLine($"	Expiration Check Interval: [{StorageOptions.ExpirationCheckInterval}]");
@@ -239,6 +242,20 @@ public sealed class CosmosDbStorage : JobStorage
 
     private async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
+        if (!StorageOptions.CreateIfNotExists)
+        {
+            // check if container exists within database
+            try
+            {
+                Container = await Client.GetContainer(databaseName, containerName).ReadContainerAsync(cancellationToken: cancellationToken);
+                return;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                throw new InvalidOperationException($"Cannot find an existing container named {containerName} within database {databaseName}");
+            }
+        }
+        
         // create database
         logger.Info($"Creating database : [{databaseName}]");
         DatabaseResponse databaseResponse = await Client.CreateDatabaseIfNotExistsAsync(databaseName, cancellationToken: cancellationToken);
