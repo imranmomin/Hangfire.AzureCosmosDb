@@ -1,0 +1,6 @@
+[*.cs]
+resharper_csharp_keep_existing_initializer_arrangement = true
+resharper_csharp_keep_existing_arrangement             = true
+resharper_keep_existing_initializer_arrangement        = true
+resharper_keep_existing_arrangement                    = true
+resharper_space_between_keyword_and_expression         = true
