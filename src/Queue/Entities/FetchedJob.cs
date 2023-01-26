@@ -29,7 +29,7 @@ internal class FetchedJob : IFetchedJob
 		this.data = data;
 
 		TimeSpan keepAliveInterval = storage.StorageOptions.JobKeepAliveInterval;
-		timer = new Timer(KeepAliveJobCallback, data, keepAliveInterval, Timeout.InfiniteTimeSpan);
+		timer = new Timer(KeepAliveJobCallback, null, keepAliveInterval, Timeout.InfiniteTimeSpan);
 		logger.Trace($"Job [{data.JobId}] will send a Keep-Alive query every [{keepAliveInterval.TotalSeconds}] seconds until disposed");
 	}
 
@@ -119,35 +119,34 @@ internal class FetchedJob : IFetchedJob
 		lock (syncRoot)
 		{
 			if (reQueued || removedFromQueue) return;
-			if (obj is not Documents.Queue temp) return;
 
 			try
 			{
-				PatchItemRequestOptions patchItemRequestOptions = new() { IfMatchEtag = temp.ETag };
+				PatchItemRequestOptions patchItemRequestOptions = new() { IfMatchEtag = data.ETag };
 				PatchOperation[] patchOperations =
 				{
 					PatchOperation.Set("/fetched_at", DateTime.UtcNow.ToEpoch())
 				};
 
-				data = storage.Container.PatchItemWithRetries<Documents.Queue>(temp.Id, partitionKey, patchOperations, patchItemRequestOptions);
+				data = storage.Container.PatchItemWithRetries<Documents.Queue>(data.Id, partitionKey, patchOperations, patchItemRequestOptions);
 
 				// set the timer for the next callback
 				TimeSpan keepAliveInterval = storage.StorageOptions.JobKeepAliveInterval;
 				timer.Change(keepAliveInterval, Timeout.InfiniteTimeSpan);
 
-				logger.Trace($"Keep-alive query for job: [{temp.Id}] sent");
+				logger.Trace($"Keep-alive query for job: [{data.Id}] sent");
 			}
 			catch (Exception ex) when (ex is CosmosException { StatusCode: HttpStatusCode.NotFound } or AggregateException { InnerException: CosmosException { StatusCode: HttpStatusCode.NotFound } })
 			{
-				logger.Trace($"Job [{temp.Id}] keep-alive query failed. Most likely the job was removed from the queue");
+				logger.Trace($"Job [{data.Id}] keep-alive query failed. Most likely the job was removed from the queue");
 			}
 			catch (Exception ex) when (ex is CosmosException { StatusCode: HttpStatusCode.BadRequest } or AggregateException { InnerException: CosmosException { StatusCode: HttpStatusCode.BadRequest } })
 			{
-				logger.Trace($"Job [{temp.Id}] keep-alive query failed. Most likely the job was updated by some other server");
+				logger.Trace($"Job [{data.Id}] keep-alive query failed. Most likely the job was updated by some other server");
 			}
 			catch (Exception ex)
 			{
-				logger.DebugException($"Unable to execute keep-alive query for job [{temp.Id}]", ex);
+				logger.DebugException($"Unable to execute keep-alive query for job [{data.Id}]", ex);
 			}
 		}
 	}
