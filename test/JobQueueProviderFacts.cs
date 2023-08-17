@@ -7,37 +7,37 @@ namespace Hangfire.Azure.Tests;
 
 public class JobQueueProviderFacts : IClassFixture<ContainerFixture>
 {
-	private CosmosDbStorage Storage { get; }
+    public JobQueueProviderFacts(ContainerFixture containerFixture, ITestOutputHelper testOutputHelper)
+    {
+        Storage = containerFixture.Storage;
+        containerFixture.SetupLogger(testOutputHelper);
+    }
 
-	public JobQueueProviderFacts(ContainerFixture containerFixture, ITestOutputHelper testOutputHelper)
-	{
-		Storage = containerFixture.Storage;
-		containerFixture.SetupLogger(testOutputHelper);
-	}
+    private CosmosDbStorage Storage { get; }
 
-	[Fact]
-	public void GetJobQueue_WhenIsNotNull()
-	{
-		// arrange
-		JobQueueProvider provider = new(Storage);
+    [Fact]
+    public void GetJobQueue_WhenIsNotNull()
+    {
+        // arrange
+        JobQueueProvider provider = new(Storage);
 
-		// act
-		IPersistentJobQueue queue = provider.GetJobQueue();
+        // act
+        IPersistentJobQueue queue = provider.GetJobQueue();
 
-		// assert
-		Assert.NotNull(queue);
-	}
+        // assert
+        Assert.NotNull(queue);
+    }
 
-	[Fact]
-	public void GetJobQueueMonitoringApi_WhenIsNotNull()
-	{
-		// arrange
-		JobQueueProvider provider = new(Storage);
+    [Fact]
+    public void GetJobQueueMonitoringApi_WhenIsNotNull()
+    {
+        // arrange
+        JobQueueProvider provider = new(Storage);
 
-		// act
-		IPersistentJobQueueMonitoringApi queue = provider.GetJobQueueMonitoringApi();
+        // act
+        IPersistentJobQueueMonitoringApi queue = provider.GetJobQueueMonitoringApi();
 
-		// assert
-		Assert.NotNull(queue);
-	}
+        // assert
+        Assert.NotNull(queue);
+    }
 }

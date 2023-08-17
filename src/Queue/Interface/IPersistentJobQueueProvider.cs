@@ -3,6 +3,7 @@ namespace Hangfire.Azure.Queue;
 
 internal interface IPersistentJobQueueProvider
 {
-	IPersistentJobQueue GetJobQueue();
-	IPersistentJobQueueMonitoringApi GetJobQueueMonitoringApi();
+    IPersistentJobQueue GetJobQueue();
+
+    IPersistentJobQueueMonitoringApi GetJobQueueMonitoringApi();
 }

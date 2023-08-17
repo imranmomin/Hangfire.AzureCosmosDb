@@ -6,6 +6,7 @@ namespace Hangfire.Azure.Queue;
 
 internal interface IPersistentJobQueue
 {
-	IFetchedJob Dequeue(string[] queues, CancellationToken cancellationToken);
-	void Enqueue(string queue, string jobId);
+    IFetchedJob Dequeue(string[] queues, CancellationToken cancellationToken);
+
+    void Enqueue(string queue, string jobId);
 }

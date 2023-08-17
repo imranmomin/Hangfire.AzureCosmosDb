@@ -28,15 +28,7 @@ public sealed class CosmosDbStorage : JobStorage
     private readonly string databaseName;
     private readonly ILog logger = LogProvider.For<CosmosDbStorage>();
 
-    private readonly JsonSerializerSettings settings = new ()
-    {
-        NullValueHandling = NullValueHandling.Ignore,
-        DateTimeZoneHandling = DateTimeZoneHandling.Utc,
-        ContractResolver = new CamelCasePropertyNamesContractResolver
-        {
-            NamingStrategy = new CamelCaseNamingStrategy(false, false)
-        }
-    };
+    private readonly JsonSerializerSettings settings = new() { NullValueHandling = NullValueHandling.Ignore, DateTimeZoneHandling = DateTimeZoneHandling.Utc, ContractResolver = new CamelCasePropertyNamesContractResolver { NamingStrategy = new CamelCaseNamingStrategy(false, false) } };
 
     /// <summary>
     ///     Creates an instance of CosmosDbStorage
@@ -93,7 +85,7 @@ public sealed class CosmosDbStorage : JobStorage
         this.containerName = containerName;
         StorageOptions = storageOptions ?? new CosmosDbStorageOptions();
 
-        JobQueueProvider provider = new (this);
+        JobQueueProvider provider = new(this);
         QueueProviders = new PersistentJobQueueProviderCollection(provider);
     }
 
@@ -140,7 +132,7 @@ public sealed class CosmosDbStorage : JobStorage
     /// <param name="log"></param>
     public override void WriteOptionsToLog(ILog log)
     {
-        StringBuilder info = new ();
+        StringBuilder info = new();
         info.AppendLine("Using the following options for Azure Cosmos DB job storage:");
         info.AppendLine($"	Cosmos DB Url: [{Client.Endpoint.AbsoluteUri}]");
         info.AppendLine($"	Database: [{databaseName}]");
@@ -175,7 +167,7 @@ public sealed class CosmosDbStorage : JobStorage
     /// <param name="storageOptions">The CosmosDbStorageOptions object to override any of the options</param>
     public static CosmosDbStorage Create(string url, string authSecret, string databaseName, string containerName, CosmosClientOptions? options = null, CosmosDbStorageOptions? storageOptions = null)
     {
-        CosmosDbStorage storage = new (url, authSecret, databaseName, containerName, options, storageOptions);
+        CosmosDbStorage storage = new(url, authSecret, databaseName, containerName, options, storageOptions);
         storage.InitializeAsync().ExecuteSynchronously();
         return storage;
     }
@@ -190,7 +182,7 @@ public sealed class CosmosDbStorage : JobStorage
     /// <param name="storageOptions">The CosmosDbStorageOptions object to override any of the options</param>
     public static CosmosDbStorage Create(CosmosClient cosmosClient, string databaseName, string containerName, CosmosDbStorageOptions? storageOptions = null)
     {
-        CosmosDbStorage storage = new (cosmosClient, databaseName, containerName, storageOptions);
+        CosmosDbStorage storage = new(cosmosClient, databaseName, containerName, storageOptions);
         storage.InitializeAsync().ExecuteSynchronously();
         return storage;
     }
@@ -205,7 +197,11 @@ public sealed class CosmosDbStorage : JobStorage
     /// <param name="options">The CosmosClientOptions object to override any of the options</param>
     /// <param name="storageOptions">The CosmosDbStorageOptions object to override any of the options</param>
     /// <param name="cancellationToken">A cancellation token</param>
-    public static async Task<CosmosDbStorage> CreateAsync(string url, string authSecret, string databaseName, string containerName,
+    public static async Task<CosmosDbStorage> CreateAsync(
+        string url,
+        string authSecret,
+        string databaseName,
+        string containerName,
         CosmosClientOptions? options = null,
         CosmosDbStorageOptions? storageOptions = null,
         CancellationToken cancellationToken = default)
@@ -215,7 +211,7 @@ public sealed class CosmosDbStorage : JobStorage
             throw new NotSupportedException($"{nameof(options.EnableContentResponseOnWrite)} is not supported. Please check the CosmosClientOptions object");
         }
 
-        CosmosDbStorage storage = new (url, authSecret, databaseName, containerName, options, storageOptions);
+        CosmosDbStorage storage = new(url, authSecret, databaseName, containerName, options, storageOptions);
         await storage.InitializeAsync(cancellationToken);
         return storage;
     }
@@ -228,11 +224,14 @@ public sealed class CosmosDbStorage : JobStorage
     /// <param name="containerName">The name of the collection/container on the database</param>
     /// <param name="storageOptions">The CosmosDbStorageOptions object to override any of the options</param>
     /// <param name="cancellationToken">A cancellation token</param>
-    public static async Task<CosmosDbStorage> CreateAsync(CosmosClient cosmosClient, string databaseName, string containerName,
+    public static async Task<CosmosDbStorage> CreateAsync(
+        CosmosClient cosmosClient,
+        string databaseName,
+        string containerName,
         CosmosDbStorageOptions? storageOptions = null,
         CancellationToken cancellationToken = default)
     {
-        CosmosDbStorage storage = new (cosmosClient, databaseName, containerName, storageOptions);
+        CosmosDbStorage storage = new(cosmosClient, databaseName, containerName, storageOptions);
         await storage.InitializeAsync(cancellationToken);
         return storage;
     }
@@ -247,7 +246,7 @@ public sealed class CosmosDbStorage : JobStorage
         logger.Info($"Creating container : [{containerName}]");
         Database resultDatabase = databaseResponse.Database;
 
-        ContainerProperties properties = new ()
+        ContainerProperties properties = new()
         {
             Id = containerName,
             DefaultTimeToLive = -1,
@@ -256,11 +255,7 @@ public sealed class CosmosDbStorage : JobStorage
         };
 
         // add the index policy
-        Collection<CompositePath> compositeIndexes = new ()
-        {
-            new CompositePath { Path = "/name", Order = CompositePathSortOrder.Ascending },
-            new CompositePath { Path = "/created_on", Order = CompositePathSortOrder.Ascending }
-        };
+        Collection<CompositePath> compositeIndexes = new() { new CompositePath { Path = "/name", Order = CompositePathSortOrder.Ascending }, new CompositePath { Path = "/created_on", Order = CompositePathSortOrder.Ascending } };
 
         properties.IndexingPolicy.CompositeIndexes.Add(compositeIndexes);
 
@@ -273,13 +268,13 @@ public sealed class CosmosDbStorage : JobStorage
         ContainerProperties? containerSettings = queryProperties.Resource.FirstOrDefault();
 
         // check for ttl 
-        if (containerSettings is { DefaultTimeToLive: null or > -1 })
+        if (containerSettings is { DefaultTimeToLive: null or> -1 })
         {
             throw new NotSupportedException($"{nameof(containerSettings.DefaultTimeToLive)} is not set to -1. Please set the value to -1");
         }
 
         // check for partition key 
-        if (containerSettings is { PartitionKeyPath: not "/type" })
+        if (containerSettings is { PartitionKeyPath: not"/type" })
         {
             throw new NotSupportedException($"{nameof(containerSettings.PartitionKeyPath)} is not set to '/type'");
         }
@@ -298,20 +293,23 @@ public sealed class CosmosDbStorage : JobStorage
                 throw new ArgumentNullException(nameof(stream), $"{storedProcedureFile} was not found");
             }
 
-            using MemoryStream memoryStream = new ();
+            using MemoryStream memoryStream = new();
             const int bufferSize = 81920; // default
             await stream.CopyToAsync(memoryStream, bufferSize, cancellationToken);
 
-            StoredProcedureProperties sp = new ()
+            StoredProcedureProperties sp = new()
             {
                 Body = Encoding.UTF8.GetString(memoryStream.ToArray()),
                 Id = Path.GetFileNameWithoutExtension(storedProcedureFile)?
-                    .Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Split(new[]
+                    {
+                        '.'
+                    }, StringSplitOptions.RemoveEmptyEntries)
                     .Last()
             };
 
             const string query = "SELECT * FROM doc where doc.id = @Id";
-            QueryDefinition queryDefinition = new (query);
+            QueryDefinition queryDefinition = new(query);
             queryDefinition.WithParameter("@Id", sp.Id);
 
             using FeedIterator<StoredProcedureProperties> iterator = Container.Scripts.GetStoredProcedureQueryIterator<StoredProcedureProperties>(queryDefinition);

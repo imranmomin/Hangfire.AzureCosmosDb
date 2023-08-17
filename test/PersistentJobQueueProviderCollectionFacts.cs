@@ -9,44 +9,44 @@ namespace Hangfire.Azure.Tests;
 
 public class PersistentJobQueueProviderCollectionFacts : IClassFixture<ContainerFixture>
 {
-	private CosmosDbStorage Storage { get; }
+    public PersistentJobQueueProviderCollectionFacts(ContainerFixture containerFixture, ITestOutputHelper testOutputHelper)
+    {
+        Storage = containerFixture.Storage;
+        containerFixture.SetupLogger(testOutputHelper);
+    }
 
-	public PersistentJobQueueProviderCollectionFacts(ContainerFixture containerFixture, ITestOutputHelper testOutputHelper)
-	{
-		Storage = containerFixture.Storage;
-		containerFixture.SetupLogger(testOutputHelper);
-	}
+    private CosmosDbStorage Storage { get; }
 
-	[Fact]
-	public void PersistentJobQueueProviderCollection_ShouldThrowException_WhenProviderIsNull()
-	{
-		// act
-		ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => new PersistentJobQueueProviderCollection(null!));
+    [Fact]
+    public void PersistentJobQueueProviderCollection_ShouldThrowException_WhenProviderIsNull()
+    {
+        // act
+        ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => new PersistentJobQueueProviderCollection(null!));
 
-		// assert
-		Assert.Equal("provider", exception.ParamName);
-	}
+        // assert
+        Assert.Equal("provider", exception.ParamName);
+    }
 
-	[Fact]
-	public void PersistentJobQueueProviderCollection_HasProvider()
-	{
-		// arrange
-		JobQueueProvider provider = new(Storage);
-		PersistentJobQueueProviderCollection collection = new(provider);
+    [Fact]
+    public void PersistentJobQueueProviderCollection_HasProvider()
+    {
+        // arrange
+        JobQueueProvider provider = new(Storage);
+        PersistentJobQueueProviderCollection collection = new(provider);
 
-		// act
-		IEnumerable<IPersistentJobQueueProvider> providers = getAllProviders();
+        // act
+        IEnumerable<IPersistentJobQueueProvider> providers = getAllProviders();
 
-		// assert
-		Assert.NotEmpty(providers);
+        // assert
+        Assert.NotEmpty(providers);
 
-		IEnumerable<IPersistentJobQueueProvider> getAllProviders()
-		{
-			using IEnumerator<IPersistentJobQueueProvider> enumerator = collection.GetEnumerator();
-			while (enumerator.MoveNext())
-			{
-				yield return enumerator.Current;
-			}
-		}
-	}
+        IEnumerable<IPersistentJobQueueProvider> getAllProviders()
+        {
+            using IEnumerator<IPersistentJobQueueProvider> enumerator = collection.GetEnumerator();
+            while (enumerator.MoveNext())
+            {
+                yield return enumerator.Current;
+            }
+        }
+    }
 }

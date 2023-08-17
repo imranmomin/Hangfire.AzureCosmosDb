@@ -7,15 +7,15 @@ namespace Hangfire.Azure.Documents;
 
 internal class List : DocumentBase
 {
-	[JsonProperty("key")]
-	public string Key { get; set; } = null!;
+    [JsonProperty("key")]
+    public string Key { get; set; } = null!;
 
-	[JsonProperty("value")]
-	public string Value { get; set; } = null!;
+    [JsonProperty("value")]
+    public string Value { get; set; } = null!;
 
-	[JsonProperty("created_on")]
-	[JsonConverter(typeof(UnixDateTimeConverter))]
-	public DateTime CreatedOn { get; set; }
+    [JsonProperty("created_on")]
+    [JsonConverter(typeof(UnixDateTimeConverter))]
+    public DateTime CreatedOn { get; set; }
 
-	public override DocumentTypes DocumentType => DocumentTypes.List;
+    public override DocumentTypes DocumentType => DocumentTypes.List;
 }

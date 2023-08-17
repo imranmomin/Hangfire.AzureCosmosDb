@@ -13,56 +13,66 @@ namespace Hangfire.Azure;
 internal class ExpirationManager : IServerComponent
 #pragma warning restore 618
 {
-	private const string DISTRIBUTED_LOCK_KEY = "locks:expiration:manager";
-	private readonly DocumentTypes[] documents = { DocumentTypes.Job, DocumentTypes.List, DocumentTypes.Set, DocumentTypes.Hash, DocumentTypes.Counter, DocumentTypes.State };
-	private readonly ILog logger = LogProvider.For<ExpirationManager>();
-	private readonly CosmosDbStorage storage;
+    private const string DISTRIBUTED_LOCK_KEY = "locks:expiration:manager";
 
-	public ExpirationManager(CosmosDbStorage storage)
-	{
-		this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
-	}
+    private readonly DocumentTypes[] documents =
+    {
+        DocumentTypes.Job,
+        DocumentTypes.List,
+        DocumentTypes.Set,
+        DocumentTypes.Hash,
+        DocumentTypes.Counter,
+        DocumentTypes.State
+    };
 
-	public void Execute(CancellationToken cancellationToken)
-	{
-		CosmosDbDistributedLock? distributedLock = null;
-		int expireOn = DateTime.UtcNow.ToEpoch();
+    private readonly ILog logger = LogProvider.For<ExpirationManager>();
+    private readonly CosmosDbStorage storage;
 
-		try
-		{
-			// check if the token was cancelled
-			cancellationToken.ThrowIfCancellationRequested();
+    public ExpirationManager(CosmosDbStorage storage) => this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
 
-			// get the distributed lock
-			distributedLock = new CosmosDbDistributedLock(DISTRIBUTED_LOCK_KEY, storage.StorageOptions.ExpirationCheckInterval, storage);
+    public void Execute(CancellationToken cancellationToken)
+    {
+        CosmosDbDistributedLock? distributedLock = null;
+        int expireOn = DateTime.UtcNow.ToEpoch();
 
-			foreach (DocumentTypes type in documents)
-			{
-				cancellationToken.ThrowIfCancellationRequested();
+        try
+        {
+            // check if the token was cancelled
+            cancellationToken.ThrowIfCancellationRequested();
 
-				logger.Trace($"Removing outdated records from the [{type}] table.");
+            // get the distributed lock
+            distributedLock = new CosmosDbDistributedLock(DISTRIBUTED_LOCK_KEY, storage.StorageOptions.ExpirationCheckInterval, storage);
 
-				string query = $"SELECT * FROM doc WHERE IS_DEFINED(doc.expire_on) AND doc.expire_on < {expireOn}";
+            foreach (DocumentTypes type in documents)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
 
-				// remove only the aggregate counters when the type is Counter
-				if (type == DocumentTypes.Counter) query += $" AND doc.counterType = {(int)CounterTypes.Aggregate}";
+                logger.Trace($"Removing outdated records from the [{type}] table.");
 
-				int deleted = storage.Container.ExecuteDeleteDocuments(query, new PartitionKey((int)type));
+                string query = $"SELECT * FROM doc WHERE IS_DEFINED(doc.expire_on) AND doc.expire_on < {expireOn}";
 
-				logger.Trace($"Outdated [{deleted}] records removed from the [{type}] table.");
-			}
-		}
-		catch (CosmosDbDistributedLockException exception) when (exception.Key == DISTRIBUTED_LOCK_KEY)
-		{
-			logger.Debug($@"An exception was thrown during acquiring distributed lock on the [{DISTRIBUTED_LOCK_KEY}] resource within [{storage.StorageOptions.ExpirationCheckInterval.TotalSeconds}] seconds. " +
-			             $@"Outdated records were not removed. It will be retried in [{storage.StorageOptions.ExpirationCheckInterval.TotalSeconds}] seconds.");
-		}
-		finally
-		{
-			distributedLock?.Dispose();
-		}
+                // remove only the aggregate counters when the type is Counter
+                if (type == DocumentTypes.Counter)
+                {
+                    query += $" AND doc.counterType = {(int)CounterTypes.Aggregate}";
+                }
 
-		// wait for the interval specified
-		cancellationToken.WaitHandle.WaitOne(storage.StorageOptions.ExpirationCheckInterval);
-	}
+                int deleted = storage.Container.ExecuteDeleteDocuments(query, new PartitionKey((int)type));
+
+                logger.Trace($"Outdated [{deleted}] records removed from the [{type}] table.");
+            }
+        }
+        catch (CosmosDbDistributedLockException exception) when (exception.Key == DISTRIBUTED_LOCK_KEY)
+        {
+            logger.Debug($"An exception was thrown during acquiring distributed lock on the [{DISTRIBUTED_LOCK_KEY}] resource within [{storage.StorageOptions.ExpirationCheckInterval.TotalSeconds}] seconds. " +
+                         $"Outdated records were not removed. It will be retried in [{storage.StorageOptions.ExpirationCheckInterval.TotalSeconds}] seconds.");
+        }
+        finally
+        {
+            distributedLock?.Dispose();
+        }
+
+        // wait for the interval specified
+        cancellationToken.WaitHandle.WaitOne(storage.StorageOptions.ExpirationCheckInterval);
+    }
 }
