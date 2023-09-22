@@ -42,7 +42,7 @@ internal class ExpirationManager : IServerComponent
 
 				logger.Trace($"Removing outdated records from the [{type}] table.");
 
-				string query = $"SELECT * FROM doc WHERE IS_DEFINED(doc.expire_on) AND doc.expire_on < {expireOn}";
+				string query = $"SELECT * FROM doc WHERE doc.expire_on < {expireOn}";
 
 				// remove only the aggregate counters when the type is Counter
 				if (type == DocumentTypes.Counter) query += $" AND doc.counterType = {(int)CounterTypes.Aggregate}";
