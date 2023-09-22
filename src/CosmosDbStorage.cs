@@ -259,7 +259,9 @@ public sealed class CosmosDbStorage : JobStorage
         Collection<CompositePath> compositeIndexes = new ()
         {
             new CompositePath { Path = "/name", Order = CompositePathSortOrder.Ascending },
-            new CompositePath { Path = "/created_on", Order = CompositePathSortOrder.Ascending }
+            new CompositePath { Path = "/created_on", Order = CompositePathSortOrder.Ascending },
+            new CompositePath { Path = "/type", Order = CompositePathSortOrder.Ascending },
+            new CompositePath { Path = "/score", Order = CompositePathSortOrder.Ascending }
         };
 
         properties.IndexingPolicy.CompositeIndexes.Add(compositeIndexes);
