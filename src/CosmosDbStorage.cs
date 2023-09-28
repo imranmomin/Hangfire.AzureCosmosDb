@@ -256,15 +256,17 @@ public sealed class CosmosDbStorage : JobStorage
         };
 
         // add the index policy
-        Collection<CompositePath> compositeIndexes = new ()
+        properties.IndexingPolicy.CompositeIndexes.Add(new Collection<CompositePath>
         {
-            new CompositePath { Path = "/name", Order = CompositePathSortOrder.Ascending },
-            new CompositePath { Path = "/created_on", Order = CompositePathSortOrder.Ascending },
-            new CompositePath { Path = "/type", Order = CompositePathSortOrder.Ascending },
-            new CompositePath { Path = "/score", Order = CompositePathSortOrder.Ascending }
-        };
-
-        properties.IndexingPolicy.CompositeIndexes.Add(compositeIndexes);
+            new() { Path = "/name", Order = CompositePathSortOrder.Ascending },
+            new() { Path = "/created_on", Order = CompositePathSortOrder.Ascending }
+        });
+        
+        properties.IndexingPolicy.CompositeIndexes.Add(new Collection<CompositePath>
+        {
+            new() { Path = "/type", Order = CompositePathSortOrder.Ascending },
+            new() { Path = "/score", Order = CompositePathSortOrder.Ascending }
+        });
 
         ContainerResponse containerResponse = await resultDatabase.CreateContainerIfNotExistsAsync(properties, cancellationToken: cancellationToken);
         Container = containerResponse.Container;
