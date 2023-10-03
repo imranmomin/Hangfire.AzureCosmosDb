@@ -10,6 +10,12 @@ namespace Hangfire.Azure;
 public class CosmosDbStorageOptions
 {
 	/// <summary>
+	///		Gets or sets a value indicating whether initialization will check for the Container existence and create it if it doesn't exist.
+	/// </summary>
+	/// <value>Default value is true</value>
+	public bool CreateIfNotExists { get; set; } = true;
+
+	/// <summary>
 	///     Get or set the interval timespan to process expired entries. Default value 30 minutes.
 	///     Expired items under "locks", "jobs", "lists", "sets", "hashs", "counters", "state" will be checked
 	/// </summary>
